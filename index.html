@@ -3389,7 +3389,35 @@ if (Object.keys(state.pickups).length === 0){
 }
 
 // keep cap in sync
+
+// === ONE ELITE ENEMY PER FLOOR (non-boss floors) ===
+// Elite = tinted like bosses, but weaker than bosses (size 1, no stairs on death)
+if (state.gameMode === 'endless' && (state.floor % 10) !== 0 && Array.isArray(state.enemies) && state.enemies.length) {
+  const candidates = state.enemies.filter(e => e && !e.boss && e.size === 1 && !e.elite);
+  if (candidates.length) {
+    const elite = candidates[rand(0, candidates.length - 1)];
+    elite.elite = true;
+    elite.tint  = randomBossTint();
+
+    // Slightly stronger (but not boss-tier)
+elite.hp = Math.max(1, Math.round((elite.hp || 1) * 1.50));
+elite.hpMax = elite.hp;
+
+if (Array.isArray(elite.atk) && elite.atk.length === 2) {
+  elite.atk[0] = Math.max(0, Math.floor(elite.atk[0] * 1.25) + 1);
+  elite.atk[1] = Math.max(elite.atk[0], Math.floor(elite.atk[1] * 1.25) + 1);
+}
+
+elite.xp = Math.max(1, Math.round((elite.xp || 1) * 2.00));
+  }
+}
+
+
 state.enemyCap = state.enemies.length;
+
+
+// === PICKUP TOP-UP: guarantee a higher amount per floor ===
+
 
 
 // === PICKUP TOP-UP: guarantee a higher amount per floor ===
@@ -3769,8 +3797,14 @@ function goldFor(enemy){
   };
   const [lo, hi]   = table[enemy.type] || [1,3];
   const depthBonus = Math.floor((state.floor|0)/3);
-  return rand(lo + depthBonus, hi + depthBonus);
+
+  const base = rand(lo + depthBonus, hi + depthBonus);
+  if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
+    return Math.max(1, Math.round(base * 1.35));
+  }
+  return base;
 }
+
 
 
 // ---- Survivability damage reduction: +5% DR every 5 levels (5,10,15,...)
@@ -3901,6 +3935,10 @@ function recomputeWeapon(){
 }
 
 function awardKill(type,amount){
+  if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
+    amount = Math.max(1, Math.round(amount * 1.35));
+  }
+
   state.player.xp += amount;
   let leveled=false;
   while(state.player.xp>=state.player.next){
@@ -3909,6 +3947,7 @@ function awardKill(type,amount){
     state.player.next = Math.floor(state.player.next * PLAYER_XP_GROWTH);
     leveled=true;
   }
+
 
   // Tutorial: after your first kill, move to the spell-menu step
   if (state.gameMode === 'tutorial' && state.tutorialStep === 3) {
@@ -4430,11 +4469,11 @@ function drawEnemyPixel(ctx, typeOrEnemy, x, y, sizePx){
     ? { type: typeOrEnemy }
     : typeOrEnemy;
 
-  // apply boss tint if present
-  ctx.save();
-  if (enemy.boss && enemy.tint){
-    ctx.filter = enemy.tint;
-  }
+  // apply boss/elite tint if present
+ctx.save();
+if ((enemy.boss || enemy.elite) && enemy.tint){
+  ctx.filter = enemy.tint;
+}
 
   const t = String(enemy.type || '').toLowerCase();
     if (t.includes('mad') && t.includes('king')) { drawMadKingPixel(ctx, x, y, sizePx); ctx.restore(); return; }
@@ -5727,23 +5766,31 @@ function enemyStep(){
       e.slowTicks--;
     }
 
-    // how many steps can this enemy attempt this phase
-    let moves = 1;
-    if (e.fast) moves = 2;
-    if (e.slow){ e._skipMove = !e._skipMove; if (e._skipMove) moves = 0; }
+// how many steps can this enemy attempt this phase
+let moves = 1;
+if (e.fast) moves = 2;
+if (e.slow){ e._skipMove = !e._skipMove; if (e._skipMove) moves = 0; }
 
 const eRange = e.range || 1; 
-    const distToPlayer = dist(e.x, e.y, state.player.x, state.player.y);
+const distToPlayer = dist(e.x, e.y, state.player.x, state.player.y);
 
-    // If enemy is ranged (range > 1) AND is currently within attack range 
-    // AND is NOT adjacent to the player (dist > 1) 
-    if (eRange > 1 && distToPlayer <= eRange && distToPlayer > 1) {
-        // Halt movement to maintain the optimal firing distance.
-        moves = 0; 
-        // We still allow 'fast' enemies (like Goblins) to keep moving to prevent
-        // them from stacking up right outside their attack range.
-        if (e.fast) moves = 1; 
-    }
+// Bloodhunt (Endless only): if the enemy is outside your vision radius, it gets +1 move.
+if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt') {
+  const rad = state.player.tempVisionRange || state.fovRadius;
+  if (distToPlayer > rad) moves += 1;
+}
+
+
+// If enemy is ranged (range > 1) AND is currently within attack range 
+// AND is NOT adjacent to the player (dist > 1) 
+if (eRange > 1 && distToPlayer <= eRange && distToPlayer > 1) {
+    // Halt movement to maintain the optimal firing distance.
+    moves = 0; 
+    // We still allow 'fast' enemies (like Goblins) to keep moving to prevent
+    // them from stacking up right outside their attack range.
+    if (e.fast) moves = 1; 
+}
+
 
     // helper that respects 2×2 bodies AND ignores the mover itself
 const canEnterPoint = (x, y) => {
@@ -5753,40 +5800,51 @@ const canEnterPoint = (x, y) => {
 };
 
     // Mage: if straight LOS and in range, cast instead of moving
-    const manhattan = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
-    if (e.ranged && s === 1 && manhattan > 1 && manhattan <= (e.range||3) &&
-    (e.x === state.player.x || e.y === state.player.y) &&
-    clearStraightLine(e.x, e.y, state.player.x, state.player.y)) {
-      const dmgRoll = rand(e.atk[0], e.atk[1]);
-      const dmg = damageAfterDR(dmgRoll);
-      SFX.rangedZap?.();
-      state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
-      flashDamage();
-      log(`${e.type} zaps you from afar for ${dmg}.`);
-      updateBars();
-      if (state.player.hp <= 0){ triggerGameOver(); return; }
-      continue; // mage ends turn with the cast
-    }
+const manhattan = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
+if (e.ranged && s === 1 && manhattan > 1 && manhattan <= (e.range||3) &&
+(e.x === state.player.x || e.y === state.player.y) &&
+clearStraightLine(e.x, e.y, state.player.x, state.player.y)) {
 
-        // If adjacent to ANY tile of a multi-tile enemy, do a melee hit
-    let adjacent = false;
-    for (let yy=0; yy<s && !adjacent; yy++){
-      for (let xx=0; xx<s && !adjacent; xx++){
-        if (Math.abs((e.x+xx) - state.player.x) + Math.abs((e.y+yy) - state.player.y) === 1){
-          adjacent = true;
-        }
-      }
-    }
+  let dmgRoll = rand(e.atk[0], e.atk[1]);
+  if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
+    dmgRoll = Math.max(1, Math.round(dmgRoll * 1.20));
+  }
 
-    if (adjacent){
-      const dmgRoll = rand(e.atk[0], e.atk[1]);
-      const dmg = damageAfterDR(dmgRoll);
-      state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
-      flashDamage();
-      SFX.enemyHit?.();
-      log(`${e.type} hits you for ${dmg}.`);
-      updateBars();
-      if (state.player.hp <= 0){ triggerGameOver(); return; }
+  const dmg = damageAfterDR(dmgRoll);
+  SFX.rangedZap?.();
+  state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+  flashDamage();
+  log(`${e.type} zaps you from afar for ${dmg}.`);
+  updateBars();
+  if (state.player.hp <= 0){ triggerGameOver(); return; }
+  continue; // mage ends turn with the cast
+}
+
+    // If adjacent to ANY tile of a multi-tile enemy, do a melee hit
+let adjacent = false;
+for (let yy=0; yy<s && !adjacent; yy++){
+  for (let xx=0; xx<s && !adjacent; xx++){
+    if (Math.abs((e.x+xx) - state.player.x) + Math.abs((e.y+yy) - state.player.y) === 1){
+      adjacent = true;
+    }
+  }
+}
+
+if (adjacent){
+
+  let dmgRoll = rand(e.atk[0], e.atk[1]);
+  if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
+    dmgRoll = Math.max(1, Math.round(dmgRoll * 1.20));
+  }
+
+  const dmg = damageAfterDR(dmgRoll);
+  state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+  flashDamage();
+  SFX.enemyHit?.();
+  log(`${e.type} hits you for ${dmg}.`);
+  updateBars();
+  if (state.player.hp <= 0){ triggerGameOver(); return; }
+
 
       // on-hit poison (rats, etc.)
       if (e.poisonChance && Math.random() < e.poisonChance){
@@ -6444,7 +6502,7 @@ setTimeout(() => {
     delete state.player.tempMaxHPBoost;
     delete state.player.movementSlowed;
 
-    // Cleanup Floor Effects
+// Cleanup Floor Effects
 delete state.floorEffect;
 delete state.player.tempVisionRange;
 
@@ -6461,9 +6519,12 @@ if (isEndless) {
     if (roll < 0.15 ) { // 15% Chance for Miasma Chamber (Poison Fog)
         state.floorEffect = 'MiasmaChamber';
         newBgColor = 'rgba(34,197,94,0.18)'; // translucent green tint (play area only)
-    } else if (roll < 1) { // 30% Chance for Shadowy Labyrinth (Limited Vision)
+    } else if (roll < 0.30) { // 15% Chance for Shadowy Labyrinth (Limited Vision)
         state.floorEffect = 'ShadowyLabyrinth';
         state.player.tempVisionRange = 2; // Set temporary vision range to 2
+    } else if (roll < 0.45) { // 45% Chance for Bloodhunt (Unseen enemies move faster)
+        state.floorEffect = 'Bloodhunt';
+        newBgColor = 'rgba(190,24,93,0.14)'; // crimson/rose tint (distinct from pure red damage flash)
     }
 }
 
@@ -6476,8 +6537,12 @@ if (tintEl) tintEl.style.background = newBgColor;
         log('The air is thick and green... This is a Miasma Chamber.');
     } else if (state.floorEffect === 'ShadowyLabyrinth') {
         log('A perpetual twilight covers this floor. Your vision is severely limited.');
+    } else if (state.floorEffect === 'Bloodhunt') {
+        log('The floor drinks the light. Something hunts you in the dark.');
     }
+
     // --- END: FLOOR EFFECTS SETUP ---
+
     // -----------------------------------------------------------
 
 
@@ -6518,12 +6583,14 @@ gen(); enemyStep(); draw?.(); updateBars();
         if (typeof updateBossHud === 'function') updateBossHud();
 
         // --- NEW: floor-effect popup banner ---
-        if (state.floorEffect === 'MiasmaChamber') {
-          showBanner('Miasma Chamber — the air itself poisons you.', 4000);
-        } else if (state.floorEffect === 'ShadowyLabyrinth') {
-          showBanner('Shadowy Labyrinth — your vision is strangled by darkness.', 4000);
-        }
-        // --- END: floor-effect popup banner ---
+if (state.floorEffect === 'MiasmaChamber') {
+  showBanner('Miasma Chamber — the air itself poisons you.', 4000);
+} else if (state.floorEffect === 'ShadowyLabyrinth') {
+  showBanner('Shadowy Labyrinth — your vision is strangled by darkness.', 4000);
+} else if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt') {
+  showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
+}
+// --- END: floor-effect popup banner ---
 
         // Depth 50 Classic: trigger intro cutscene (it will hide HUD again)
         if (state.gameMode === 'classic' &&
@@ -9550,6 +9617,7 @@ function stopRunTimerFreeze(){
 function doRestart(){
   // 🔓 unlock inputs + clear death state
   state.gameOver = false;
+  state._inputLocked = false; // <-- add (ensures no leftover lock blocks run-start popups)
   state.player.poisoned = false;
   state.player.poisonTicks = 0;
 
@@ -9561,9 +9629,8 @@ function doRestart(){
   if (tintEl) tintEl.style.background = 'rgba(0,0,0,0)';
 
   // reset run stats + keep hiscores loaded
-state.run = freshRunStats();
-if (!state._hiscores) state._hiscores = loadHi();
-
+  state.run = freshRunStats();
+  if (!state._hiscores) state._hiscores = loadHi();
 
   // 🎯 fresh run stats (same as first boot)
   state.floor = 1;
@@ -9580,20 +9647,20 @@ if (!state._hiscores) state._hiscores = loadHi();
   state._hitParity = 0;
 
   state.player.shield = null;     // clear any equipped shield
-state._shieldParity = 0;    
+  state._shieldParity = 0;
 
   // 🎒 inventory, spells, bow
   state.inventory = {
-  lockpicks: 0,
-  potions: 0,
-  tonics: 0,
-  antidotes: 0,
-  weapons: {},          // name -> spare count
-  stashed: {},          // name -> [{ weapon objects with dur/durMax }]
-  arrows: 0,
-  gold: 0,
-  shields: 0
-};
+    lockpicks: 0,
+    potions: 0,
+    tonics: 0,
+    antidotes: 0,
+    weapons: {},
+    stashed: {},
+    arrows: 0,
+    gold: 0,
+    shields: 0
+  };
 
   state.spells = [];
   state.equippedSpell = null;
@@ -9603,19 +9670,32 @@ state._shieldParity = 0;
   state.skills = {};
 
   // 🗺️ rebuild floor and UI
-   gen();
-  enemyStep();            // ← ADD
+  gen();
+  enemyStep();
   draw?.();
   updateBars();
   updateEquipUI();
   renderSkills && renderSkills();
   startRunTimer();
-updateRunTimerNow();
+  updateRunTimerNow();
 
   // 🔕 hide Game Over modal
   const m = document.getElementById('gameOverModal');
   if (m) m.style.display = 'none';
+
+  // ✅ Pick 1 of 2 should appear on a fresh run after death restart
+  if (state.gameMode !== 'tutorial') {
+    requestAnimationFrame(()=>{
+      try { draw?.(); } catch {}
+      const f =
+        (typeof offerPick2Choice === 'function') ? offerPick2Choice :
+        (typeof window.offerPick2Choice === 'function') ? window.offerPick2Choice :
+        null;
+      if (f) { try { f('start'); } catch(e){ console.error(e); } }
+    });
+  }
 }
+
 
 // === Arcade score flow ===
 function openScoreEntry(){
