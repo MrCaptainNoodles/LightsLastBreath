@@ -9157,16 +9157,15 @@ function openLevelUpModal(){
   lvlupModal.style.display = 'flex';
   state._inputLocked = true;
 
-  // Hide mobile controls while the choice modal is up
-  if (typeof setMobileControlsVisible === 'function') {
-    setMobileControlsVisible(false);
-  }
+  // hide mobile controls while choosing
+  setMobileControlsVisible?.(false);
 }
 window.openLevelUpModal = openLevelUpModal;
 
 if (btnHP){
   btnHP.onclick = ()=>{
-    state.player.hpMax += 5;
+    const inc = (typeof levelHpGain === 'function') ? levelHpGain() : 5;
+    state.player.hpMax += inc;
 
     const before = state.player.hp|0;
     const gain   = Math.max(1, Math.round(state.player.hpMax * POTION_PCT));
@@ -9176,17 +9175,16 @@ if (btnHP){
     lvlupModal.style.display='none';
     state._inputLocked = false;
 
-    // Restore mobile controls after leveling (unless paused)
-    if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') {
-      setMobileControlsVisible(true);
-    }
+    // restore mobile controls (unless paused)
+    if (!state._pauseOpen) setMobileControlsVisible?.(true);
 
     log('You feel tougher.');
   };
 }
 if (btnMP){
   btnMP.onclick = ()=>{
-    state.player.mpMax += 5;
+    const inc = (typeof levelMpGain === 'function') ? levelMpGain() : 5;
+    state.player.mpMax += inc;
 
     const before = state.player.mp|0;
     const gain   = Math.max(1, Math.round(state.player.mpMax * TONIC_PCT));
@@ -9196,14 +9194,13 @@ if (btnMP){
     lvlupModal.style.display='none';
     state._inputLocked = false;
 
-    // Restore mobile controls after leveling (unless paused)
-    if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') {
-      setMobileControlsVisible(true);
-    }
+    // restore mobile controls (unless paused)
+    if (!state._pauseOpen) setMobileControlsVisible?.(true);
 
     log('You feel more attuned to magic.');
   };
 }
+
 
 
 
