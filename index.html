@@ -701,6 +701,11 @@ body.noscroll{
       <input id="volFoot" type="range" min="0" max="100" value="100">
     </label>
 
+    <label style="display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); cursor:pointer;">
+      <span style="font-weight:700; color:#ff9a8b;">Arachnophobia Mode</span>
+      <input id="chkArachno" type="checkbox" style="width:24px; height:24px; accent-color:#ff9a8b;">
+    </label>
+
     <p style="margin-top:10px; font-size:12px; opacity:0.8;">
       (These settings are saved in your browser between runs.)
     </p>
@@ -1071,6 +1076,7 @@ body.noscroll{
   <button class="btn" id="dbgSpawnStairs">Spawn Stairs Below</button>
   <button class="btn" id="dbgSpawnShrine">Spawn Shrine</button>
   <button class="btn" id="dbgGiveClaymore">Give Claymore</button>
+  <button class="btn" id="dbgUnlockEndless">Unlock Endless</button>
 </div>
 
 
@@ -2129,8 +2135,17 @@ function extendSfxForUtility(){
 // ---- Level Up SFX (custom file) ----
 // swap this URL for your own hosted/CORS-enabled file
 const LEVEL_UP_SFX_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/level_up.mp3';
+// Replace with your actual hosted file
+const ARACHNO_SFX_URL  = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/arachnophobia_mode.mp3'; 
 
 let levelUpBuf = null;
+
+function playArachnoSound(){
+    // Simple one-shot player
+    const a = new Audio(ARACHNO_SFX_URL);
+    a.volume = 0.5;
+    a.play().catch(()=>{});
+}
 
 async function loadLevelUpSfx(url = LEVEL_UP_SFX_URL){
   try{
@@ -2252,6 +2267,28 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (!audioCtx) initAudio();
     applyGroupVolumes();
   }, 'volFoot');
+
+  // --- Arachnophobia Mode Wiring ---
+  const chkArachno = document.getElementById('chkArachno');
+  // Initialize global state from storage (default false)
+  window._arachnophobiaMode = (localStorage.getItem('arachnoMode') === '1');
+  
+  if (chkArachno) {
+    chkArachno.checked = window._arachnophobiaMode;
+    
+    chkArachno.addEventListener('change', ()=>{
+       window._arachnophobiaMode = chkArachno.checked;
+       localStorage.setItem('arachnoMode', chkArachno.checked ? '1' : '0');
+       
+       // Play sound only on enable
+       if (chkArachno.checked) {
+           if(typeof playArachnoSound === 'function') playArachnoSound();
+       }
+       
+       // Redraw immediately to update any visible spiders
+       if(typeof draw === 'function') draw();
+    });
+  }
 });
 
 
@@ -2961,6 +2998,8 @@ function dist(a,b,c,d){return Math.abs(a-c)+Math.abs(b-d)}
 // Custom names per boss type
 const BOSS_NAMES = {
   Rat:      'The Rat King',
+  Bat:      'Count Fang',
+  Spider:   'Broodmother',
   Slime:    'Sir Squish',
   Goblin:   'Carl',
   Skeleton: 'Mr. Humerus',
@@ -3124,6 +3163,8 @@ if (!pickedSpecial) {
 
   // Behaviors so it still feels like a big version of the species
   if (base.type === 'Rat')      boss.poisonChance = 0.40;
+  if (base.type === 'Bat')      boss.vampiric = true; // handled in enemyStep by type check, but good for flags
+  if (base.type === 'Spider')   boss.webChance = 1.0; 
   if (base.type === 'Goblin') { boss.fast = true; boss.stealChance = 0.40; }
   if (base.type === 'Slime')  { boss.slow = true; boss._skipMove = false; }
   if (base.type === 'Skeleton'){ boss._revived = false; }
@@ -4861,6 +4902,77 @@ function drawMimicPixel(ctx, x, y, tile){
   R(5,9,2,1,tongue);
 }
 
+function drawBatPixel(ctx, x, y, tile){
+  const { s, R } = gridN(ctx, x, y, tile, 12);
+  const dark = '#0b141d', body = '#4b3d44', wing = '#2a2328', eye = '#ef4444';
+
+  // Wings: Wider M-shape silhouette
+  // Left Wing
+  R(1,3,1,2,wing); // tip
+  R(2,2,1,4,wing); // arch
+  R(3,3,1,3,wing); // mid
+  R(4,4,1,2,wing); // connector
+
+  // Right Wing
+  R(10,3,1,2,wing); // tip
+  R(9,2,1,4,wing);  // arch
+  R(8,3,1,3,wing);  // mid
+  R(7,4,1,2,wing);  // connector
+
+  // Body
+  R(5,4,2,4,body);
+
+  // Ears (Tall and pointy)
+  R(4,2,1,2,body); R(7,2,1,2,body);
+
+  // Eyes (Glowing Red)
+  R(5,5,1,1,eye); R(6,5,1,1,eye);
+  
+  // Feet
+  R(5,8,1,1,dark); R(6,8,1,1,dark);
+}
+
+function drawSpiderPixel(ctx, x, y, tile){
+  // Arachnophobia Mode Override
+  if (window._arachnophobiaMode) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x, y, tile, tile);
+    
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold ' + Math.floor(tile/3.5) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SPIDER', x + tile/2, y + tile/2);
+    return;
+  }
+
+  const { s, R } = gridN(ctx, x, y, tile, 12);
+  const dark = '#0b141d', body = '#27272a', leg = '#3f3f46', eye = '#ef4444', mark = '#ef4444';
+
+  // Legs (8 total, 4 per side)
+  // Left legs
+  R(1,3,1,1,leg); R(2,4,1,1,leg); R(3,5,1,1,leg);
+  R(0,6,2,1,leg); R(2,6,1,1,leg);
+  R(0,8,2,1,leg); R(2,7,1,1,leg);
+  R(1,10,1,1,leg); R(2,9,1,1,leg); R(3,8,1,1,leg);
+
+  // Right legs (mirror)
+  R(10,3,1,1,leg); R(9,4,1,1,leg); R(8,5,1,1,leg);
+  R(10,6,2,1,leg); R(9,6,1,1,leg);
+  R(10,8,2,1,leg); R(9,7,1,1,leg);
+  R(10,10,1,1,leg); R(9,9,1,1,leg); R(8,8,1,1,leg);
+
+  // Abdomen (rear)
+  R(4,6,4,4,body);
+  // Red hourglass/mark
+  R(5,7,2,2,mark);
+
+  // Cephalothorax (head)
+  R(5,4,2,2,body);
+  
+  // Eyes
+  R(5,4,1,1,eye); R(6,4,1,1,eye);
+}
 
 // Updated drawRatPixel (original lines ~4358–4370) – added outline pixels for body and tail
 function drawRatPixel(ctx, x, y, tile){
@@ -5019,9 +5131,16 @@ function drawEnemyPixel(ctx, typeOrEnemy, x, y, sizePx){
     ? { type: typeOrEnemy }
     : typeOrEnemy;
 
-  // apply boss/elite tint if present
+  // apply boss/elite tint or damage/heal flash
 ctx.save();
-if ((enemy.boss || enemy.elite) && enemy.tint){
+if (enemy._flashColor && enemy._flashTime > Date.now()) {
+    // Override filter for flash effect
+    // Red flash (damage) or Green flash (heal)
+    const color = enemy._flashColor;
+    // Simple filter hack: brightness/sepia/hue-rotate to approximate color
+    if (color === 'red') ctx.filter = 'brightness(0.6) sepia(1) hue-rotate(-50deg) saturate(5)'; 
+    else if (color === 'green') ctx.filter = 'brightness(1.2) sepia(1) hue-rotate(50deg) saturate(5)';
+} else if ((enemy.boss || enemy.elite) && enemy.tint){
   ctx.filter = enemy.tint;
 }
 
@@ -5031,6 +5150,8 @@ if ((enemy.boss || enemy.elite) && enemy.tint){
   if (t.includes('shadow'))                   { drawShadowPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
 
   if (t.includes('rat'))       { drawRatPixel(ctx, x, y, sizePx); ctx.restore(); return; }
+  if (t.includes('bat'))       { drawBatPixel(ctx, x, y, sizePx); ctx.restore(); return; }
+  if (t.includes('spider'))    { drawSpiderPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('goblin'))    { drawGoblinPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('slime'))     { drawSlimePixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('skeleton'))  { drawSkeletonPixel(ctx, x, y, sizePx); ctx.restore(); return; }
@@ -5753,8 +5874,14 @@ if (state.jester) {
 // enemies (collect bosses for later, now pixel-based)
 for (const e of state.enemies){
   const s = e.size || 1;
+  
+  // Handle flash expiration
+  if (e._flashTime && Date.now() > e._flashTime) {
+    e._flashTime = 0; e._flashColor = null;
+  }
+
   if (s === 1){
-    if (e.x === gx && e.y === gy) drawEnemyPixel(ctx, e, px, py, tile); // pass enemy object
+    if (e.x === gx && e.y === gy) drawEnemyPixel(ctx, e, px, py, tile); 
   } else {
     if (gx === e.x && gy === e.y) bossesToDraw.push({ enemy: e, px, py }); // keep the whole enemy
   }
@@ -6352,7 +6479,16 @@ function flashDamage(){
     _hurtTO = null;
   }, 90); // hold ~90ms before fading over 480ms
 }
-
+function flashEnemy(e, color='red', ms=100){
+  e._flashColor = color;
+  e._flashTime = Date.now() + ms;
+  
+  // Force the game to redraw after the flash time is up
+  // This ensures the red/green tint disappears even if you don't move
+  setTimeout(() => {
+    if (typeof draw === 'function') draw();
+  }, ms + 20);
+}
 // ===== Per-floor enemy templates =====
 function floorEnemyKinds(){
   const f = state.floor | 0;
@@ -6361,16 +6497,20 @@ function floorEnemyKinds(){
   // base (floor 1) stats, then scale every floor
   const base = {
     Rat:      { hp: 4, atk:[1,2], xp: 3 },
+    Bat:      { hp: 3, atk:[1,2], xp: 3 }, // Weak but heals
+    Spider:   { hp: 5, atk:[2,3], xp: 4 }, // Slows you
     Slime:    { hp: 5, atk:[1,3], xp: 4 },
     Goblin:   { hp: 6, atk:[2,4], xp: 5 },
     Skeleton: { hp: 7, atk:[2,5], xp: 6 },
     Mage:     { hp: 8, atk:[3,6], xp: 7 }
   };
 
-  // progressive availability (keep your original unlock feel)
+  // progressive availability
   const pool = [];
   if (f >= 1) pool.push('Rat');
+  if (f >= 2) pool.push('Bat');    // Early unlock
   if (f >= 3) pool.push('Slime');
+  if (f >= 4) pool.push('Spider'); // Mid-early unlock
   if (f >= 5) pool.push('Goblin');
   if (f >= 7) pool.push('Skeleton');
   if (f >= 8) pool.push('Mage');
@@ -6589,6 +6729,30 @@ if (adjacent){
         if (!state.player.poisoned) log('You are poisoned!');
         state.player.poisoned = true;
         state.player.poisonTicks = Math.max(state.player.poisonTicks|0, 15);
+      }
+
+      // BAT: Vampiric (heals 100% of dmg dealt)
+      if (e.type === 'Bat' && dmg > 0) {
+        const healAmt = dmg;
+        const oldHp = e.hp;
+        e.hp = Math.min(e.hp + healAmt, (e.hpMax || 999));
+        if (e.hp > oldHp) {
+            flashEnemy(e, 'green');
+            // optional: log('The Bat drains your life!');
+        }
+      }
+
+      // SPIDER: Web/Slow (100% chance or adjust as needed)
+      if (e.type === 'Spider') {
+         // Apply slow logic. We can reuse the player.poisonTicks mechanism or add a new one.
+         // Let's add a simple temporary slow to the player state if not present.
+         if (!state.player.slowed) {
+             state.player.slowed = true;
+             state.player.slowTicks = 5; // 5 steps
+             log('The Spider webs you! (Slowed)');
+         } else {
+             state.player.slowTicks = Math.max(state.player.slowTicks, 5);
+         }
       }
 
       // Goblins: chance to steal on hit
@@ -7135,11 +7299,24 @@ function tryMove(dx,dy){
   if (isJesterTile(nx, ny)) { log('The jester blocks the way.'); return; }
   if (isCartographerTile(nx, ny)) { log('The cartographer blocks the way.'); return; }
 
-  // NEW: set facing from movement
+// NEW: set facing from movement
   if (dx>0) state.player.facing='right';
   else if (dx<0) state.player.facing='left';
   else if (dy>0) state.player.facing='down';
   else if (dy<0) state.player.facing='up';
+
+  // Handle Player Slow (Spider web)
+  if (state.player.slowed && state.player.slowTicks > 0) {
+      // 50% chance to fail movement? Or move every other turn? 
+      // Let's do: Movement takes 2 turns of enemy time.
+      // Implementation: We move, but we call enemyStep() TWICE.
+      enemyStep(); // Extra enemy turn cost
+      state.player.slowTicks--;
+      if (state.player.slowTicks <= 0) {
+          state.player.slowed = false;
+          log('You break free of the webs.');
+      }
+  }
 
   state.player.x = nx; 
   state.player.y = ny;
@@ -7162,16 +7339,10 @@ if (state.floorEffect === 'MiasmaChamber'){
     updateBars();
     if (state.player.hp <= 0){ triggerGameOver(); return; }
 
-    // Enemy Damage
-    for (const e of state.enemies) {
-      e.hp -= damage;
-      if (typeof flashEnemyTile === 'function') flashEnemyTile(e.x, e.y, '#22c55e'); 
-      if (e.hp <= 0){
-        state.enemies = state.enemies.filter(x=>x!==e);
-        state.run.kills = (state.run.kills|0) + 1;
-        SFX.kill?.();
-      }
-    }
+    // Enemy Damage (REMOVED: Miasma only hurts player now)
+    /*
+    for (const e of state.enemies) { ... } 
+    */
   }
 }
 // --- END: MIASMA step tick ---
@@ -7312,9 +7483,11 @@ state._miasmaSteps = 0;
 
 // --- APPLY ENDLESS MODE FLOOR EFFECT ---
 const isEndless = state.gameMode !== 'classic';
+const nextFloor = state.floor + 1; // Calculating for the floor we are ABOUT to enter
 let newBgColor = 'rgba(0,0,0,0)'; // DEFAULT: no tint (play area only)
 
-if (isEndless) { 
+// Only apply effects if it's NOT a boss floor (multiples of 10)
+if (isEndless && (nextFloor % 10 !== 0)) { 
     const roll = Math.random();
     
     if (roll < 0.15 ) { // 15% Chance for Miasma Chamber (Poison Fog)
@@ -8114,6 +8287,7 @@ if (w.type === 'two' && proc(quirkChance('two'))){
 }
 
 target.hp -= dmg;
+if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); // <--- ADD THIS
 
 log(`You hit the ${target.type} for ${dmg}.${note}`);
 
@@ -8415,6 +8589,7 @@ const { min, max } = getSpellStats(spell.name);
 const dmg = rand(min, max);
 
 target.hp -= dmg;
+if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); // <--- ADD THIS
 log(`Your ${spell.name} hits for ${dmg}.`);
 
 // Tutorial Step 7 -> 8 (Magic used successfully)
@@ -11345,14 +11520,25 @@ if (restartBtn) {
       }
     });
 
-    // Touch Easter egg: long-press the "Depth" chip
+    // Touch Easter egg: Triple-tap the "Depth" chip
     if (dbg.depthChip){
-      dbg.depthChip.addEventListener('touchstart', ()=>{
-        clearTimeout(dbg.longTimer);
-        dbg.longTimer = setTimeout(showDebug, dbg.longMs);
-      }, {passive:true});
-      dbg.depthChip.addEventListener('touchend', ()=> clearTimeout(dbg.longTimer));
-      dbg.depthChip.addEventListener('touchmove', ()=> clearTimeout(dbg.longTimer));
+      let tapCount = 0;
+      let tapTimer = null;
+      
+      dbg.depthChip.addEventListener('click', (e)=>{
+        // prevent unintended clicks if needed, though usually fine on chip
+        tapCount++;
+        
+        // Reset count if too much time passes between taps (e.g. 400ms)
+        clearTimeout(tapTimer);
+        tapTimer = setTimeout(() => { tapCount = 0; }, 400);
+
+        if (tapCount >= 3){
+           showDebug();
+           tapCount = 0;
+           clearTimeout(tapTimer);
+        }
+      });
     }
 
     const spawnBtn = document.getElementById('dbgSpawnShield');
@@ -11396,6 +11582,14 @@ if (clayBtn) clayBtn.addEventListener('click', ()=>{
   hideDebug?.();
 
   log('[debug] Gave you a Claymore (equipped).');
+});
+
+const unlockBtn = document.getElementById('dbgUnlockEndless');
+if (unlockBtn) unlockBtn.addEventListener('click', ()=>{
+  localStorage.setItem('endlessUnlocked', '1');
+  if (typeof syncEndlessUnlockUI === 'function') syncEndlessUnlockUI();
+  log('[debug] Endless Mode unlocked! Check Main Menu.');
+  hideDebug?.();
 });
 
 const healBtn = document.getElementById('dbgSpawnHeal');
