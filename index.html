@@ -936,6 +936,22 @@ body.noscroll{
   </div>
 </div>
 
+<!-- Tutorial Mode Clear Modal -->
+<div class="modal" id="tutorialCompleteModal" style="display:none;">
+  <div class="sheet">
+    <div class="title" style="text-align:center; font-weight:800; margin-bottom:6px;">
+      Tutorial Complete!
+    </div>
+    <div style="text-align:center; opacity:.9; margin-bottom:10px;">
+      Congratulations on beating the tutorial! Head back to the main menu to try Classic Mode.
+      <br><br>
+      (If you ever need controls, press <b>H</b>).
+    </div>
+    <div class="row" style="gap:10px; justify-content:center;">
+      <button class="btn" id="btnTutReturn">Main Menu</button>
+    </div>
+  </div>
+</div>
 
 <!-- Merchant Modal -->
 <div class="modal" id="merchantModal" style="display:none;">
@@ -1125,6 +1141,13 @@ function hideBanner(){
   el.style.display = 'none';
   el.style.opacity  = '0';
   el.style.transform = 'translate(-50%, 0)';
+
+  // NEW: allow queued banners (and say()) to continue after a manual hide
+  el._busy = false;
+  if (el._queue && el._queue.length){
+    const next = el._queue.shift();
+    if (next) showBanner(next.text, next.ms);
+  }
 }
 
 function waitForAdvance(){
@@ -1175,7 +1198,7 @@ function isNearMerchant(px,py){
   ];
   for (const [x,y] of tiles){
     if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y)<=1) return true;
+    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
   }
   return false;
 }
@@ -1197,7 +1220,7 @@ function isNearBlacksmith(px,py){
   ];
   for (const [x,y] of tiles){
     if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y)<=1) return true;
+    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
   }
   return false;
 }
@@ -1220,7 +1243,7 @@ function isNearJester(px,py){
   ];
   for (const [x,y] of tiles){
     if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y)<=1) return true;
+    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
   }
   return false;
 }
@@ -1243,10 +1266,11 @@ function isNearCartographer(px,py){
   ];
   for (const [x,y] of tiles){
     if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y)<=1) return true;
+    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
   }
   return false;
 }
+
 
 // NEW: find stairs + reveal full floor + draw arrow around player
 function cartographerFindStairs(){
@@ -1310,7 +1334,9 @@ function drawCartographerStairsArrow(ctx, ox, oy, tile){
   ctx.restore();
 }
 
-const CARTOGRAPHER_SPAWN_CHANCE = 0.18;
+
+
+const CARTOGRAPHER_SPAWN_CHANCE = 0.20; // 20%
 const CARTOGRAPHER_LOOP_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/cartographer.mp3';
 let cartographerAudio = null, cartographerGain = null, cartographerNode = null;
 
@@ -1347,16 +1373,33 @@ function stopCartographerAudio(){
 }
 
 function updateCartographerAudio(){
-  if (!state.cartographer || !cartographerGain) return;
+  if (!cartographerGain) return;
+
+  // if cartographer is gone (new floor / boss floor), force silence
+  if (!state.cartographer){ cartographerGain.gain.value = 0; return; }
+
+  // play until you're next to the NPC
+  if (isNearCartographer(state.player.x, state.player.y)){
+    cartographerGain.gain.value = 0;
+    return;
+  }
+
   const d = Math.abs(state.player.x - state.cartographer.x) + Math.abs(state.player.y - state.cartographer.y);
-  const maxRange = 18;
-  const v = d >= maxRange ? 0 : Math.max(0, Math.min(0.55, (maxRange - d)/maxRange * 0.55));
-  cartographerGain.gain.value = v;
+  const maxD = 20; // was 12
+  const v = clamp(1 - (d/maxD), 0, 1);
+  const shaped = Math.pow(v, 0.65);
+
+  // NOTE: Interactables slider is already applied by interactGain
+  cartographerGain.gain.value = shaped * 0.6;
 }
 
 
+
+
+
+
 // Spawn chance (20% per non-boss floor)
-const JESTER_SPAWN_CHANCE = .2;
+const JESTER_SPAWN_CHANCE = 0.20; 
 const JESTER_LOOP_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/jester_laugh.mp3';
 let jesterAudio = null, jesterGain = null, jesterNode = null;
 
@@ -1393,12 +1436,29 @@ function stopJesterAudio(){
 }
 
 function updateJesterAudio(){
-  if (!state.jester || !jesterGain) return;
+  if (!jesterGain) return;
+
+  // if jester is gone (new floor / boss floor), force silence
+  if (!state.jester){ jesterGain.gain.value = 0; return; }
+
+  // play until you're next to the NPC
+  if (isNearJester(state.player.x, state.player.y)){
+    jesterGain.gain.value = 0;
+    return;
+  }
+
   const d = Math.abs(state.player.x - state.jester.x) + Math.abs(state.player.y - state.jester.y);
-  const maxRange = 18;
-  const v = d >= maxRange ? 0 : Math.max(0, Math.min(0.55, (maxRange - d)/maxRange * 0.55));
-  jesterGain.gain.value = v;
+  const maxD = 20; // was 12
+  const v = clamp(1 - (d/maxD), 0, 1);
+  const shaped = Math.pow(v, 0.65);
+
+  // NOTE: Interactables slider is already applied by interactGain
+  jesterGain.gain.value = shaped * 0.6;
 }
+
+
+
+
 
 
 // ---- Default BGM (replace with your hosted URL) ----
@@ -1406,9 +1466,75 @@ function updateJesterAudio(){
 
 const DEFAULT_BGM_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/bg.mp3';
 
+// ---- NPC dialogue (one-shot voice lines) ----
+// Replace these placeholder URLs with your recorded lines.
+const NPC_DIALOGUE_URLS = {
+  merchant: {
+    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_interact.mp3',
+    buy:      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_buy.mp3',
+    sell:     'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_sell.mp3',
+    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_leave.mp3',
+  },
+  blacksmith: {
+    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_interact.mp3',
+    repair:   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_repair.mp3',
+    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_leave.mp3',
+  },
+  jester: {
+    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_interact.mp3',
+    spin:     'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_spin.mp3',
+    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_leave.mp3',
+    win:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_win.mp3',
+    lose:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_lose.mp3',
+  },
+  cartographer: {
+    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_interact.mp3',
+    buy:      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_buy.mp3',
+    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_leave.mp3',
+  }
+};
+
+const _npcDialogueEls = Object.create(null);
+const _npcDialogueNodes = Object.create(null);
+
+// Plays a one-shot voice line routed through Interactables volume (interactGain).
+function playNpcDialogue(url){
+  if (!url) return;
+
+  try { initAudio(); } catch {}
+  try { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{}); } catch {}
+  try { if (typeof muted !== 'undefined' && muted) return; } catch {}
+
+  let el = _npcDialogueEls[url];
+  if (!el){
+    el = new Audio();
+    el.preload = 'auto';
+    el.crossOrigin = 'anonymous';
+    el.setAttribute('playsinline','');
+    el.src = url;
+    _npcDialogueEls[url] = el;
+
+    // Route through WebAudio so your "Interactables" slider affects the dialogue.
+    try{
+      const node = audioCtx.createMediaElementSource(el);
+      node.connect(interactGain || masterGain);
+      _npcDialogueNodes[url] = node;
+      el.volume = 1;
+    }catch(e){
+      // If routing fails, still try to play via element audio.
+    }
+  }
+
+  try{
+    el.currentTime = 0;
+    el.play().catch(()=>{});
+  }catch{}
+}
+
 // ---- Merchant config ----
 
-const MERCHANT_SPAWN_CHANCE = .20; // 25% per non-boss floor
+
+const MERCHANT_SPAWN_CHANCE = .20; // 20% per non-boss floor
 const MERCHANT_LOOP_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/money.mp3'; // ← your loop SFX
 let merchantAudio = null, merchantNode = null, merchantGain = null;
 
@@ -1446,15 +1572,29 @@ function stopMerchantAudio(){
 
 // volume rises as you approach the merchant
 function updateMerchantAudio(){
-  if (!state.merchant || !merchantGain) return;
+  if (!merchantGain) return;
+
+  // if merchant is gone (new floor / boss floor), force silence
+  if (!state.merchant){ merchantGain.gain.value = 0; return; }
+
+  // play until you're next to the NPC
+  if (isNearMerchant(state.player.x, state.player.y)){
+    merchantGain.gain.value = 0;
+    return;
+  }
+
   const d = Math.abs(state.player.x - state.merchant.x) + Math.abs(state.player.y - state.merchant.y);
-  const maxRange = 18; // how far away you can start to hear it
-  const v = d >= maxRange ? 0 : Math.max(0, Math.min(0.6, (maxRange - d)/maxRange * 0.6));
-  merchantGain.gain.value = v;
+  const maxD = 20; // was 12
+  const v = clamp(1 - (d/maxD), 0, 1);
+  const shaped = Math.pow(v, 0.65); // gentler falloff so it doesn't feel “short”
+
+  // NOTE: Interactables slider is already applied by interactGain
+  merchantGain.gain.value = shaped * 0.6;
 }
 
+
 // ---- Blacksmith config ----
-const BLACKSMITH_SPAWN_CHANCE = .20; // 25% per non-boss floor
+const BLACKSMITH_SPAWN_CHANCE = 0.20; // 20% per non-boss floor
 const BLACKSMITH_LOOP_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/anvil-loop.mp3'; // add this file to your repo
 let blacksmithAudio = null, blacksmithNode = null, blacksmithGain = null;
 
@@ -1482,19 +1622,37 @@ function ensureBlacksmithAudio(){
     }catch{}
   }
 }
+
 function stopBlacksmithAudio(){
   try{ if (blacksmithAudio){ blacksmithAudio.pause(); blacksmithAudio.currentTime = 0; } }catch{}
   try{ if (blacksmithNode){ blacksmithNode.disconnect(); blacksmithNode = null; } }catch{}
   blacksmithAudio = null;
   if (blacksmithGain) blacksmithGain.gain.value = 0;
 }
+
+
 function updateBlacksmithAudio(){
-  if (!state.blacksmith || !blacksmithGain) return;
+  if (!blacksmithGain) return;
+
+  // if blacksmith is gone (new floor / boss floor), force silence
+  if (!state.blacksmith){ blacksmithGain.gain.value = 0; return; }
+
+  // play until you're next to the NPC
+  if (isNearBlacksmith(state.player.x, state.player.y)){
+    blacksmithGain.gain.value = 0;
+    return;
+  }
+
   const d = Math.abs(state.player.x - state.blacksmith.x) + Math.abs(state.player.y - state.blacksmith.y);
-  const maxRange = 18;
-  const v = d >= maxRange ? 0 : Math.max(0, Math.min(0.6, (maxRange - d)/maxRange * 0.6));
-  blacksmithGain.gain.value = v;
+  const maxD = 20; // was 12
+  const v = clamp(1 - (d/maxD), 0, 1);
+  const shaped = Math.pow(v, 0.65);
+
+  // NOTE: Interactables slider is already applied by interactGain
+  blacksmithGain.gain.value = shaped * 0.7;
 }
+
+
 
 // ---- Shield config ----
 const SHIELD_NAME = 'Round Shield';
@@ -2291,20 +2449,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // Unlock audio + connect loops + preload some sfx (safe to call multiple times)
-  function unlockAudioAndLoops(){
-    try { initAudio?.(); } catch {}
-    try {
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
-    } catch {}
+function unlockAudioAndLoops(){
+  try { initAudio?.(); } catch {}
+  try {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+  } catch {}
 
+  // NPC loops (ok if not present yet)
+  try { ensureMerchantAudio?.(); if (merchantAudio){ merchantAudio.muted=false; merchantAudio.play()?.catch(()=>{}); } } catch {}
+  try { ensureBlacksmithAudio?.(); if (blacksmithAudio){ blacksmithAudio.muted=false; blacksmithAudio.play()?.catch(()=>{}); } } catch {}
+  try { ensureJesterAudio?.(); if (jesterAudio){ jesterAudio.muted=false; jesterAudio.play()?.catch(()=>{}); } } catch {}
+  try { ensureCartographerAudio?.(); if (cartographerAudio){ cartographerAudio.muted=false; cartographerAudio.play()?.catch(()=>{}); } } catch {}
 
-    // NPC loops (ok if not present yet)
-    try { ensureMerchantAudio?.(); if (merchantAudio){ merchantAudio.muted=false; merchantAudio.play()?.catch(()=>{}); } } catch {}
-    try { ensureBlacksmithAudio?.(); if (blacksmithAudio){ blacksmithAudio.muted=false; blacksmithAudio.play()?.catch(()=>{}); } } catch {}
+  // Preload a few common SFX so first use isn’t delayed
+  try { loadWalkSfx?.(); loadPotionSfx?.(); loadCastSfx?.(); } catch {}
+}
 
-    // Preload a few common SFX so first use isn’t delayed
-    try { loadWalkSfx?.(); loadPotionSfx?.(); loadCastSfx?.(); } catch {}
-  }
 
   // Transition: Title → Menu
 const title = document.getElementById('titleScreen');
@@ -2386,36 +2546,80 @@ async function startTutorial(e){
   // Place a chest in the lower room:
   const chestX=15, chestY=27;
   state.tiles[chestY][chestX] = 3;
-  // Spawn enemies (only rats for tutorial):
+  // Spawn enemies (tutorial): start with ONLY the stationary bow target.
+  // The melee rat will spawn AFTER the stationary target is killed.
   state.enemies = [
-    {x:18, y:14, type:'Rat', hp:5, atk:[1,2], xp:3},
-    {x:16, y:26, type:'Rat', hp:5, atk:[1,2], xp:3}
+    // Step 4 bow target — won’t move/attack (enemyStep skips while stunTicks > 0)
+    {x:18, y:11, type:'Rat', hp:3, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true}
   ];
-  // Place tutorial pickups (floor tile =5 with payload):
+
+  // NEW: gate the melee rat spawn until the stationary target dies
+  state._tutSpawnedMeleeRat = false;
+
+
+   // NEW: tutorial flags for this step
+  state._tutGotArrows  = false;
+  state._tutBowShot    = false;
+
+  // NEW: Step 5 flags
+  state._tutGotWeapon  = false;
+  state._tutMeleeHit   = false;
+
+
+    // Place tutorial pickups (floor tile =5 with payload):
   state.pickups = {};
   function dropPickup(x,y, kind, payload){
     state.pickups[`${x},${y}`] = {kind, payload};
     state.tiles[y][x] = 5;
   }
-  // Give items for inventory tutorial:
-  dropPickup(10,11, 'potion',    1);
-  dropPickup(11,11, 'tonic',     1);
-  dropPickup(12,11, 'antidote',  1);
-  dropPickup(13,11, 'lockpicks', 1);
-  // Weapon pickup (to equip):
+
+  // NEW: Step 4 arrows (stand on them to pick up)
+  dropPickup(12,11, 'arrows', 6);
+
+  // === Step 1 (NEW): Start kit (already in inventory) ===
+  state.inventory.potions   = 1;
+  state.inventory.tonics    = 1;
+  state.inventory.antidotes = 1;
+  state.inventory.lockpicks = 1;
+
+  // Start with Pebble learned + equipped
+  state.spellUpgrades = {}; // keep tutorial start clean
+  const pebbleSpell = { name:'Pebble', cost:(SPELL_BOOK?.Pebble?.cost ?? 1), tier:1 };
+  state.spells = [pebbleSpell];
+  state.equippedSpell = pebbleSpell;
+  if (typeof ensureSpellUpgradeSlot === 'function') ensureSpellUpgradeSlot('Pebble');
+
+  // Weapon pickup (we’ll reposition/gate this later when we do Step 5)
   dropPickup(10,12, 'weapon', {name:'Shortsword', type:'one', min:2, max:4, base:{min:2,max:4}, durMax:10, dur:10});
-  // Spell pickup (to learn a spell):
-  dropPickup(14,12, 'spell', {name:'Heal', cost:4, tier:1});
+
   // Set player start:
   state.player.x = 10;
   state.player.y = 10;
   state.seen = new Set([`${state.player.x},${state.player.y}`]); // reveal start tile
-  state.spells = [];        // no spells at start
-  state.equippedSpell = null;
+
   updateBars(); updateEquipUI(); draw();
-  // Initial tutorial prompt:
-  state.tutorialStep = 0;
-  await say("Tutorial: Press I to open your inventory.");  
+
+  // Ensure keyboard focus so hotkeys (I/P/etc.) work immediately without clicking
+  try{
+    window.focus();
+    const cw = document.getElementById('cw');
+    if (cw){
+      if (!cw.hasAttribute('tabindex')) cw.tabIndex = 0;
+      cw.focus({ preventScroll:true });
+    } else {
+      document.body?.focus?.();
+    }
+  }catch{}
+
+ // Initial tutorial prompt:
+ // Step 2 (new tutorial): Movement
+ state.tutorialStep = 0;
+ state._tutMoveWASD = { w:false, a:false, s:false, d:false };
+ state._tutMoveArrows = { up:false, down:false, left:false, right:false };
+ state._tutMoveDone = false;
+
+ showBanner("Tutorial: Move with WASD or Arrow Keys. Press W A S D (or ↑ ↓ ← →) at least once each to continue.", 999999);
+
 }
 
 
@@ -2802,6 +3006,8 @@ state.cartographerArrowTarget = null;
 stopMerchantAudio?.();
 stopBlacksmithAudio?.();
 stopJesterAudio?.();
+stopCartographerAudio?.();
+
 
 
 
@@ -3262,7 +3468,7 @@ stopCartographerAudio?.();
   let spawnedCartographer = false;
 
 
-if (state.floor % 10 !== 0 && Math.random() < MERCHANT_SPAWN_CHANCE){
+if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < MERCHANT_SPAWN_CHANCE){
   const rooms = state.rooms
   .slice(1)                                   // avoid start room
   .filter(r => r !== state._stairsRoom);      // NEW: never the stairs room
@@ -3295,7 +3501,7 @@ ensureMerchantAudio();
 }
 
 // ---- Blacksmith safe-room spawn (25%) — 3-wide: [anvil][smith][anvil]
-if (state.floor % 10 !== 0 && Math.random() < BLACKSMITH_SPAWN_CHANCE){
+if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < BLACKSMITH_SPAWN_CHANCE){
   // Rooms eligible: not start, not stairs, and NOT the merchant's room
   const rooms2 = state.rooms
     .slice(1)
@@ -6667,7 +6873,7 @@ await fadeFromBlack(360);
     const hood = { type:'Hooded', x:far.x, y:far.y, hp:1, size:1, _scene:true, static:true };
     state.enemies.push(hood); draw();
 
-    await say('You’ve come this far, and yet you understand nothing.');
+    await say("You’ve come this far, and yet you understand nothing.");
     await say('Fine, I will be your opponent.');  // click to dismiss
 
     // Immediately swap to crowned king
@@ -6758,10 +6964,21 @@ function collectIfPickup(){
   const kxy=key(state.player.x,state.player.y);
   if(state.tiles[state.player.y][state.player.x]===5 && state.pickups[kxy]){
     const it=state.pickups[kxy];
-    if(it.kind==='weapon'){
+        if(it.kind==='weapon'){
         SFX.pickup();
       state.inventory.weapons[it.payload.name]=(state.inventory.weapons[it.payload.name]||0)+1;
       log(`Picked up ${it.payload.name} (now x${state.inventory.weapons[it.payload.name]}).`);
+
+      // Tutorial Step 5: weapon pickup
+      if (state.gameMode === 'tutorial' && it.payload && it.payload.name === 'Shortsword'){
+        state._tutGotWeapon = true;
+
+        // Only prompt once Step 4 is done
+        if (state._tutBowShot && !state._tutMeleeHit){
+          say("Tutorial: Shortsword acquired. Press I → Weapons → equip Shortsword. Then move next to the rat and press SPACE to attack.");
+        }
+      }
+
     }else if(it.kind==='potion'){
         SFX.pickup();    
       state.inventory.potions++; log('Picked up a potion.');
@@ -6778,6 +6995,51 @@ function collectIfPickup(){
   SFX.pickup();
   state.inventory.arrows = (state.inventory.arrows | 0) + (it.payload | 0);
   log(`Picked up ${it.payload} arrows.`);
+
+  // NEW: Tutorial (Step 4) — teach B, and make the first shot work immediately
+  if (state.gameMode === 'tutorial' && !state._tutGotArrows){
+    state._tutGotArrows = true;
+    state._tutArrowsPicked = true; // prevent the duplicate message block below from firing too
+
+    // ensure bow object exists
+    if (!state.player.bow) state.player.bow = { loaded:0, range:5 };
+
+    // instantly notch one arrow so pressing B doesn't say "No arrow loaded."
+    if ((state.player.bow.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
+      state.inventory.arrows--;
+      state.player.bow.loaded = 1;
+      log('You notch a new arrow.');
+      updateEquipUI?.();
+    }
+
+    hideBanner();
+    showBanner("Tutorial: Press B to shoot the training rat. Make sure you're facing it.", 999999);
+  }
+
+// Tutorial (new): teach bow shooting on arrows pickup
+if (state.gameMode === 'tutorial' && !state._tutGotArrows){
+  // set BOTH flags so all tutorial code paths agree
+  state._tutArrowsPicked = true;
+  state._tutGotArrows = true;
+
+  // Ensure bow exists and auto-load ONE arrow immediately so B works right away
+  state.player.bow = state.player.bow || { range:5, loaded:0 };
+  if ((state.player.bow.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
+    state.inventory.arrows = (state.inventory.arrows|0) - 1;
+    state.player.bow.loaded = 1;
+    SFX.bowDraw?.();
+    updateEquipUI?.();
+    updateInvBody?.();
+  }
+
+  hideBanner();
+  showBanner("Arrows acquired. Face the rat and press B to shoot.", 999999);
+}
+
+
+
+
+
 
         } else if (it.kind === 'shield'){
   SFX.pickup();
@@ -7150,22 +7412,36 @@ if (state.floorEffect === 'MiasmaChamber') {
 function interact(){
   if (state.gameOver) return;
   if (state._inputLocked || state._descending) return;
-  // Blacksmith first, then Merchant
-  if (isNearBlacksmith(state.player.x, state.player.y)){ openBlacksmith(); return; }
-  if (isNearMerchant(state.player.x, state.player.y)){ openMerchant(); return; }
 
-  if (isNearJester(state.player.x, state.player.y)){ 
-    openJester(); 
-    return; 
+  // Blacksmith first, then Merchant
+  if (isNearBlacksmith(state.player.x, state.player.y)){
+    if (typeof window.openBlacksmith === 'function') window.openBlacksmith();
+    else if (typeof openBlacksmith === 'function') openBlacksmith();
+    return;
+  }
+
+  if (isNearMerchant(state.player.x, state.player.y)){
+    if (typeof window.openMerchant === 'function') window.openMerchant();
+    else if (typeof openMerchant === 'function') openMerchant();
+    return;
+  }
+
+  if (isNearJester(state.player.x, state.player.y)){
+    if (typeof window.openJester === 'function') window.openJester();
+    else if (typeof openJester === 'function') openJester();
+    return;
   }
 
   if (isNearCartographer(state.player.x, state.player.y)){
-    openCartographer();
+    if (typeof window.openCartographer === 'function') window.openCartographer();
+    else if (typeof openCartographer === 'function') openCartographer();
     return;
   }
 
   let did = false;
   for(const nb of neighbors4(state.player.x,state.player.y)){
+    
+
     if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===3){
       openChest(nb.x,nb.y); did=true;
     }
@@ -7237,7 +7513,13 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           SFX.lockSuccess();
           log('You pick the lock and open the door.');
           if (state.gameMode === 'tutorial') {
-            say('Note: in the real dungeon, not all locks will open on the first try.');
+            // Step 9 -> 10: Door unlocked
+            if (state.tutorialStep === 9) {
+              state.tutorialStep = 10;
+              hideBanner();
+              showBanner("Door open! Approach the chest and press E to finish.", 2200);
+              showBanner('Note: In Classic Mode, locks are not guaranteed. You may break a pick and have to try again.', 2500);
+            }
           }
         } else {
           SFX.lockFail();
@@ -7351,6 +7633,28 @@ function openChest(x,y){
   // Normal chest
   state.tiles[y][x] = 1;
   SFX.openChest();
+  
+// Tutorial Step 10: Finish (Triggers on ANY chest in tutorial mode)
+  if (state.gameMode === 'tutorial') {
+    state.tutorialStep = 11; // done
+    hideBanner();
+
+    // Show the dedicated Tutorial Complete modal
+    const m = document.getElementById('tutorialCompleteModal');
+    if (m) {
+      m.style.display = 'flex';
+      // Wire the button right here to ensure it works
+      const btn = document.getElementById('btnTutReturn');
+      if (btn) {
+        btn.onclick = () => { 
+          m.style.display = 'none'; 
+          if(typeof goMenu === 'function') goMenu(); 
+        };
+      }
+    }
+    return; // Stop normal loot logic
+  }
+
   const lootMsg = [];
 
   const kxy = x + ',' + y;
@@ -7687,8 +7991,29 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
       const dmg = rand(2+bonus, 4+bonus);      // simple 2–4 base for bow
       SFX.rangedZap();                         // reuse your ranged SFX
       e.hp -= dmg;
-      log(`You shoot an arrow for ${dmg}.`);
-      const isFatal = e.hp <= 0;
+log(`You shoot an arrow for ${dmg}.`);
+
+if (state.gameMode === 'tutorial' &&
+    state._tutGotArrows &&
+    !state._tutBowShot &&
+    e.tutorialDummy &&
+    e.hp <= 0){
+  state._tutBowShot = true;
+
+  const alreadyHasSword = ((state.inventory?.weapons?.Shortsword|0) > 0);
+
+  hideBanner();
+  showBanner(
+    alreadyHasSword
+      ? "Nice shot. You already have the Shortsword — equip it (I → Weapons), then press SPACE next to the rat to attack. Careful: it’s poisonous."
+      : "Nice shot. Next: pick up the Shortsword, equip it (I → Weapons), then press SPACE next to the rat to attack. Careful: it’s poisonous.",
+    999999
+  );
+}
+
+
+
+const isFatal = e.hp <= 0;
 
 const onDone = ()=>{ 
   if (isFatal) {
@@ -7719,6 +8044,16 @@ const onDone = ()=>{
     awardKill('bow', Math.max(1, e.xp|0));
     SFX.kill();
     log(`${e.type} falls.`);
+
+    // NEW: Tutorial — after killing the stationary bow target, spawn the melee rat
+    if (state.gameMode === 'tutorial' &&
+        e.tutorialDummy &&
+        state._tutBowShot &&
+        !state._tutSpawnedMeleeRat){
+      state._tutSpawnedMeleeRat = true;
+      state.enemies.push({x:18, y:14, type:'Rat', hp:5, atk:[1,2], xp:3});
+    }
+
   }
 
   enemyStep(); 
@@ -7748,7 +8083,15 @@ const onDone = ()=>{
 function attack(){
     if (state.gameOver) return;
     if (state._inputLocked || state._descending) return;
+
+    // Tutorial Step 5: require weapon pickup before teaching melee
+    if (state.gameMode === 'tutorial' && state._tutBowShot && !state._tutGotWeapon){
+      showBanner("Tutorial: Step onto the Shortsword to pick it up first.", 2200);
+      return;
+    }
+
   const nbs = neighbors4(state.player.x,state.player.y);
+
   let target=null, ti=-1;
   for(let i=0;i<state.enemies.length;i++){
     const e=state.enemies[i]; const s=e.size||1;
@@ -7773,6 +8116,32 @@ if (w.type === 'two' && proc(quirkChance('two'))){
 target.hp -= dmg;
 
 log(`You hit the ${target.type} for ${dmg}.${note}`);
+
+// Tutorial Step 5: first melee hit poisons + deals a little damage (once)
+if (state.gameMode === 'tutorial' &&
+    state._tutBowShot &&
+    state._tutGotWeapon &&
+    !state._tutMeleeHit &&
+    target.type === 'Rat' &&
+    !target.tutorialDummy &&
+    dmg > 0){
+
+  state._tutMeleeHit = true;
+
+  if (!state.player.poisoned) log('You are poisoned!');
+  state.player.poisoned = true;
+  state.player.poisonTicks = Math.max(state.player.poisonTicks|0, 12);
+
+  const poisonHit = 4; // small, safe tutorial hit
+  state.player.hp = clamp(state.player.hp - poisonHit, 0, state.player.hpMax);
+  flashDamage?.();
+  log(`Venom burns you for ${poisonHit}.`);
+  updateBars?.();
+
+  // show the "Ouch" tutorial line AFTER this rat is killed
+  state._tutPoisonMsgPending = true;
+}
+
 
 if (dmg > 0) {
   const cvs = document.getElementById('view');
@@ -7874,13 +8243,31 @@ if (!target.boss && Math.random() < GOLD_DROP_CHANCE){
 
 
 
-  // Remove enemy, award XP
+// Remove enemy, award XP
   state.enemies.splice(ti,1);
   SFX.kill();                 // ← enemy down
   log(`${target.type} falls.`);
   state.run.kills++; 
   awardKill(state.player.weapon.type, Math.max(1, target.xp|0));
+
+  // === Tutorial Step 6: teach antidote (3) then potion (1) ===
+  if (state.gameMode === 'tutorial' &&
+      state._tutGotWeapon &&
+      state._tutMeleeHit &&
+      !state._tutStep6Started &&
+      target.type === 'Rat' &&
+      !target.tutorialDummy){
+    state._tutStep6Started = true;
+    state._tutStep6UsedAntidote = false;
+    state._tutStep6UsedPotion = false;
+
+    state.tutorialStep = 6;
+
+    hideBanner();
+    showBanner("You’re poisoned. Press 3 to use an antidote, then press 1 to drink a potion.", 999999);
+  }
 }
+
 
   enemyStep();
   draw();
@@ -8029,6 +8416,13 @@ const dmg = rand(min, max);
 
 target.hp -= dmg;
 log(`Your ${spell.name} hits for ${dmg}.`);
+
+// Tutorial Step 7 -> 8 (Magic used successfully)
+if (state.gameMode === 'tutorial' && state.tutorialStep === 7) {
+  state.tutorialStep = 8;
+  hideBanner();
+  showBanner("Nice cast! Your Mana is low. Press 2 to drink a Tonic.", 999999);
+}
 
 
 if (target.hp <= 0){
@@ -8337,7 +8731,7 @@ function merchantBuyOnly(){
   function renderBuy(){
     setBackMode('back');
     const offers = getBuyStock();
-    msg.textContent = 'What are ya buying?';
+    msg.textContent = "I've got plenty of things that might interest you.";
 
     const paint = (btn, o) => {
       if (!o){ btn.style.display = 'none'; return; }
@@ -8353,6 +8747,8 @@ function merchantBuyOnly(){
     function doBuy(o){
   const have = (state.inventory.gold|0);
   if (have < o.price){ msg.textContent = 'Not enough gold.'; return; }
+
+  playNpcDialogue(NPC_DIALOGUE_URLS.merchant.buy);
 
   state.inventory.gold = have - o.price;
   o.do();                                 // grant ONE item
@@ -8370,6 +8766,7 @@ function merchantBuyOnly(){
 }
 
 
+
     paint(btnA, offers[0]);
     paint(btnB, offers[1]);
     paint(btnC, offers[2]);
@@ -8377,7 +8774,7 @@ function merchantBuyOnly(){
 
   function renderSell(){
     setBackMode('back');
-    msg.textContent = 'What are ya selling?';
+    msg.textContent = "I'll buy just about anything you have. ";
 
     // Build three sell picks (only if you have extras)
     const picks = [];
@@ -8410,29 +8807,41 @@ for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
 
     // paint up to three
     const paintSell = (btn, pick)=>{
-      if (!pick){ bind(btn, '', null); return; }
-      bind(btn, `${pick.label} — +${pick.price}g`, ()=>{
-        pick.doSell();
-        goldNow.textContent = state.inventory.gold|0;
-        updateInvBody?.();
-        renderSell();
-      });
-    };
+  if (!pick){ bind(btn, '', null); return; }
+  bind(btn, `${pick.label} — +${pick.price}g`, ()=>{
+    playNpcDialogue(NPC_DIALOGUE_URLS.merchant.sell);
+    pick.doSell();
+    goldNow.textContent = state.inventory.gold|0;
+    updateInvBody?.();
+    renderSell();
+  });
+};
+
 
     paintSell(btnA, picks[0] || null);
     paintSell(btnB, picks[1] || null);
     paintSell(btnC, picks[2] || null);
   }
 
-  function renderGreeting(){
+function renderGreeting(){
     setBackMode('hide');
-    msg.textContent = 'I got something that might interest ya.';
+    msg.textContent = 'Hello adventurer, are you looking to buy or sell?';
     [btnA, btnB, btnC].forEach(b=>{
       b.disabled = false; b.style.opacity = 1; b.style.pointerEvents = '';
     });
-        bind(btnA, 'Buy',  renderBuy);
-    bind(btnB, 'Sell', renderSell);
+
+    bind(btnA, 'Buy',  ()=>{
+      playNpcDialogue(NPC_DIALOGUE_URLS.merchant.buy);
+      renderBuy();
+    });
+
+    bind(btnB, 'Sell', ()=>{
+      playNpcDialogue(NPC_DIALOGUE_URLS.merchant.sell);
+      renderSell();
+    });
+
     bind(btnC, 'Leave', ()=>{
+      playNpcDialogue(NPC_DIALOGUE_URLS.merchant.leave);
       modal.style.display='none';
 
       // Unlock controls when leaving the merchant
@@ -8444,10 +8853,11 @@ for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
     });
   }
 
-
   // Public opener
   window.openMerchant = function openMerchant(){
     if (!modal) return;
+    playNpcDialogue(NPC_DIALOGUE_URLS.merchant.interact);
+
     goldNow.textContent = state.inventory.gold|0;
     renderGreeting();
     modal.style.display = 'flex';
@@ -8457,6 +8867,7 @@ for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
 
     setMobileControlsVisible?.(false);
   };
+
 });
 
 
@@ -8519,7 +8930,7 @@ function refreshBsUI(){
 }
 
 
-  function doRepair(points){
+function doRepair(points){
   const usingShield = (bsTarget === 'shield');
 
   if (usingShield){
@@ -8545,8 +8956,12 @@ function refreshBsUI(){
     log(`Blacksmith repaired ${w.name} +${amt} for ${cost}g.`);
   }
 
+  playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.repair);
+
   updateEquipUI?.(); updateInvBody?.(); refreshBsUI();
 }
+
+
 const tgtW = document.getElementById('bsTargetWeapon');
 const tgtS = document.getElementById('bsTargetShield');
 if (tgtW) tgtW.onclick = ()=>{ bsTarget='weapon'; refreshBsUI(); };
@@ -8558,15 +8973,18 @@ if (tgtS) tgtS.onclick = ()=>{ bsTarget='shield'; refreshBsUI(); };
   if (bf) bf.onclick = ()=>doRepair(999);
 
   // global open
-  window.openBlacksmith = function openBlacksmith(){
-    refreshBsUI();
-    modal.style.display = 'flex';
+ window.openBlacksmith = function openBlacksmith(){
+  playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.interact);
 
-    // Lock player input while at the blacksmith
-    state._inputLocked = true;
+  refreshBsUI();
+  modal.style.display = 'flex';
 
-    setMobileControlsVisible(false);
-  };
+  // Lock player input while at the blacksmith
+  state._inputLocked = true;
+
+  setMobileControlsVisible(false);
+};
+
 });
 
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -8580,19 +8998,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
   drawJesterWheelCanvas(); // ✅ INSERT THIS TO INITIALLY DRAW THE WHEEL
 
   // Close button
-  if (closeBtn) {
-    closeBtn.onclick = ()=>{
-      modal.style.display = 'none';
-      state._inputLocked = false;
-      if (!state._pauseOpen) setMobileControlsVisible?.(true);
-    };
-  }
+if (closeBtn) {
+  closeBtn.onclick = ()=>{
+    playNpcDialogue(NPC_DIALOGUE_URLS.jester.leave);
+    modal.style.display = 'none';
+    state._inputLocked = false;
+    if (!state._pauseOpen) setMobileControlsVisible?.(true);
+  };
+}
 
-  // Spin button
-  if (spinBtn) spinBtn.onclick = () => {
-    if (state.jesterSpun) return;
-    state.jesterSpun = true;
-    spinBtn.disabled = true;
+// Spin button
+if (spinBtn) spinBtn.onclick = () => {
+  if (state.jesterSpun) return;
+
+  playNpcDialogue(NPC_DIALOGUE_URLS.jester.spin);
+
+  state.jesterSpun = true;
+  spinBtn.disabled = true;
+
 
     const wheelCanvas = document.getElementById('jesterWheel');
 
@@ -8636,30 +9059,35 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ctx.restore();
 
       // 4) Apply reward/punishment based on the color of that slice
-      if (winningSlice % 2 === 1) {
-        // odd = green (your draw function alternates starting red at 0)
-        state.player.hp = state.player.hpMax;
-        state.inventory.gold = (state.inventory.gold|0) + 100;
-        msg.textContent = "Lucky you!";
-        log('[Jester] Landed on GREEN: healed & +100g.');
-      } else {
-        // even = red
-        state.player.hp = Math.max(1, Math.floor(state.player.hpMax * 0.05));
-        msg.textContent = "Ha ha ha, better luck next time!";
-        log('[Jester] Landed on RED: HP dropped to 5%.');
-      }
+if (winningSlice % 2 === 1) {
+  // odd = green (your draw function alternates starting red at 0)
+  state.player.hp = state.player.hpMax;
+  state.inventory.gold = (state.inventory.gold|0) + 100;
+  msg.textContent = "Lucky you!";
+  playNpcDialogue(NPC_DIALOGUE_URLS.jester.win);
+  log('[Jester] Landed on GREEN: healed & +100g.');
+} else {
+  // even = red
+  state.player.hp = Math.max(1, Math.floor(state.player.hpMax * 0.05));
+  msg.textContent = "Ha ha ha, better luck next time!";
+  playNpcDialogue(NPC_DIALOGUE_URLS.jester.lose);
+  log('[Jester] Landed on RED: HP dropped to 5%.');
+}
 
-      updateBars?.();
+updateBars?.();
+
     }, 4200);
   };
 
 
   // Done/Leave button
   if (doneBtn) doneBtn.onclick = ()=>{
-    modal.style.display = 'none';
-    state._inputLocked = false;
-    if (!state._pauseOpen) setMobileControlsVisible?.(true);
-  };
+  playNpcDialogue(NPC_DIALOGUE_URLS.jester.leave);
+  modal.style.display = 'none';
+  state._inputLocked = false;
+  if (!state._pauseOpen) setMobileControlsVisible?.(true);
+};
+
 });
 
 // NEW: Cartographer modal wiring
@@ -8687,42 +9115,48 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (buyBtn){ buyBtn.disabled = false; buyBtn.textContent = `Buy Map (${cost}g)`; }
   }
 
-  function close(){
-    if (!modal) return;
-    modal.style.display = 'none';
-    state._inputLocked = false;
-    if (!state._pauseOpen) setMobileControlsVisible?.(true);
-  }
+function close(){
+  if (!modal) return;
+  playNpcDialogue(NPC_DIALOGUE_URLS.cartographer.leave);
+  modal.style.display = 'none';
+  state._inputLocked = false;
+  if (!state._pauseOpen) setMobileControlsVisible?.(true);
+}
 
-  window.openCartographer = function openCartographer(){
-    if (!modal) return;
-    renderCarto();
-    modal.style.display = 'flex';
-    state._inputLocked = true;
-    setMobileControlsVisible?.(false);
-  };
+window.openCartographer = function openCartographer(){
+  if (!modal) return;
+  playNpcDialogue(NPC_DIALOGUE_URLS.cartographer.interact);
+  renderCarto();
+  modal.style.display = 'flex';
+  state._inputLocked = true;
+  setMobileControlsVisible?.(false);
+};
+
 
   if (closeBtn) closeBtn.onclick = close;
   if (doneBtn)  doneBtn.onclick  = close;
 
-  if (buyBtn) buyBtn.onclick = ()=>{
-    const cost = mapCost();
-    if ((state.inventory.gold|0) < cost){
-      if (msg) msg.textContent = "Come back when you can afford ink and parchment.";
-      return;
-    }
+if (buyBtn) buyBtn.onclick = ()=>{
+  const cost = mapCost();
+  if ((state.inventory.gold|0) < cost){
+    if (msg) msg.textContent = "Come back when you can afford ink and parchment.";
+    return;
+  }
 
-    state.inventory.gold = (state.inventory.gold|0) - cost;
-    state.cartographerMapBought = true;
-    state.cartographerMapActive = true;
+  state.inventory.gold = (state.inventory.gold|0) - cost;
+  state.cartographerMapBought = true;
+  state.cartographerMapActive = true;
 
-    cartographerRevealFloor();
-    renderCarto();
+  playNpcDialogue(NPC_DIALOGUE_URLS.cartographer.buy);
 
-    updateBars?.();
-    draw?.();
-    showBanner?.("A floor map is unrolled before you. The way down is marked.", 3200);
-  };
+  cartographerRevealFloor();
+  renderCarto();
+
+  updateBars?.();
+  draw?.();
+  showBanner?.("A floor map is unrolled before you. The way down is marked.", 3200);
+};
+
 });
 
 
@@ -8769,6 +9203,9 @@ function drawJesterWheelCanvas() {
 window.openJester = function openJester(){
   const modal = document.getElementById('jesterModal');
   if (!modal || state.jesterSpun) return;
+
+  playNpcDialogue(NPC_DIALOGUE_URLS.jester.interact);
+
   msg = document.getElementById('jesterMsg');
   msg.textContent = 'Spin the wheel of fate! Land on green to win big, red means a big loss...';
 
@@ -8782,6 +9219,7 @@ window.openJester = function openJester(){
   state._inputLocked = true;
   setMobileControlsVisible?.(false);
 };
+
 
 
 
@@ -8802,6 +9240,11 @@ document.addEventListener('click', (ev)=>{
   const modal = document.querySelector(sel);
 
   if (modal) {
+
+    if (sel === '#blacksmithModal') {
+      playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.leave);
+    }
+
     modal.style.display='none';
 
     // If we just closed merchant or blacksmith, unlock controls
@@ -8819,6 +9262,7 @@ document.addEventListener('click', (ev)=>{
 
 
 
+
 const invModal=document.getElementById('invModal');
 const spellModal=document.getElementById('spellModal');
 document.querySelectorAll('[data-close]:not(#mBack)')
@@ -8829,13 +9273,31 @@ document.querySelectorAll('[data-close]:not(#mBack)')
       if (modal) {
         modal.style.display = 'none';
 
-        // Tutorial: if we just closed the inventory via its Close button
-        if (sel === '#invModal' &&
-            state.gameMode === 'tutorial' &&
-            state.tutorialStep === 0) {
-          state.tutorialStep = 1;
-          say("Good. Now drink a potion by pressing 1.");
-        }
+        // Tutorial (new Step 3): if we just closed the inventory via its Close button
+if (sel === '#invModal' && state.gameMode === 'tutorial') {
+
+  // movement safeguard
+  if (state.tutorialStep === 0 && !state._tutMoveDone) {
+    showBanner("Tutorial: Move first — press W A S D (or ↑ ↓ ← →) once each.", 2200);
+  }
+
+  // Step 3 advancement: close Inventory -> prompt Spell Book
+  if (state.tutorialStep === 1) {
+    hideBanner();
+    state.tutorialStep = 2;
+    say("Nice. Now press P to open your Spell Book.");
+  }
+}
+
+// Tutorial (new Step 4): if we just closed the spell book via its Close button
+if (sel === '#spellModal' && state.gameMode === 'tutorial') {
+  if (state.tutorialStep === 3) {
+    hideBanner();
+    state.tutorialStep = 4;
+    showBanner("Next: pick up the arrows on the floor. Then face the training rat and press B to shoot.", 999999);
+  }
+}
+
 
         // If we just closed merchant or blacksmith, unlock controls
         if (sel === '#blacksmithModal' || sel === '#merchantModal') {
@@ -10060,79 +10522,217 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // --- normal controls ---
-  if (k === 'arrowup'   || k === 'w') tryMove(0,-1);
-  else if (k === 'arrowdown' || k === 's') tryMove(0, 1);
-  else if (k === 'arrowleft' || k === 'a') tryMove(-1,0);
-  else if (k === 'arrowright'|| k === 'd') tryMove(1, 0);
+ // Tutorial Step 0 (movement): require W+A+S+D OR arrows before continuing
+if (state.gameMode === 'tutorial' && state.tutorialStep === 0 && !state._tutMoveDone){
+  if (k === 'w') state._tutMoveWASD.w = true;
+  else if (k === 'a') state._tutMoveWASD.a = true;
+  else if (k === 's') state._tutMoveWASD.s = true;
+  else if (k === 'd') state._tutMoveWASD.d = true;
+  else if (k === 'arrowup') state._tutMoveArrows.up = true;
+  else if (k === 'arrowdown') state._tutMoveArrows.down = true;
+  else if (k === 'arrowleft') state._tutMoveArrows.left = true;
+  else if (k === 'arrowright') state._tutMoveArrows.right = true;
+
+  const wasdDone = state._tutMoveWASD.w && state._tutMoveWASD.a && state._tutMoveWASD.s && state._tutMoveWASD.d;
+  const arrowsDone = state._tutMoveArrows.up && state._tutMoveArrows.down && state._tutMoveArrows.left && state._tutMoveArrows.right;
+
+ if (wasdDone || arrowsDone){
+  state._tutMoveDone = true;
+  state.tutorialStep = 1;
+  hideBanner();
+  showBanner("Nice! Next: press I to open your inventory.", 999999);
+}
+}
+
+// --- normal controls ---
+if (k === 'arrowup'   || k === 'w') tryMove(0,-1);
+else if (k === 'arrowdown' || k === 's') tryMove(0, 1);
+else if (k === 'arrowleft' || k === 'a') tryMove(-1,0);
+else if (k === 'arrowright'|| k === 'd') tryMove(1, 0);
+
   else if (k === 'e') interact();
   else if (k === ' ') attack();        // melee
   else if (k === 'b') {                // bow
-    shootBow();
-    return;                            // consume the key so enemies don’t also move
-  }
+  const hadArrowLoaded = (state.player?.bow?.loaded|0) > 0;
+
+  shootBow();
+
+  // Tutorial (new): confirm they actually fired a shot (not "No arrow loaded.")
+// IMPORTANT: do NOT advance the tutorial here — advancement happens when the stationary rat dies.
+if (state.gameMode === 'tutorial' && (state._tutGotArrows || state._tutArrowsPicked) && hadArrowLoaded && !state._tutFiredBowOnce){
+  state._tutFiredBowOnce = true;
+}
+
+
+  return;                            // consume the key so enemies don’t also move
+}
+
   else if (k === 'q') cast();
     // --- Hotkeys / modals / tutorial steps ---
-  else if (k === '1') {
-    // drink potion
-    usePotion();
+    else if (k === '1') {
 
-    // Tutorial: they just drank a potion
-    if (state.gameMode === 'tutorial' && state.tutorialStep === 1) {
-      state.tutorialStep = 2;
-      say("Great! Now use the WASD/Arrow Keys to pick up and equip the weapon off the floor.");
+    // === Tutorial Step 6: must use antidote (3) before potion (1) ===
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 6) {
+
+      // Don’t let them waste the only potion before curing poison
+      if (!state._tutStep6UsedAntidote) {
+        hideBanner();
+        showBanner("Use 3 first (antidote). Then use 1 (potion).", 2200);
+      } else {
+        // drink potion
+        usePotion();
+
+        if (!state._tutStep6UsedPotion) {
+          state._tutStep6UsedPotion = true;
+          state.tutorialStep = 7; 
+          
+          // Step 7: Spawn new rat and prompt Magic
+          state.enemies.push({x:15, y:14, type:'Rat', hp:4, atk:[1,2], xp:3});
+          hideBanner();
+          showBanner("A new rat appears! Press Q to cast your equipped spell (Pebble).", 999999);
+        }
+      }
+
+    } else {
+      // normal behavior
+      usePotion();
+
+      // Tutorial: (legacy) advancement disabled — new tutorial uses different steps now
+      if (state.gameMode === 'tutorial' && state.tutorialStep === 999) {
+        state.tutorialStep = 2;
+        say("Great! Now use the WASD/Arrow Keys to pick up and equip the weapon off the floor.");
+      }
     }
   }
   else if (k === '2') {
     useTonic();
+
+    // Tutorial Step 8 -> 9 (Tonic used)
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 8) {
+      state.tutorialStep = 9;
+      hideBanner();
+      showBanner("Mana restored. Walk to the locked door below and press E to use a lockpick.", 999999);
+    }
   }
   else if (k === '3') {
-    useAntidote();
+
+    // === Tutorial Step 6: track antidote usage ===
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 6) {
+
+      if (!state._tutStep6UsedAntidote) {
+        useAntidote();
+        state._tutStep6UsedAntidote = true;
+
+        hideBanner();
+        showBanner("Good. Now press 1 to drink a potion.", 999999);
+      } else {
+        hideBanner();
+        showBanner("Antidote already used. Now press 1 for a potion.", 2200);
+      }
+
+    } else {
+      // normal behavior
+      useAntidote();
+    }
   }
+
   else if (k === 'h') {
     const m = document.getElementById('helpModal');
     if (m) m.style.display = (m.style.display === 'flex' ? 'none' : 'flex');
   }
     else if (k === 'i') {
-    const m = document.getElementById('invModal');
+  const m = document.getElementById('invModal');
 
-    if (m && m.style.display === 'flex') {
-      // closing inventory
-      m.style.display = 'none';
+  if (m && m.style.display === 'flex') {
+    // closing inventory
+    m.style.display = 'none';
 
-      // Tutorial: only advance AFTER they close the inventory
-      if (state.gameMode === 'tutorial' && state.tutorialStep === 0) {
-        state.tutorialStep = 1;
-        say("Good. Now drink a potion by pressing 1.");
+    // clear tab highlight (in case we added it)
+    try{
+      ['tabItems','tabShield','tabWeapons'].forEach(id=>{
+        const btn = document.getElementById(id);
+        if (btn){ btn.style.outline=''; btn.style.outlineOffset=''; }
+      });
+    }catch{}
+
+    // Tutorial Step 2 safeguard (movement first)
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 0 && !state._tutMoveDone) {
+      showBanner("Tutorial: Move first — press W A S D (or ↑ ↓ ← →) once each.", 2200);
+    }
+
+    // Tutorial Step 3: after they close Inventory, prompt Spell Book (P)
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 1) {
+      hideBanner();
+      state.tutorialStep = 2;
+      say("Nice. Now press P to open your Spell Book.");
+    }
+
+} else {
+  // opening inventory
+
+  // Tutorial: when they press I the first time after movement, clear the "press I" prompt immediately
+  if (state.gameMode === 'tutorial' && state.tutorialStep === 1 && state._tutMoveDone && !state._tutInvPromptCleared){
+    state._tutInvPromptCleared = true;
+    hideBanner();
+  }
+
+  updateInvBody();
+  if (m) {
+    m.style.display = 'flex';
+  }
+
+  // Tutorial Step 3: show tabs + highlight them once
+  if (state.gameMode === 'tutorial' && state.tutorialStep === 1 && !state._tutInvTabsShown) {
+    state._tutInvTabsShown = true;
+    showBanner("Inventory tabs: Items / Shield / Weapons. Click a tab, then press I to close.", 999999);
+
+    try{
+      ['tabItems','tabShield','tabWeapons'].forEach(id=>{
+        const btn = document.getElementById(id);
+        if (btn){ btn.style.outline='2px solid #f9d65c'; btn.style.outlineOffset='2px'; }
+      });
+    }catch{}
+  }
+}
+
+}
+
+else if (k === 'p') {
+  const m = document.getElementById('spellModal');
+
+  if (m && m.style.display === 'flex') {
+    // closing spell menu
+    m.style.display = 'none';
+
+    // Tutorial Step 4: ONLY after closing Spell Book, prompt arrows pickup
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 3) {
+      hideBanner();
+      state.tutorialStep = 4;
+      showBanner("Next: pick up the arrows on the floor. Then face the training rat and press B to shoot.", 999999);
+    }
+
+  } else {
+    updateSpellBody();
+    if (m) {
+      m.style.display = 'flex';
+
+      // Tutorial Step 3: open Spell Book, but DON'T mention arrows yet
+      if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
+        hideBanner();
+        state.tutorialStep = 3;
+        showBanner("Spell Book opened. This is where you manage spells. Press P again to close.", 999999);
       }
-    } else {
-      // opening inventory
-      updateInvBody();
-      if (m) {
-        m.style.display = 'flex';
+
+      // keep your existing (legacy) tutorial logic untouched for now
+      if (state.gameMode === 'tutorial' && state.tutorialStep === 4) {
+        state.tutorialStep = 5;
+        say("Spell menu opened. Press Q to use your equipped spell. Close the spell menu, then stand next to the locked door and press E to pick the lock.");
       }
     }
   }
+}
 
-  else if (k === 'p') {
-    const m = document.getElementById('spellModal');
 
-    if (m && m.style.display === 'flex') {
-      // closing spell menu
-      m.style.display = 'none';
-    } else {
-      updateSpellBody();
-      if (m) {
-        m.style.display = 'flex';
-
-        // Tutorial: teach opening the spell menu
-        if (state.gameMode === 'tutorial' && state.tutorialStep === 4) {
-          state.tutorialStep = 5;
-          say("Spell menu opened. Press Q to use your equipped spell. Close the spell menu, then stand next to the locked door and press E to pick the lock.");
-        }
-      }
-    }
-  }
 
 
   updateBars();
