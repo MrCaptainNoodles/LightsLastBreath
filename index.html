@@ -11073,19 +11073,7 @@ function doRestart(){
   state.player.poisoned = false;
   state.player.poisonTicks = 0;
 
-  // CRITICAL FIX: Ensure gameMode is explicitly set back to the last non-tutorial mode.
-  // The global 'state.gameMode' persists between runs. If it was 'classic' before death, 
-  // it should be 'classic' now.
-  if (state.gameMode === 'endless') {
-      // If we died in Endless, stay in Endless (if unlocked)
-      state.gameMode = 'endless';
-  } else {
-      // If we died in Classic or Tutorial, revert to Classic.
-      state.gameMode = 'classic';
-  }
-  
-  // Also reset flags, as these are often mode-specific checks
-  state.flags = {};
+state.gameMode = state.gameMode || 'classic';
 
   // NEW: clear any active floor effects + visuals from the previous run
   delete state.floorEffect;
@@ -11150,7 +11138,7 @@ function doRestart(){
   if (m) m.style.display = 'none';
 
   // ✅ Pick 1 of 2 should appear on a fresh run after death restart
-  if (state.gameMode !== 'tutorial' && state.run.kills === 0) {
+  if (state.gameMode !== 'tutorial') {
     requestAnimationFrame(()=>{
       try { draw?.(); } catch {}
       const f =
