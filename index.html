@@ -640,12 +640,26 @@ body.noscroll{
   <a id="btnTutorial" class="menuLink" href="#">Tutorial Mode</a>
   <a id="btnClassic"  class="menuLink" href="#">Classic Mode</a>
       <span id="btnEndless" class="menuLink disabled" aria-disabled="true" title="Unlock after beating Classic">???</span>
+      <a id="btnCodex" class="menuLink" href="#">Codex</a>
       <a id="btnSettings" class="menuLink" href="#">Settings</a>
       <a id="btnCredits"  class="menuLink" href="#">Credits</a>
     </nav>
   </div>
 </div>
 
+<!-- ====== Codex ====== -->
+<div id="codexOverlay" class="fullOverlay" style="display:none;" aria-label="Codex">
+  <div class="creditsWrap">
+    <button class="btn closeBtn" data-close="#codexOverlay" title="Close">Close</button>
+    <img class="creditsBg" src="https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawler@main/testing_title_screen.png" alt="" />
+    
+    <div class="creditsCard" style="text-align:left;">
+      <div class="creditsTitle" style="text-align:center;">Dungeon Codex</div>
+      <div id="codexContent" style="display:grid; grid-template-columns:1fr; gap:16px;">
+        </div>
+    </div>
+  </div>
+</div>
 
 <!-- ====== CREDITS (full-screen overlay) ====== -->
 <div id="creditsOverlay" class="fullOverlay" style="display:none;" aria-label="Credits">
@@ -1197,16 +1211,8 @@ function isMerchantTile(x,y){
 function isNearMerchant(px,py){
   const m = state.merchant;
   if (!m) return false;
-  const tiles = [
-    [m.left?.x, m.left?.y],
-    [m.x, m.y],
-    [m.right?.x, m.right?.y],
-  ];
-  for (const [x,y] of tiles){
-    if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
-  }
-  return false;
+  const d = Math.abs(px - m.x) + Math.abs(py - m.y);
+  return d === 1;
 }
 
 function isBlacksmithTile(x,y){
@@ -1219,16 +1225,8 @@ function isBlacksmithTile(x,y){
 function isNearBlacksmith(px,py){
   const b = state.blacksmith;
   if (!b) return false;
-  const tiles = [
-    [b.left?.x, b.left?.y],
-    [b.x, b.y],
-    [b.right?.x, b.right?.y],
-  ];
-  for (const [x,y] of tiles){
-    if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
-  }
-  return false;
+  const d = Math.abs(px - b.x) + Math.abs(py - b.y);
+  return d === 1;
 }
 
 // ===== Jester NPC helpers =====
@@ -1242,17 +1240,10 @@ function isJesterTile(x,y){
 function isNearJester(px,py){
   const j = state.jester;
   if (!j) return false;
-  const tiles = [
-    [j.left?.x, j.left?.y],
-    [j.x, j.y],
-    [j.right?.x, j.right?.y],
-  ];
-  for (const [x,y] of tiles){
-    if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
-  }
-  return false;
+  const d = Math.abs(px - j.x) + Math.abs(py - j.y);
+  return d === 1;
 }
+
 
 // ===== Cartographer NPC helpers =====
 function isCartographerTile(x,y){
@@ -1264,17 +1255,9 @@ function isCartographerTile(x,y){
 }
 function isNearCartographer(px,py){
   const c = state.cartographer;
-  if (!c) return false;
-  const tiles = [
-    [c.left?.x, c.left?.y],
-    [c.x, c.y],
-    [c.right?.x, c.right?.y],
-  ];
-  for (const [x,y] of tiles){
-    if (x==null || y==null) continue;
-    if (Math.abs(px-x)+Math.abs(py-y) <= 2) return true;
-  }
-  return false;
+   if (!c) return false;
+  const d = Math.abs(px - c.x) + Math.abs(py - c.y);
+  return d === 1;
 }
 
 
@@ -3452,9 +3435,9 @@ state.mimicChests = new Set();
 // --- Shrines (tile 6) ---
 ensurePathToStairsUnlocked(); 
 
-if (state.gameMode === 'endless') {
+if (state.gameMode === 'endless' || state.gameMode === 'classic') {
   let shrineCount = rand(1, 2); 
-  const shrineRooms = new Set(); // NEW: Track rooms that already have a shrine (by index)
+  const shrineRooms = new Set();
 
   while(shrineCount > 0){ 
     // Pick a random room index
@@ -3614,7 +3597,7 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < JE
 }
 
 // ---- Cartographer safe-room spawn ----
-  if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < CARTOGRAPHER_SPAWN_CHANCE) {
+  if ((state.gameMode === 'endless' || state.gameMode === 'classic') && state.floor % 10 !== 0 && Math.random() < CARTOGRAPHER_SPAWN_CHANCE) {
     const rooms4 = state.rooms
       .slice(1)
       .filter(r => r !== state._stairsRoom)
@@ -3979,7 +3962,7 @@ if (Object.keys(state.pickups).length === 0){
 
 // === ONE ELITE ENEMY PER FLOOR (non-boss floors) ===
 // Elite = tinted like bosses, but weaker than bosses (size 1, no stairs on death)
-if (state.gameMode === 'endless' && (state.floor % 10) !== 0 && Array.isArray(state.enemies) && state.enemies.length) {
+if ((state.gameMode === 'endless' || state.gameMode === 'classic') && (state.floor % 10) !== 0 && Array.isArray(state.enemies) && state.enemies.length) {
   const candidates = state.enemies.filter(e => e && !e.boss && e.size === 1 && !e.elite);
   if (candidates.length) {
     const elite = candidates[rand(0, candidates.length - 1)];
@@ -5156,7 +5139,7 @@ if (enemy._flashColor && enemy._flashTime > Date.now()) {
   if (t.includes('slime'))     { drawSlimePixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('skeleton'))  { drawSkeletonPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('mage'))      { drawMagePixel(ctx, x, y, sizePx); ctx.restore(); return; }
-  if (t.includes('mimic')) { drawMimicPixel(ctx, x, y, sizePx); return; }
+  if (t.includes('mimic')) { drawMimicPixel(ctx, x, y, sizePx); ctx.restore(); return; } // Added ctx.restore()
   if (t.includes('clone') || t.includes('mirror')){
     drawPlayerHelmet(ctx, x, y, sizePx, state.player.facing || 'down');
     ctx.restore();
@@ -7557,9 +7540,13 @@ gen(); enemyStep(); draw?.(); updateBars();
         if (typeof updateBossHud === 'function') updateBossHud();
 
         // --- NEW: floor-effect popup banner ---
-if (state.floorEffect === 'MiasmaChamber') {
-  showBanner('Miasma Chamber — the air itself poisons you.', 4000);
-} else if (state.floorEffect === 'ShadowyLabyrinth') {
+        
+        // This SINGLE line covers Miasma, Shadow, and Bloodhunt automatically:
+        unlockCodex(state.floorEffect); 
+
+        if (state.floorEffect === 'MiasmaChamber') {
+          showBanner('Miasma Chamber — the air itself poisons you.', 4000);
+        } else if (state.floorEffect === 'ShadowyLabyrinth') {
   showBanner('Shadowy Labyrinth — your vision is strangled by darkness.', 4000);
 } else if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt') {
   showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
@@ -7624,22 +7611,25 @@ function interact(){
 if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
   state.tiles[nb.y][nb.x] = 1; // Change shrine to used floor tile
   SFX.spell(); // Use a generic spell sound for feedback
-  
+  unlockCodex('Shrine', true); // <--- TRACK GENERAL SHRINE INTERACTION
   const roll = Math.random();
   if (roll < 0.25) {
     // Bad: Summon Enemies (25% chance)
     log('The shrine hums... and traps you!');
     if (typeof spawnMimic === 'function') spawnMimic(nb.x, nb.y); 
+    unlockCodex('Shrine_Mimic', true); // <--- TRACK MIMIC
   } else if (roll < 0.55) { // 30% chance
     // Good: Full Heal
     state.player.hp = state.player.hpMax;
     state.player.mp = state.player.mpMax;
     log('Divine light restores your vitality!');
     updateBars();
+    unlockCodex('Shrine_Heal', true); // <--- TRACK HEAL
   } else if (roll < 0.85) { // 30% chance
     // Good: XP Boost
     log('Ancient knowledge flows into you. (+50 XP)');
     if (typeof awardKill === 'function') awardKill('magic', 50); 
+    unlockCodex('Shrine_XP', true); // <--- TRACK XP
   } else { // 15% chance
     // Mixed: Teleport (can be good or bad)
     log('The world shifts around you...');
@@ -7647,6 +7637,8 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
       const spot = findFreeFloorTile(10);
       if(spot) { state.player.x = spot.x; state.player.y = spot.y; }
     }
+    unlockCodex('Shrine_Teleport', true); // <--- TRACK TELEPORT
+  
   }
 
   // 👇 ADD THESE TWO LINES HERE 👇
@@ -8216,6 +8208,7 @@ const onDone = ()=>{
     state.run.kills++; 
     awardKill('bow', Math.max(1, e.xp|0));
     SFX.kill();
+    unlockCodex(target.displayName || target.type, true);
     log(`${e.type} falls.`);
 
     // NEW: Tutorial — after killing the stationary bow target, spawn the melee rat
@@ -8420,6 +8413,7 @@ if (!target.boss && Math.random() < GOLD_DROP_CHANCE){
 // Remove enemy, award XP
   state.enemies.splice(ti,1);
   SFX.kill();                 // ← enemy down
+  unlockCodex(target.displayName || target.type, true);
   log(`${target.type} falls.`);
   state.run.kills++; 
   awardKill(state.player.weapon.type, Math.max(1, target.xp|0));
@@ -8652,6 +8646,7 @@ if (!target.boss && Math.random() < GOLD_DROP_CHANCE){
   // Remove enemy, award XP
   state.enemies = state.enemies.filter(x => x !== target);
   if (SFX.kill) SFX.kill();
+  unlockCodex(target.displayName || target.type, true);
   log(`${target.type} falls.`);
   state.run.kills++;
   awardKill('magic', Math.max(1, target.xp|0));
@@ -8919,11 +8914,11 @@ function merchantBuyOnly(){
       btn.onclick = o.sold ? null : () => doBuy(o);
     };
 
-    function doBuy(o){
+function doBuy(o){
   const have = (state.inventory.gold|0);
   if (have < o.price){ msg.textContent = 'Not enough gold.'; return; }
 
-  playNpcDialogue(NPC_DIALOGUE_URLS.merchant.buy);
+  // Audio removed here (plays only on entering menu)
 
   state.inventory.gold = have - o.price;
   o.do();                                 // grant ONE item
@@ -8934,7 +8929,7 @@ function merchantBuyOnly(){
   } else {
     o.sold = true;                        // fallback for any legacy line
   }
-
+unlockCodex('Merchant_Bought', true); // <--- TRACK PURCHASE
   goldNow.textContent = state.inventory.gold|0;
   updateInvBody?.();
   renderBuy();                            // refresh labels / SOLD state
@@ -8967,12 +8962,31 @@ for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
         const equipped = state.player.weapon?.name === wName;
         const stashedCnt = (state.inventory.stashed?.[wName]?.length) || 0;
 
-        // If this was your only copy and it's currently equipped (and no stashed copy), switch to Fists
+        // CHECK: If this is the last copy you own (inventory + stash) AND it's equipped
         if (equipped && count <= 1 && stashedCnt === 0) {
-          equipWeaponByName('Fists');
+          // Force switch to Fists + recompute/UI update immediately
+          state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
+          
+          if (typeof recomputeWeapon === 'function') recomputeWeapon();
+          if (typeof updateEquipUI === 'function') updateEquipUI(); // <-- CRITICAL: Force HUD update NOW
+          
+          if (typeof log === 'function') log(`Sold your last ${wName}. Equipped Fists.`);
+          
+          if (state.player.shield) { 
+            // Also unequip the shield if it was equipped with this two-handed weapon, 
+            // though Fists should allow a shield, so this may not be needed, but safe to keep.
+            unequipShield(); 
+          }
         }
-
+        
+        // Decrement inventory count and gain gold
         state.inventory.weapons[wName] = Math.max(0, (state.inventory.weapons[wName] | 0) - 1);
+        
+        // CRITICAL STEP: CLEAN UP THE ZERO-COUNT ENTRY
+        if (state.inventory.weapons[wName] === 0) {
+            delete state.inventory.weapons[wName];
+        }
+        
         state.inventory.gold = (state.inventory.gold | 0) + price;
       }
     });
@@ -8984,8 +8998,9 @@ for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
     const paintSell = (btn, pick)=>{
   if (!pick){ bind(btn, '', null); return; }
   bind(btn, `${pick.label} — +${pick.price}g`, ()=>{
-    playNpcDialogue(NPC_DIALOGUE_URLS.merchant.sell);
+    // Audio removed here (plays only on entering menu)
     pick.doSell();
+    unlockCodex('Merchant_Sold', true); // <--- TRACK SALE
     goldNow.textContent = state.inventory.gold|0;
     updateInvBody?.();
     renderSell();
@@ -9031,6 +9046,7 @@ function renderGreeting(){
   // Public opener
   window.openMerchant = function openMerchant(){
     if (!modal) return;
+    unlockCodex('Merchant'); // <--- ADD THIS
     playNpcDialogue(NPC_DIALOGUE_URLS.merchant.interact);
 
     goldNow.textContent = state.inventory.gold|0;
@@ -9132,7 +9148,7 @@ function doRepair(points){
   }
 
   playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.repair);
-
+unlockCodex('Blacksmith_Repair', true); // <--- TRACK REPAIR
   updateEquipUI?.(); updateInvBody?.(); refreshBsUI();
 }
 
@@ -9149,6 +9165,7 @@ if (tgtS) tgtS.onclick = ()=>{ bsTarget='shield'; refreshBsUI(); };
 
   // global open
  window.openBlacksmith = function openBlacksmith(){
+  unlockCodex('Blacksmith'); // <--- ADD THIS
   playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.interact);
 
   refreshBsUI();
@@ -9188,9 +9205,11 @@ if (spinBtn) spinBtn.onclick = () => {
 
   playNpcDialogue(NPC_DIALOGUE_URLS.jester.spin);
 
+// In jesterModal wiring, inside spinBtn.onclick
   state.jesterSpun = true;
   spinBtn.disabled = true;
 
+unlockCodex('Jester_Spin', true); // <--- TRACK SPIN
 
     const wheelCanvas = document.getElementById('jesterWheel');
 
@@ -9300,6 +9319,7 @@ function close(){
 
 window.openCartographer = function openCartographer(){
   if (!modal) return;
+  unlockCodex('Cartographer'); // <--- ADD THIS
   playNpcDialogue(NPC_DIALOGUE_URLS.cartographer.interact);
   renderCarto();
   modal.style.display = 'flex';
@@ -9323,7 +9343,7 @@ if (buyBtn) buyBtn.onclick = ()=>{
   state.cartographerMapActive = true;
 
   playNpcDialogue(NPC_DIALOGUE_URLS.cartographer.buy);
-
+unlockCodex('Cartographer_Map', true); // <--- TRACK MAP PURCHASE
   cartographerRevealFloor();
   renderCarto();
 
@@ -9379,6 +9399,7 @@ window.openJester = function openJester(){
   const modal = document.getElementById('jesterModal');
   if (!modal || state.jesterSpun) return;
 
+  unlockCodex('Jester'); // <--- ADD THIS
   playNpcDialogue(NPC_DIALOGUE_URLS.jester.interact);
 
   msg = document.getElementById('jesterMsg');
@@ -9415,21 +9436,50 @@ document.addEventListener('click', (ev)=>{
   const modal = document.querySelector(sel);
 
   if (modal) {
-
-    if (sel === '#blacksmithModal') {
-      playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.leave);
-    }
+    // 1. Audio feedback on close
+    if (sel === '#blacksmithModal' && typeof playNpcDialogue === 'function') playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.leave);
+    if (sel === '#merchantModal' && typeof playNpcDialogue === 'function') playNpcDialogue(NPC_DIALOGUE_URLS.merchant.leave);
+    if (sel === '#jesterModal' && typeof playNpcDialogue === 'function') playNpcDialogue(NPC_DIALOGUE_URLS.jester.leave);
+    if (sel === '#cartographerModal' && typeof playNpcDialogue === 'function') playNpcDialogue(NPC_DIALOGUE_URLS.cartographer.leave);
 
     modal.style.display='none';
 
-    // If we just closed merchant or blacksmith, unlock controls
-    if (sel === '#blacksmithModal' || sel === '#merchantModal') {
+    // 2. Unlock controls for ALL interaction modals
+    // This list now includes Jester and Cartographer so you don't get stuck.
+    const lockingModals = [
+      '#blacksmithModal', 
+      '#merchantModal', 
+      '#jesterModal', 
+      '#cartographerModal', 
+      '#spellUpModal'
+    ];
+
+    if (lockingModals.includes(sel)) {
       state._inputLocked = false;
     }
 
-    // Only re-show mobile controls if we are NOT paused
+    // 3. Restore mobile controls (unless paused)
     if (!state._pauseOpen) {
-      setMobileControlsVisible(true);
+      if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+    }
+    
+    // 4. Tutorial specific logic (keeps your existing tutorial flow working)
+    if (sel === '#invModal' && state.gameMode === 'tutorial') {
+      if (state.tutorialStep === 0 && !state._tutMoveDone) {
+        showBanner("Tutorial: Move first — press W A S D (or ↑ ↓ ← →) once each.", 2200);
+      }
+      if (state.tutorialStep === 1) {
+        hideBanner();
+        state.tutorialStep = 2;
+        say("Nice. Now press P to open your Spell Book.");
+      }
+    }
+    if (sel === '#spellModal' && state.gameMode === 'tutorial') {
+      if (state.tutorialStep === 3) {
+        hideBanner();
+        state.tutorialStep = 4;
+        showBanner("Next: pick up the arrows on the floor. Then face the training rat and press B to shoot.", 999999);
+      }
     }
   }
 });
@@ -10482,10 +10532,15 @@ function hidePick2Modal(){
   if (typeof draw === 'function') draw();
 }
 
+// === UPDATE INSIDE choosePick2 ===
 function choosePick2(idx){
   if (!_pick2Current || !_pick2Current[idx]) return;
   const cfg = _pick2Current[idx];
   try { cfg.apply(); } catch (err) { console.error(err); }
+  
+  // Pass 'true' to increment the "Picked" count
+  unlockCodex(cfg.id, true); 
+
   hidePick2Modal();
 }
 
@@ -11717,6 +11772,180 @@ if (shrineBtn) shrineBtn.addEventListener('click', ()=>{
   });
 })();
 
+// ====== CODEX SYSTEM ======
+const CODEX_KEY = 'dc_codex_v1';
+const CODEX_DEF = {
+  // Enemies
+  Rat: { name:'Rat', desc:'A large, disease-ridden rodent.', seen:false, kills:0 },
+  Bat: { name:'Bat', desc:'Flits in the shadows. Drinks blood to heal.', seen:false, kills:0 },
+  Slime: { name:'Slime', desc:'A mindless blob of acidic jelly.', seen:false, kills:0 },
+  Spider: { name:'Spider', desc:'Web-spinning hunter. Slows its prey.', seen:false, kills:0 },
+  Goblin: { name:'Goblin', desc:'Quick and greedy. Steals items.', seen:false, kills:0 },
+  Skeleton: { name:'Skeleton', desc:'Animated bones. Often reassembles.', seen:false, kills:0 },
+  Mage: { name:'Mage', desc:'Casts spells from a distance.', seen:false, kills:0 },
+  Mimic: { name:'Mimic', desc:'A chest with teeth. Surprise!', seen:false, kills:0 },
+  // Bosses
+  'The Rat King': { name:'The Rat King', desc:'The toxic ruler of the sewers.', seen:false, kills:0 },
+  'Count Fang': { name:'Count Fang', desc:'Ancient vampiric horror.', seen:false, kills:0 },
+  'Broodmother': { name:'Broodmother', desc:'Queen of the webs.', seen:false, kills:0 },
+  'Sir Squish': { name:'Sir Squish', desc:'A slime of noble lineage.', seen:false, kills:0 },
+  'Carl': { name:'Carl', desc:'The Goblin King. Likes gold.', seen:false, kills:0 },
+  'Mr. Humerus': { name:'Mr. Humerus', desc:'A really big pile of bones.', seen:false, kills:0 },
+  'Archon of Ash': { name:'Archon of Ash', desc:'Master of destructive magic.', seen:false, kills:0 },
+  'Your Shadow': { name:'Your Shadow', desc:'A dark reflection of yourself.', seen:false, kills:0 },
+  'The Mad King': { name:'The Mad King', desc:'The ruler of the dungeon.', seen:false, kills:0 },
+  // NPCs
+  Merchant: { name:'Merchant', desc:'Buys and sells goods.', seen:false },
+  Blacksmith: { name:'Blacksmith', desc:'Repairs your equipment.', seen:false },
+  Jester: { name:'Jester', desc:'Plays games of chance.', seen:false },
+  Cartographer: { name:'Cartographer', desc:'Maps the floor for a price.', seen:false },
+  // Effects
+  MiasmaChamber: { name:'Miasma Chamber', desc:'Poisonous air fills the floor.', seen:false },
+  ShadowyLabyrinth: { name:'Shadowy Labyrinth', desc:'Vision is severely limited.', seen:false },
+  Bloodhunt: { name:'Bloodhunt', desc:'Enemies are stronger and faster.', seen:false },
+// Existing Interactable
+  Shrine: { name:'Mystical Shrine', desc:'A holy altar that offers a blessing... or a curse.', seen:false, triggered:0 }, // Add general tracker
+  
+// New Shrine Effect Trackers (Inferred from interact() function)
+  Shrine_Mimic:   { name:'Shrine: Summoned Mimic',   desc:'Triggers a surprise Mimic encounter.', seen:false, activated:0 },
+  Shrine_Heal:    { name:'Shrine: Full Restore',     desc:'Restores all HP and MP.', seen:false, activated:0 },
+  Shrine_XP:      { name:'Shrine: XP Boost',         desc:'Grants +50 Magic XP.', seen:false, activated:0 },
+  Shrine_Teleport: { name:'Shrine: Teleport',        desc:'Teleports you to a random floor tile.', seen:false, activated:0 },
+  
+  // New NPC Interaction Trackers
+  Merchant_Bought:   { name:'Merchant: Items Bought',    desc:'Total items purchased (potions, tonics, lockpicks).', seen:false, interactions:0 }, 
+  Merchant_Sold:     { name:'Merchant: Items Sold',      desc:'Total items sold to the Merchant.', seen:false, interactions:0 },      
+  Blacksmith_Repair: { name:'Blacksmith: Repairs Done',  desc:'Total times durability was restored.', seen:false, interactions:0 },  
+  Jester_Spin:       { name:'Jester: Wheel Spins',       desc:'Total spins of the Wheel of Fate.', seen:false, interactions:0 },      
+  Cartographer_Map:  { name:'Cartographer: Maps Bought', desc:'Total maps purchased.', seen:false, interactions:0 },  
+  
+};
+if (typeof PICK2_POOL !== 'undefined') {
+  PICK2_POOL.forEach(p => {
+    const niceName = p.id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    CODEX_DEF[p.id] = { 
+      name: niceName, 
+      desc: p.label, 
+      seen: false,
+      picked: 0  // <--- ADD THIS LINE
+    };
+  });
+}
+function loadCodex(){
+  const stored = JSON.parse(localStorage.getItem(CODEX_KEY)||'{}');
+  const merged = { ...CODEX_DEF }; // Start with the complete default definition
+  
+  for (const k in stored) {
+    if (merged[k]) {
+        // Merge the saved data INTO the default definition, 
+        // preserving default properties like 'interactions: 0' if not present in 'stored'.
+        merged[k] = { 
+            ...merged[k],    // default properties (like interactions:0)
+            ...stored[k]     // saved values (like kills:10 or seen:true)
+        };
+    }
+  }
+  return merged;
+}
+function saveCodex(c){ localStorage.setItem(CODEX_KEY, JSON.stringify(c)); }
+
+function unlockCodex(key, increment=false){
+  if (!key) return;
+  const c = loadCodex();
+  
+  // Handle loose mapping
+  let entry = c[key];
+  if (!entry && typeof getBossName === 'function') entry = c[getBossName(key)];
+  
+  if (entry){
+    if (!entry.seen) entry.seen = true;
+    
+    if (increment) {
+       // Is it an enemy?
+       if (entry.kills !== undefined) {
+         entry.kills++;
+       } 
+       // Is it an Omen?
+       else if (entry.picked !== undefined || (typeof PICK2_POOL !== 'undefined' && PICK2_POOL.some(p => p.id === key))) {
+         entry.picked = (entry.picked || 0) + 1;
+       }
+       // Is it a Shrine or NPC tracker? <--- NEW LOGIC HERE
+       else if (entry.activated !== undefined) {
+         entry.activated = (entry.activated || 0) + 1;
+       }
+       else if (entry.interactions !== undefined) {
+         entry.interactions = (entry.interactions || 0) + 1; // <--- This line relies on interactions:0 being present
+       }
+    }
+    saveCodex(c);
+  }
+}
+
+function renderCodexUI(){
+  const list = document.getElementById('codexContent');
+  if (!list) return;
+  list.innerHTML = '';
+  const c = loadCodex();
+  
+  // === UPDATE THIS LIST ===
+  const cats = [
+    { title: 'Enemies', keys: ['Rat','Bat','Spider','Slime','Goblin','Skeleton','Mage','Mimic'] },
+    { title: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] },
+    { title: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer'] },
+    { title: 'Discoveries', keys: ['Shrine'] },
+    { title: 'Floor Effects', keys: ['MiasmaChamber','ShadowyLabyrinth','Bloodhunt'] },
+    { title: 'Shrine Outcomes', keys: ['Shrine_Mimic','Shrine_Heal','Shrine_XP','Shrine_Teleport'] },
+      { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map'] },
+    { title: 'Omens', keys: (typeof PICK2_POOL !== 'undefined' ? PICK2_POOL.map(p => p.id) : []) }
+  ];
+
+  cats.forEach(cat => {
+    const h = document.createElement('div');
+    h.style.cssText = 'font-weight:900; font-size:22px; color:#f9d65c; margin-top:20px; border-bottom:1px solid #444; padding-bottom:4px;';
+    h.textContent = cat.title;
+    list.appendChild(h);
+
+    cat.keys.forEach(k => {
+      const data = c[k];
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(255,255,255,0.06); border-radius:8px; border:1px solid rgba(255,255,255,0.1);';
+      
+      if (data && data.seen) {
+           let statHtml = '';
+           if (data.kills !== undefined) {
+             statHtml = `<div style="font-size:12px; color:#ef4444; font-weight:700;">Kills: ${data.kills}</div>`;
+           } else if (data.picked !== undefined) {
+             statHtml = `<div style="font-size:12px; color:#60a5fa; font-weight:700;">Picked: ${data.picked}</div>`;
+           }
+           // NEW STATS DISPLAY LOGIC
+           else if (data.activated !== undefined) {
+             statHtml = `<div style="font-size:12px; color:#7df9ff; font-weight:700;">Activated: ${data.activated}</div>`;
+           } 
+           else if (data.interactions !== undefined) {
+             statHtml = `<div style="font-size:12px; color:#f6d66a; font-weight:700;">Count: ${data.interactions}</div>`;
+           }
+
+         row.innerHTML = `
+           <div>
+             <div style="font-weight:800; font-size:16px; color:#d9e7f5;">${data.name}</div>
+             <div style="font-size:14px; opacity:0.8; margin-top:2px;">${data.desc}</div>
+           </div>
+           <div style="text-align:right; margin-left:12px;">${statHtml}</div>
+         `;
+      } else {
+         row.innerHTML = `<div style="opacity:0.3; font-style:italic; font-weight:600;">???</div>`;
+      }
+      list.appendChild(row);
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('btnCodex')?.addEventListener('click', ()=>{
+    renderCodexUI();
+    window.openModal('#codexOverlay');
+  });
+});
 
 </script>
 
