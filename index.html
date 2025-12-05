@@ -10543,12 +10543,12 @@ if (btnPick2B){
 window.offerPick2Choice = function offerPick2Choice(context){
   // safety: if the modal or buttons aren't there, do nothing
   if (!pick2Modal || !btnPick2A || !btnPick2B) return;
-  // don't show in tutorial
-  // don't show in tutorial
-  if (state.gameMode === 'tutorial') return;
+  
+  // Omen/Pick 1 of 2 is exclusive to Endless Mode.
+  if (state.gameMode !== 'endless') return;
 
-  // Boss Reward pick should be Endless-only
-  if (context === 'boss' && state.gameMode !== 'endless') return;
+  // Boss Reward pick should only fire if we are actually in Endless mode
+  if (context === 'boss' && state.gameMode !== 'endless') return; // Redundant, but harmless safety.
 
   if (!Array.isArray(PICK2_POOL) || PICK2_POOL.length < 2) return;
 
@@ -11133,12 +11133,12 @@ state.gameMode = state.gameMode || 'classic';
   startRunTimer();
   updateRunTimerNow();
 
-  // 🔕 hide Game Over modal
+// 🔕 hide Game Over modal
   const m = document.getElementById('gameOverModal');
   if (m) m.style.display = 'none';
 
-  // ✅ Pick 1 of 2 should appear on a fresh run after death restart
-  if (state.gameMode !== 'tutorial') {
+  // ✅ Pick 1 of 2 should appear only when starting a new ENDLESS run
+  if (state.gameMode === 'endless') { // <--- ONLY START ENDLESS WITH OMEN
     requestAnimationFrame(()=>{
       try { draw?.(); } catch {}
       const f =
