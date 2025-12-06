@@ -636,13 +636,27 @@ body.noscroll{
     <!-- Your menu background image -->
     <img class="menu-image" src="https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawler@main/testing_title_screen.png" alt="Main Menu Image" />
     <!-- Left-edge floating options -->
-    <nav class="menuList" aria-label="Main Menu">
-  <a id="btnTutorial" class="menuLink" href="#">Tutorial Mode</a>
-  <a id="btnClassic"  class="menuLink" href="#">Classic Mode</a>
-      <span id="btnEndless" class="menuLink disabled" aria-disabled="true" title="Unlock after beating Classic">???</span>
-      <a id="btnShop" class="menuLink" href="#" style="color:#f9d65c">Soul Shop (0)</a> <a id="btnCodex" class="menuLink" href="#">Codex</a>
-      <a id="btnSettings" class="menuLink" href="#">Settings</a>
-      <a id="btnCredits"  class="menuLink" href="#">Credits</a>
+    <nav class="menuList" aria-label="Main Menu" id="menuRoot">
+      <div id="mm-main" style="display:flex; flex-direction:column; gap:18px;">
+        <a id="btnMenuPlay" class="menuLink" href="#">Play</a>
+        <a id="btnMenuStats" class="menuLink" href="#">Stats</a>
+        <a id="btnShop" class="menuLink" href="#" style="color:#f9d65c">Soul Shop (0)</a>
+        <a id="btnSettings" class="menuLink" href="#">Settings</a>
+        <a id="btnCredits" class="menuLink" href="#">Credits</a>
+      </div>
+
+      <div id="mm-play" style="display:none; flex-direction:column; gap:18px;">
+        <a id="btnMenuBackPlay" class="menuLink" href="#" style="opacity:0.6; font-size:14px;">&lt; Back</a>
+        <a id="btnTutorial" class="menuLink" href="#">Tutorial Mode</a>
+        <a id="btnClassic"  class="menuLink" href="#">Classic Mode</a>
+        <span id="btnEndless" class="menuLink disabled" aria-disabled="true" title="Unlock after beating Classic">???</span>
+      </div>
+
+      <div id="mm-stats" style="display:none; flex-direction:column; gap:18px;">
+        <a id="btnMenuBackStats" class="menuLink" href="#" style="opacity:0.6; font-size:14px;">&lt; Back</a>
+        <a id="btnCodex" class="menuLink" href="#">Codex</a>
+        <a id="btnShowLeaderboard" class="menuLink" href="#">Leaderboard</a>
+      </div>
     </nav>
   </div>
 </div>
@@ -740,6 +754,15 @@ body.noscroll{
       <span style="font-weight:700; color:#ff9a8b;">Arachnophobia Mode</span>
       <input id="chkArachno" type="checkbox" style="width:24px; height:24px; accent-color:#ff9a8b;">
     </label>
+
+    <label style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); cursor:pointer;">
+      <span style="font-weight:700; color:#facc15;">Developer Sounds</span>
+      <input id="chkDevSounds" type="checkbox" style="width:24px; height:24px; accent-color:#facc15;">
+    </label>
+
+    <div style="margin-top:16px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1);">
+      <button id="btnResetData" class="btn" style="width:100%; background:#7f1d1d; border-color:#991b1b; color:#fee2e2;">Reset All Save Data</button>
+    </div>
 
     <p style="margin-top:10px; font-size:12px; opacity:0.8;">
       (These settings are saved in your browser between runs.)
@@ -1087,6 +1110,25 @@ body.noscroll{
   </div>
 </div>
 
+<!-- Cleric Modal -->
+<div class="modal" id="clericModal" style="display:none;">
+  <div class="sheet">
+    <div class="row">
+      <div class="title">Cleric</div>
+      <button class="btn" id="clBack">Close</button>
+    </div>
+    <div id="clericMsg" style="opacity:.9; margin:6px 0 10px">
+      The shadows are deep here. I can bless you for a price.
+    </div>
+    <div class="row" style="gap:10px; justify-content:center;">
+      <button class="btn choice" id="clBuyBless">Blessing (50g)</button>
+      <button class="btn" id="clDone">Leave</button>
+    </div>
+    <div style="margin-top:10px; text-align:center; opacity:.85">
+      Gold: <span id="clGoldNow">0</span>
+    </div>
+  </div>
+</div>
 
 
 <!-- Debug Teleport Modal (hidden) -->
@@ -1112,9 +1154,11 @@ body.noscroll{
   <button class="btn" id="dbgSpawnShrine">Spawn Shrine</button>
  <button class="btn" id="dbgGiveClaymore">Give Claymore</button>
   <button class="btn" id="dbgUnlockEndless">Unlock Endless</button>
-  <button class="btn" id="dbgGiveBomb">Give 5 Bombs</button>
-  <button class="btn" id="dbgGiveWarp">Give Warp Stone</button>
+<button class="btn" id="dbgGiveBomb">Give 5 Bombs</button>
+  <button class="btn" id="dbgGiveWarp">Give 1 Warp Stone</button>
+ <button class="btn" id="dbgGiveKeyBlade">Give Key of Destiny</button>
   <button class="btn" id="dbgUnlockClasses">Unlock All Classes</button>
+  <button class="btn" id="dbgSpawnKey">Spawn Key Below</button>
 </div>
 
 
@@ -1284,6 +1328,12 @@ function isNearCartographer(px,py){
   return d === 1;
 }
 
+// --- NEW: Cleric Helper ---
+function isClericTile(x,y){
+  return state.cleric && x === state.cleric.x && y === state.cleric.y;
+}
+// --------------------------
+
 
 // NEW: find stairs + reveal full floor + draw arrow around player
 function cartographerFindStairs(){
@@ -1404,6 +1454,62 @@ function updateCartographerAudio(){
 
   // NOTE: Interactables slider is already applied by interactGain
   cartographerGain.gain.value = shaped * 0.6;
+}
+
+// --- NEW: Cleric Audio ---
+const CLERIC_LOOP_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/priest.mp3';
+let clericAudio = null, clericGain = null, clericNode = null;
+
+function ensureClericAudio(){
+  initAudio();
+  if (!clericGain){
+    clericGain = audioCtx.createGain();
+    clericGain.gain.value = 0;
+    clericGain.connect(interactGain || masterGain);
+  }
+  if (!clericAudio){
+    clericAudio = new Audio();
+    clericAudio.crossOrigin = 'anonymous';
+    clericAudio.loop = true;
+    clericAudio.preload = 'auto';
+    clericAudio.setAttribute('playsinline','');
+    clericAudio.src = CLERIC_LOOP_URL;
+    clericAudio.muted = true;
+    clericAudio.play().catch(()=>{});
+  }
+  if (!clericNode && clericAudio){
+    try{
+      clericNode = audioCtx.createMediaElementSource(clericAudio);
+      clericNode.connect(clericGain);
+    }catch{}
+  }
+}
+
+function stopClericAudio(){
+  try{ if (clericAudio){ clericAudio.pause(); clericAudio.currentTime = 0; } }catch{}
+  try{ if (clericNode){ clericNode.disconnect(); clericNode = null; } }catch{}
+  clericAudio = null;
+  if (clericGain) clericGain.gain.value = 0;
+}
+
+function updateClericAudio(){
+  if (!clericGain) return;
+  if (!state.cleric){ clericGain.gain.value = 0; return; }
+
+  const d = Math.abs(state.player.x - state.cleric.x) + Math.abs(state.player.y - state.cleric.y);
+
+  // RESTORED: Mute if you are on top of her or directly adjacent (distance <= 1)
+  if (d <= 1){
+    clericGain.gain.value = 0;
+    return;
+  }
+
+  const maxD = 20;
+  const v = clamp(1 - (d/maxD), 0, 1);
+  const shaped = Math.pow(v, 0.65);
+  
+  // Volume is 60% max
+  clericGain.gain.value = shaped * 0.6;
 }
 
 
@@ -2277,23 +2383,64 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // --- Arachnophobia Mode Wiring ---
   const chkArachno = document.getElementById('chkArachno');
-  // Initialize global state from storage (default false)
   window._arachnophobiaMode = (localStorage.getItem('arachnoMode') === '1');
-  
   if (chkArachno) {
     chkArachno.checked = window._arachnophobiaMode;
-    
     chkArachno.addEventListener('change', ()=>{
        window._arachnophobiaMode = chkArachno.checked;
        localStorage.setItem('arachnoMode', chkArachno.checked ? '1' : '0');
-       
-       // Play sound only on enable
-       if (chkArachno.checked) {
-           if(typeof playArachnoSound === 'function') playArachnoSound();
-       }
-       
-       // Redraw immediately to update any visible spiders
+       if (chkArachno.checked && typeof playArachnoSound === 'function') playArachnoSound();
        if(typeof draw === 'function') draw();
+    });
+  }
+
+  // --- Reset Data Wiring ---
+  document.getElementById('btnResetData')?.addEventListener('click', () => {
+    if(confirm("Are you sure? This will wipe ALL progress, purchases, and high scores forever.")){
+      localStorage.clear();
+      window.location.reload();
+    }
+  });
+
+  // --- Developer Sounds Wiring ---
+  const chkDev = document.getElementById('chkDevSounds');
+  window._devSounds = (localStorage.getItem('devSounds') === '1');
+  let devTries = 0;
+  // Temporary denial sounds (placeholders)
+  const devDenials = [
+    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/miss.mp3', // Placeholder 1
+    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/miss.mp3', // Placeholder 2
+    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/miss.mp3', // Placeholder 3
+    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/miss.mp3', // Placeholder 4
+    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/miss.mp3'  // Placeholder 5
+  ];
+
+  if (chkDev) {
+    chkDev.checked = window._devSounds;
+    chkDev.addEventListener('click', (e) => {
+        // If enabling, and not fully unlocked (tries < 5), intercept
+        if (chkDev.checked && devTries < 5) {
+            e.preventDefault(); // Stop it from checking
+            
+            // Play Audio Bite (Blocking)
+            const audio = new Audio(devDenials[devTries]);
+            // Lock input/UI
+            document.body.style.pointerEvents = 'none'; 
+            audio.play().catch(()=>{});
+            
+            audio.onended = () => {
+                document.body.style.pointerEvents = 'auto'; // Unlock
+                devTries++;
+            };
+            // Fallback unlock if audio fails
+            audio.onerror = () => { document.body.style.pointerEvents = 'auto'; devTries++; };
+            return;
+        }
+
+        // 6th click or disabling: Allow toggle
+        window._devSounds = chkDev.checked;
+        localStorage.setItem('devSounds', chkDev.checked ? '1' : '0');
+        if (window._devSounds) alert("Developer Sounds Activated! (Placeholder: Implement audio swap logic here)");
     });
   }
 });
@@ -2502,8 +2649,9 @@ function unlockAudioAndLoops(){
   // NPC loops (ok if not present yet)
   try { ensureMerchantAudio?.(); if (merchantAudio){ merchantAudio.muted=false; merchantAudio.play()?.catch(()=>{}); } } catch {}
   try { ensureBlacksmithAudio?.(); if (blacksmithAudio){ blacksmithAudio.muted=false; blacksmithAudio.play()?.catch(()=>{}); } } catch {}
-  try { ensureJesterAudio?.(); if (jesterAudio){ jesterAudio.muted=false; jesterAudio.play()?.catch(()=>{}); } } catch {}
+try { ensureJesterAudio?.(); if (jesterAudio){ jesterAudio.muted=false; jesterAudio.play()?.catch(()=>{}); } } catch {}
   try { ensureCartographerAudio?.(); if (cartographerAudio){ cartographerAudio.muted=false; cartographerAudio.play()?.catch(()=>{}); } } catch {}
+  try { ensureClericAudio?.(); if (clericAudio){ clericAudio.muted=false; clericAudio.play()?.catch(()=>{}); } } catch {}
 
   // Preload a few common SFX so first use isn’t delayed
   try { loadWalkSfx?.(); loadPotionSfx?.(); loadCastSfx?.(); } catch {}
@@ -2554,9 +2702,16 @@ function syncEndlessUnlockUI(){
 
   if (title) title.style.display = 'none';
   if (menu)  menu.style.display  = 'flex';
+
+  // --- FIX: Reset Menu Layers ---
+  if(document.getElementById('mm-main')) document.getElementById('mm-main').style.display = 'flex';
+  if(document.getElementById('mm-play')) document.getElementById('mm-play').style.display = 'none';
+  if(document.getElementById('mm-stats')) document.getElementById('mm-stats').style.display = 'none';
+  // ------------------------------
+
   syncEndlessUnlockUI();
   updateMainMenuShopLabel(); // <--- Refresh shard count
-  document.getElementById('btnClassic')?.focus();
+  document.getElementById('btnMenuPlay')?.focus();
 }
 
 
@@ -2721,12 +2876,40 @@ if (title){
 
 
 
-  // Wire Menu buttons
+// Wire Menu buttons
+  // -- Navigation Logic --
+  const showMenuLayer = (id) => {
+    ['mm-main','mm-play','mm-stats'].forEach(x => {
+      const el = document.getElementById(x);
+      if(el) el.style.display = (x === id) ? 'flex' : 'none';
+    });
+  };
+
+  document.getElementById('btnMenuPlay')?.addEventListener('click', () => showMenuLayer('mm-play'));
+  document.getElementById('btnMenuStats')?.addEventListener('click', () => showMenuLayer('mm-stats'));
+  document.getElementById('btnMenuBackPlay')?.addEventListener('click', () => showMenuLayer('mm-main'));
+  document.getElementById('btnMenuBackStats')?.addEventListener('click', () => showMenuLayer('mm-main'));
+
+  // -- Actions --
   document.getElementById('btnTutorial')?.addEventListener('click', startTutorial);
   document.getElementById('btnClassic') ?.addEventListener('click', startClassic);
   document.getElementById('btnSettings')?.addEventListener('click', ()=>openModal('#settingsOverlay'));
   document.getElementById('btnCredits') ?.addEventListener('click', ()=>openModal('#creditsOverlay'));
   
+// Leaderboard button in stats menu
+  document.getElementById('btnShowLeaderboard')?.addEventListener('click', () => {
+    const m = document.getElementById('scoreModal');
+    const ent = document.getElementById('scoreEntry');
+    const lst = document.getElementById('hiscoreList');
+    if (m && lst) {
+        m.style.zIndex = '10001';           // <--- FIX: Force z-index above Main Menu (9999)
+        m.style.display = 'flex';
+        if(ent) ent.style.display = 'none'; // Hide entry form
+        lst.style.display = 'block';        // Show list
+        if(typeof renderHiscores === 'function') renderHiscores();
+    }
+  });
+
   // --- NEW: Soul Shop Button ---
   document.getElementById('btnShop')?.addEventListener('click', (e)=>{
     e.preventDefault();
@@ -2955,6 +3138,9 @@ function enemyCanEnter(x,y){
   if (inSafe(state.safeRect2, x, y)) return false;
   if (inSafe(state.safeRect3, x, y)) return false;
   if (inSafe(state.safeRect4, x, y)) return false; // NEW: cartographer safe-room protection
+  
+  // --- NEW: Block enemies from walking on the Cleric ---
+  if (state.cleric && x === state.cleric.x && y === state.cleric.y) return false;
 
   const t = state.tiles[y][x];
   return t===1 || t===4;
@@ -3524,6 +3710,7 @@ state.merchant = null;
 stopBlacksmithAudio();
 stopJesterAudio?.();
 stopCartographerAudio?.();
+stopClericAudio?.(); // <--- NEW
 
   // Cartographer/map state gets cleared every floor
   state.cartographerMapBought  = false;
@@ -3534,6 +3721,7 @@ stopCartographerAudio?.();
   let spawnedBlacksmith = false;
   let spawnedJester     = false;
   let spawnedCartographer = false;
+  let spawnedCleric     = false; // <--- NEW
 
 
 if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < MERCHANT_SPAWN_CHANCE){
@@ -3677,53 +3865,47 @@ ensureCartographerAudio();
     }
   }
 
+  // --- NEW: Cleric Spawn (15% chance, non-boss floors) ---
+  state.cleric = null; // Reset
+  // RESTRICTED: Endless Mode only
+if (state.gameMode === 'endless' && state.floor % 10 !== 0) { // <--- Removed random check     // Reuse logic: Find a room not used by others
+     const rooms5 = state.rooms.slice(1).filter(r => r !== state._stairsRoom && !state.merchant?.room && !state.blacksmith?.room && !state.jester?.room && !state.cartographer?.room);
+     const pick5 = rooms5.length ? rooms5[rand(0, rooms5.length-1)] : null;
+     
+     if (pick5) {
+       const cx = Math.floor(pick5.x + pick5.w/2);
+       const cy = Math.floor(pick5.y + pick5.h/2);
+       // Simple single tile spawn in center
+       state.cleric = { x:cx, y:cy };
+       spawnedCleric = true;
+       ensureClericAudio();
+     }
+  }
+  // ------------------------------------------------------
 
-// Update spawn banners to mention all NPCs (Merchant/Blacksmith/Jester/Cartographer):
-if (spawnedMerchant && spawnedBlacksmith && spawnedJester && spawnedCartographer) {
-  showBanner("you hear coins, an anvil, maniacal laughter, and parchment rustling nearby", 3600);
 
-} else if (spawnedMerchant && spawnedBlacksmith && spawnedJester) {
-  showBanner("you hear coins, an anvil, and maniacal laughter echo nearby", 3600);
+// --- NEW: Dynamic Spawn Message (Handles any combination of 5 NPCs) ---
+const sounds = [];
+if (spawnedMerchant)     sounds.push("jingling coins");
+if (spawnedBlacksmith)   sounds.push("a hammer ringing");
+if (spawnedJester)       sounds.push("raucous laughter");
+if (spawnedCartographer) sounds.push("parchment rustling");
+if (spawnedCleric)       sounds.push("soft chanting");
 
-} else if (spawnedMerchant && spawnedBlacksmith && spawnedCartographer) {
-  showBanner("you hear coins jingling, a hammer ringing, and frantic quill-scratches nearby", 3600);
-
-} else if (spawnedMerchant && spawnedJester && spawnedCartographer) {
-  showBanner("you hear coins jingling, raucous laughter, and parchment shuffling nearby", 3600);
-
-} else if (spawnedBlacksmith && spawnedJester && spawnedCartographer) {
-  showBanner("you hear an anvil ring, raucous laughter, and the scratch of a quill nearby", 3600);
-
-} else if (spawnedMerchant && spawnedBlacksmith){
-  showBanner("you hear coins jingling and a hammer ringing nearby", 3600);
-
-} else if (spawnedMerchant && spawnedJester){
-  showBanner("you hear coins jingling and raucous laughter nearby", 3600);
-
-} else if (spawnedMerchant && spawnedCartographer){
-  showBanner("you hear coins jingling and parchment rustling nearby", 3600);
-
-} else if (spawnedBlacksmith && spawnedJester){
-  showBanner("the ring of hammer on anvil and raucous laughter can be heard nearby", 3600);
-
-} else if (spawnedBlacksmith && spawnedCartographer){
-  showBanner("you hear the ring of anvil and a quill scratching nearby", 3600);
-
-} else if (spawnedJester && spawnedCartographer){
-  showBanner("you hear raucous laughter and parchment rustling nearby", 3600);
-
-} else if (spawnedMerchant){
-  showBanner("the sound of jingling coins can be heard nearby", 3600);
-
-} else if (spawnedBlacksmith){
-  showBanner("the ring of hammer on anvil can be heard nearby", 3600);
-
-} else if (spawnedJester){
-  showBanner("you hear raucous laughter echoing nearby", 3600);
-
-} else if (spawnedCartographer){
-  showBanner("you hear parchment turning and a quill scratching nearby", 3600);
+if (sounds.length > 0) {
+  // Join with commas and an Oxford comma/and
+  let text = "you hear " + sounds[0];
+  if (sounds.length === 2) {
+    text = `you hear ${sounds[0]} and ${sounds[1]} nearby`;
+  } else if (sounds.length > 2) {
+    const last = sounds.pop();
+    text = `you hear ${sounds.join(", ")}, and ${last} nearby`;
+  } else {
+    text = `you hear ${sounds[0]} nearby`;
+  }
+  showBanner(text, 3600);
 }
+// ---------------------------------------------------------------------
 
 
 
@@ -3799,9 +3981,21 @@ if (
     ) continue;
 
 
-  // pick kind and build enemy
+// pick kind and build enemy
   const k = kinds[Math.floor(Math.random() * kinds.length)];
   const e = { x, y, size:1, boss:false, type:k.type, hp:k.hp, atk:[...k.atk], xp:k.xp };
+
+  // SHADOW LABYRINTH: 40% chance to spawn a Heartless instead
+  if (state.floorEffect === 'ShadowLabyrinth' && Math.random() < 0.40) {
+    e.type = 'Heartless';
+    e.hp = Math.max(1, Math.floor(e.hp * 0.8)); // Slightly weaker than avg
+    e.fast = true;                              // But fast/twitchy
+    e.xp = Math.max(1, e.xp - 1);               // Worth slightly less XP
+    // Reset specific traits from the original roll
+    e.poisonChance = 0; 
+    e.stealChance = 0;
+    e.ranged = false;
+  }
 
   // per-type traits (mirror what you do elsewhere)
   if (k.type === 'Rat')      { e.poisonChance = 0.20; }
@@ -3842,14 +4036,31 @@ while(propCount > 0 && propSafe < 1000){
   if (enemyAt(rx,ry)) continue;
   if (rx===state.player.x && ry===state.player.y) continue;
   
-  // Don't put on NPC tiles
+// Don't put on NPC tiles
   if (isMerchantTile(rx,ry) || isBlacksmithTile(rx,ry) || isJesterTile(rx,ry) || isCartographerTile(rx,ry)) continue;
 
-  const types = ['crate','crate','barrel','barrel','bones','rubble'];
+// Determine prop pool based on floor depth
+  let types = ['crate','barrel','rubble']; // Default fallback
+  const f = state.floor;
+  
+  if (f <= 10) { // Sewers
+    types = ['crate','barrel','rubble','slime_puddle','pipe_debris','rat_nest','broken_grate','toxic_barrel'];
+  } else if (f <= 20) { // Crypt
+    types = ['coffin','urn','bones','broken_tomb','candle_stand','gargoyle','spider_web','skull_pile'];
+  } else if (f <= 30) { // Magma
+    types = ['obsidian_shard','ash_pile','magma_rock','burnt_cage','lava_vent','iron_chain','dragon_bone'];
+  } else if (f <= 40) { // Jungle/Ruins
+    types = ['fern','broken_pillar','vine_cluster','mossy_rock','giant_flower','stone_idol','ancient_pot'];
+  } else if (f <= 50) { // Void
+    types = ['floating_rock','crystal_shard','void_tendril','star_mote','dark_monolith','energy_swirl'];
+  } else { // Gilded
+    types = ['gold_vase','statue_head','velvet_stool','treasure_pile','red_carpet','chandelier_fallen'];
+  }
+
   state.props[key(rx,ry)] = { type: types[rand(0, types.length-1)] };
   
   // Set tile to 8 (Obstacle)
-  state.tiles[ry][rx] = 8; 
+  state.tiles[ry][rx] = 8;
   
   propCount--;
 }
@@ -4114,7 +4325,7 @@ if (typeof isMerchantTile === 'function' && isMerchantTile(spot.x, spot.y)) cont
 if (typeof isBlacksmithTile === 'function' && isBlacksmithTile(spot.x, spot.y)) continue;
 if (typeof isJesterTile === 'function' && isJesterTile(spot.x, spot.y)) continue;
 if (typeof isCartographerTile === 'function' && isCartographerTile(spot.x, spot.y)) continue;
-
+if (typeof isClericTile === 'function' && isClericTile(spot.x, spot.y)) continue; // --- NEW ---
     
          // already something here
 
@@ -4288,12 +4499,13 @@ const skillBonus = magicPowerBonus(); // +1 dmg bonus for every 2 Magic levels (
 
 
 function randomWeapon(){
-  const pool=[
+const pool=[
     {name:'Shortsword',min:3,max:5,type:'one'},
     {name:'Claymore',min:5,max:9,type:'two'},
     {name:'Spear',min:4,max:7,type:'spear'},
     {name:'Axe',min:4,max:8,type:'axe'},
-    {name:'Knuckle Duster',min:2,max:4,type:'hand'}
+    {name:'Knuckle Duster',min:2,max:4,type:'hand'},
+    {name:'Key of Destiny',min:5,max:7,type:'one'} // <--- NEW
   ];
   let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
 
@@ -4500,6 +4712,9 @@ function damageAfterDR(raw){
   let usedShield = false;
   const sh = state.player?.shield;
   if (sh && sh.dur > 0){ dr += SHIELD_DR; usedShield = true; }
+
+  // Cleric Blessing: +20% Damage Reduction
+  if (state.player.blessTicks > 0) { dr += 0.20; }
 
   dr = Math.min(dr, 0.80);                 // cap total DR at 80%
   const dmg = Math.ceil(raw * (1 - dr));
@@ -5012,14 +5227,100 @@ else if (type === 'rubble') {
     R(4,5,1,1,dust);
   }
   // --- NEW: Pillar Visual ---
-  else if (type === 'pillar') {
+else if (type === 'pillar') {
     const marble = '#d1d5db', shadow = '#9ca3af', dark = '#4b5563';
     // Tall vertical column
-    R(2,1,8,10,marble); 
-    R(3,1,1,10,shadow); // shading
-    R(9,1,1,10,shadow);
-    R(1,0,10,2,dark);   // capital (top)
-    R(1,10,10,2,dark);  // base (bottom)
+    R(2,1,8,10,marble); R(3,1,1,10,shadow); R(9,1,1,10,shadow);
+    R(1,0,10,2,dark); R(1,10,10,2,dark);
+  }
+  // --- BIOME SPECIFIC PROPS ---
+  else if (['coffin','broken_tomb'].includes(type)) { // Crypt
+    R(3,2,6,8,'#4b5563'); R(4,3,4,6,'#1f2937'); // Stone box
+    if(type==='broken_tomb') R(3,5,6,1,'#000'); // Crack
+  }
+  else if (['urn','gold_vase'].includes(type)) { // Crypt/Gilded
+    const c = type==='gold_vase' ? '#fbbf24' : '#b45309';
+    R(4,7,4,4,c); R(3,5,6,2,c); R(4,4,4,1,c); // Pot shape
+  }
+  else if (['magma_rock','obsidian_shard'].includes(type)) { // Magma
+    R(2,8,8,3,'#1f2937'); R(3,7,2,2,'#1f2937');
+    if(type==='magma_rock') { R(4,9,1,1,'#ef4444'); R(7,9,1,1,'#f97316'); } // Glow
+  }
+  else if (['fern','vine_cluster'].includes(type)) { // Jungle
+    R(5,9,2,2,'#166534'); // Base
+    R(2,6,3,3,'#22c55e'); R(7,6,3,3,'#22c55e'); R(5,3,2,4,'#22c55e'); // Leaves
+  }
+else if (['crystal_shard','floating_rock'].includes(type)) { // Void
+    const c = type==='crystal_shard' ? '#a855f7' : '#4b5563';
+    R(5,4,2,6,c); R(4,6,1,2,c); R(7,6,1,2,c); // Spikey/Floaty
+  }
+  // --- NEW: Extended Prop Visuals ---
+  else if (type === 'rat_nest') { 
+    R(2,9,8,3,'#5c4033'); R(3,8,6,1,'#4a3728'); R(4,9,1,1,'#000'); // Messy pile
+  }
+  else if (type === 'broken_grate') {
+    R(2,2,8,8,'#374151'); R(3,3,6,6,'#111827'); // Frame + Hole
+    R(4,2,1,8,'#4b5563'); R(7,2,1,8,'#4b5563'); // Bars
+  }
+  else if (type === 'toxic_barrel') {
+    R(2,3,8,8,'#166534'); R(2,4,8,1,'#000'); R(2,9,8,1,'#000'); // Green barrel
+    R(5,5,2,2,'#a3e635'); // Ooze leak
+  }
+  else if (type === 'gargoyle') {
+    R(4,6,4,4,'#6b7280'); // Body
+    R(2,4,2,4,'#4b5563'); R(8,4,2,4,'#4b5563'); // Wings
+    R(5,5,1,1,'#ef4444'); R(6,5,1,1,'#ef4444'); // Eyes
+  }
+  else if (type === 'spider_web') {
+    ctx.globalAlpha = 0.4;
+    R(0,0,4,4,'#e5e7eb'); R(8,0,4,4,'#e5e7eb'); // Corners
+    ctx.globalAlpha = 1.0;
+  }
+  else if (type === 'skull_pile') {
+    R(4,9,4,3,'#e5e7eb'); R(2,10,3,2,'#d1d5db'); R(7,10,3,2,'#d1d5db'); // Pile
+    R(5,10,1,1,'#000'); R(7,10,1,1,'#000'); // Eyes
+  }
+  else if (type === 'lava_vent') {
+    R(2,8,8,4,'#451a03'); // Mound
+    R(4,8,4,2,'#ef4444'); // Magma top
+    R(5,7,2,3,'#f97316'); // Plume
+  }
+  else if (type === 'iron_chain') {
+    R(5,0,2,12,'#9ca3af'); // Vertical chain
+  }
+  else if (type === 'giant_flower') {
+    R(5,8,2,4,'#166534'); // Stalk
+    R(2,4,8,4,'#db2777'); // Petals
+    R(5,5,2,2,'#fdf4ff'); // Center
+  }
+  else if (type === 'stone_idol') {
+    R(3,2,6,10,'#78716c'); // Head
+    R(4,4,1,1,'#000'); R(7,4,1,1,'#000'); // Eyes
+    R(4,8,4,1,'#000'); // Mouth
+  }
+  else if (type === 'star_mote') {
+    R(5,5,2,2,'#f0abfc'); // Core
+    ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 10;
+    R(6,2,1,8,'#fae8ff'); R(2,6,8,1,'#fae8ff'); // Rays
+    ctx.shadowBlur = 0;
+  }
+  else if (type === 'dark_monolith') {
+    R(4,1,4,11,'#000'); // Black pillar
+    R(5,3,2,6,'#4c1d95'); // Rune glow
+  }
+  else if (type === 'treasure_pile') {
+    R(2,9,8,3,'#eab308'); // Gold base
+    R(3,8,6,2,'#facc15'); // Mid
+    R(4,7,4,2,'#fef08a'); // Top
+    R(3,9,1,1,'#fff'); R(8,10,1,1,'#fff'); // Sparkles
+  }
+  else if (type === 'red_carpet') {
+    R(2,0,8,12,'#991b1b'); // Red strip
+    R(1,0,1,12,'#facc15'); R(10,0,1,12,'#facc15'); // Gold trim
+  }
+  else {
+    // Default fallback (Rubbish pile)
+    R(3,9,6,2,'#4b5563'); R(4,8,4,1,'#6b7280');
   }
 }
 
@@ -5031,7 +5332,29 @@ function drawShadowPixel(ctx, x, y, tile){
   R(2,4,8,6,dark);
   R(3,10,6,1,deep);
 }
+function drawHeartlessPixel(ctx, x, y, tile){
+  const { s, R } = gridN(ctx, x, y, tile, 12);
+  const body = '#0f172a'; // Ink black
+  const eye  = '#facc15'; // Glowing yellow
 
+  // Twitchy antenna animation (shifts based on time)
+  const twitch = Math.floor(Date.now() / 200) % 2; 
+
+  // Antennae
+  if (twitch === 0) {
+    R(4,1, 1,3, body); R(7,2, 1,2, body);
+  } else {
+    R(5,2, 1,2, body); R(8,1, 1,3, body);
+  }
+
+  // Round head + small body
+  R(3,4, 6,5, body); // Head
+  R(4,9, 4,2, body); // Body/Feet base
+
+  // GLOWING YELLOW EYES
+  R(4,5, 1,1, eye); 
+  R(7,5, 1,1, eye);
+}
 function drawHoodedPixel(ctx, x, y, tile){
   const { s, R } = gridN(ctx, x, y, tile, 12);
   // palette
@@ -5345,7 +5668,7 @@ if (enemy._flashColor && enemy._flashTime > Date.now()) {
     if (t.includes('mad') && t.includes('king')) { drawMadKingPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('hood'))                     { drawHoodedPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
   if (t.includes('shadow'))                   { drawShadowPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
-
+if (t.includes('heartless')) { drawHeartlessPixel(ctx, x, y, sizePx); ctx.restore(); return; } // <--- NEW
   if (t.includes('rat'))       { drawRatPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('bat'))       { drawBatPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('spider'))    { drawSpiderPixel(ctx, x, y, sizePx); ctx.restore(); return; }
@@ -5551,9 +5874,34 @@ C(rOuter - 2, wood);
 
 
 
-  // ===== Weapons (payload.type: 'one'|'two'|'spear'|'axe'|future 'hand') =====
+// ===== Weapons (payload.type: 'one'|'two'|'spear'|'axe'|future 'hand') =====
   if (kind === 'weapon'){
+    // Fix: Capture the specific name for visual overrides, separate from the type
+    const nameStr = String(item?.payload?.name || '').toLowerCase();
     const t = String((item?.payload?.type || item?.payload?.name || item?.payload || '')).toLowerCase();
+
+    // KINGDOM HEARTS REFERENCE (Visuals)
+    if (nameStr.includes('key of destiny') || t.includes('keyblade')) {
+      const yellow = '#facc15', blade = '#e5e7eb', grip = '#1f2937';
+      
+      // Guard (The yellow hand protection)
+      P(2,4, yellow, 1, 5); // Vertical guard bar
+      P(1,4, yellow, 2, 1); // Top guard hook
+      P(1,8, yellow, 2, 1); // Bottom guard hook
+      
+      // Grip (Dark handle inside guard)
+      P(0,6, grip, 2, 1); 
+
+      // Shaft (Long silver blade)
+      P(3,6, blade, 7, 1); 
+
+      // Teeth (The crown-shaped keys at the tip)
+      P(8,7, blade, 1, 2); 
+      P(9,7, blade, 1, 1);
+
+      
+      return;
+    }
 
     // One-Handed Sword – long blade across tile
     if (t === 'one' || t.includes('one-handed') || (t.includes('sword') && !t.includes('two'))){
@@ -6235,7 +6583,36 @@ for (const e of state.enemies){
 
 // player on top (pixel helmet) - USE SMOOTH COORDS (rx/ry)
 const ppx = (state.player.rx-ox)*tile, ppy = (state.player.ry-oy)*tile;
+
+// --- NEW: Draw Aura ---
+if (state.player.blessTicks > 0) {
+  ctx.save();
+  // Pulsing gold glow
+  ctx.globalAlpha = 0.3 + (Math.sin(Date.now() / 200) * 0.1); 
+  ctx.fillStyle = '#fbbf24'; 
+  ctx.beginPath();
+  ctx.arc(ppx + tile/2, ppy + tile/2, tile * 0.75, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+// ----------------------
+
 drawPlayerHelmet(ctx, ppx, ppy, tile, state.player.facing || 'down');
+
+// --- NEW: Draw Cleric NPC ---
+if (state.cleric) {
+  const cx = (state.cleric.x - ox) * tile;
+  const cy = (state.cleric.y - oy) * tile;
+  if (state.seen.has(key(state.cleric.x, state.cleric.y))) {
+     // White robe with gold trim
+     const { R } = gridN(ctx, cx, cy, tile, 12);
+     R(3,3, 6,7, '#f3f4f6'); // Robe
+     R(4,2, 4,3, '#efd8b8'); // Face
+     R(3,6, 6,4, '#fbbf24'); // Gold Sash
+     R(5,7, 2,3, '#f3f4f6'); // Center fold
+  }
+}
+// ----------------------------
 
 // NEW: cartographer arrow overlay (points to stairs)
 drawCartographerStairsArrow(ctx, ox, oy, tile);
@@ -6253,6 +6630,11 @@ if (jesterAudio && jesterAudio.muted && audioCtx && audioCtx.state === 'running'
 
 updateCartographerAudio();
 if (cartographerAudio && cartographerAudio.muted && audioCtx && audioCtx.state === 'running') cartographerAudio.muted = false;
+
+// --- FIX: Add Cleric Here ---
+updateClericAudio();
+if (clericAudio && clericAudio.muted && audioCtx && audioCtx.state === 'running') clericAudio.muted = false;
+// ----------------------------
 
 
   // fog last so it still darkens bosses & player outside FOV
@@ -7025,11 +7407,26 @@ if (state.safeRect){
 function triggerGameOver(){
   if (state.gameOver) return;
   state.gameOver = true;
+  
   const m = document.getElementById('gameOverModal');
-  if (m) m.style.display = 'flex';
+  if (m) {
+    m.style.display = 'flex';
+    
+    // KH REFERENCE: Rare death message
+    const title = m.querySelector('.title');
+    if (title) {
+        if (Math.random() < 0.10) { 
+            title.textContent = "Your heart has been lost...";
+            title.style.color = "#ff0000"; // Optional: make it red
+        } else {
+            title.textContent = "Game Over";
+            title.style.color = ""; // Reset color
+        }
+    }
+  }
+  
   state.run.ended = true;
   stopRunTimerFreeze(); 
-   state.run.ended = true; 
   if (typeof openScoreEntry === 'function') openScoreEntry();
 }
 
@@ -7047,6 +7444,13 @@ function enemyStep(){
   // -------------------------
 
 // === player status that ticks once per enemy phase ===
+  // --- NEW: Cleric Blessing Tick ---
+  if (state.player.blessTicks > 0) {
+    state.player.blessTicks--;
+    if (state.player.blessTicks === 0) log("The holy blessing fades.");
+  }
+  // --------------------------------
+
   if (state.player.poisoned && state.player.poisonTicks > 0){
     state.player.poisonTicks--;
     const t = state.player.poisonTicks;
@@ -7696,6 +8100,7 @@ async function runDepth50Intro(){
 
     // Player advances this line
     await say('So you’ve finally made it. This is where your journey ends.');
+await say('Submit to the darkness!');  // click to dismiss
 
     // Cut to black, remove shadow, start boss music, fade back
     await fadeToBlack(360);
@@ -8049,6 +8454,7 @@ function tryMove(dx,dy){
   if (isBlacksmithTile(nx, ny)) { log('The blacksmith blocks the way.'); return; }
   if (isJesterTile(nx, ny)) { log('The jester blocks the way.'); return; }
   if (isCartographerTile(nx, ny)) { log('The cartographer blocks the way.'); return; }
+  if (isClericTile(nx, ny)) { log('The priestess blocks the way.'); return; }
 
 // NEW: set facing from movement
   if (dx>0) state.player.facing='right';
@@ -8073,7 +8479,7 @@ function tryMove(dx,dy){
   state.player.y = ny;
   SFX.step();
 
-  // --- NEW: Glacial Freeze (Slide) ---
+// --- NEW: Glacial Freeze (Slide) ---
   if (state.floorEffect === 'GlacialFreeze') {
     // 1. ADDED: Stair Traction. If we just stepped onto Stairs (4), do not slide.
     if (t !== 4) {
@@ -8088,6 +8494,15 @@ function tryMove(dx,dy){
             !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
             !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY)) {
             
+            // Check the intermediate tile (nx, ny) for pickup BEFORE sliding past it
+            const kIntermediate = key(nx, ny);
+            if (state.pickups[kIntermediate]) {
+                // Temporarily place player on intermediate to collect
+                state.player.x = nx; state.player.y = ny; 
+                collectIfPickup(); // Pickup item
+                log('You grab an item as you slide!');
+            }
+
             state.player.x = slideX;
             state.player.y = slideY;
             log('You slide on the ice!');
@@ -8402,6 +8817,13 @@ function interact(){
     return;
   }
 
+  // --- NEW: Cleric Check ---
+  if (state.cleric && Math.abs(state.player.x - state.cleric.x) + Math.abs(state.player.y - state.cleric.y) <= 1) {
+    if (typeof window.openCleric === 'function') window.openCleric();
+    return;
+  }
+  // -------------------------
+
   let did = false;
   for(const nb of neighbors4(state.player.x,state.player.y)){
     
@@ -8500,13 +8922,17 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
   did = true;
 }
         if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===2){
-      if(state.inventory.lockpicks>0){
-        state.inventory.lockpicks--;
+      // Check for Key of Destiny
+      const hasKey = state.player.weapon?.name?.includes('Key of Destiny');
+      
+      if(hasKey || state.inventory.lockpicks>0){
+        if (!hasKey) state.inventory.lockpicks--; // Only consume pick if no key
+        
         ensureSkill('lockpicking');
 
-        // In the tutorial, the door always opens on the first try.
+        // Tutorial OR Key = Instant Success
         let success;
-        if (state.gameMode === 'tutorial') {
+        if (state.gameMode === 'tutorial' || hasKey) {
           success = true;
         } else {
           const L = state.skills['lockpicking'].lvl || 1;
@@ -8514,20 +8940,28 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           success = (Math.random() < chance);
         }
 
-        if (success){
+      if (success){
           incrementMetaStat('locks'); // <--- NEW: Track lockpick success
           state.tiles[nb.y][nb.x] = 1;
-          state.skills['lockpicking'].shown = true;
-          state.skills['lockpicking'].xp += 6;
-          while (state.skills['lockpicking'].xp >= state.skills['lockpicking'].next){
-            state.skills['lockpicking'].xp -= state.skills['lockpicking'].next;
-            state.skills['lockpicking'].lvl++;
-            state.skills['lockpicking'].next = Math.floor(state.skills['lockpicking'].next * 1.5);
-            log('Lockpicking advanced to ' + state.skills['lockpicking'].lvl + '.');
+          
+          // Only grant XP if we actually used a lockpick (no Key)
+          if (!hasKey) {
+            state.skills['lockpicking'].shown = true;
+            state.skills['lockpicking'].xp += 6;
+            while (state.skills['lockpicking'].xp >= state.skills['lockpicking'].next){
+              state.skills['lockpicking'].xp -= state.skills['lockpicking'].next;
+              state.skills['lockpicking'].lvl++;
+              state.skills['lockpicking'].next = Math.floor(state.skills['lockpicking'].next * 1.5);
+              log('Lockpicking advanced to ' + state.skills['lockpicking'].lvl + '.');
+            }
           }
+
           renderSkills();
           SFX.lockSuccess();
-          log('You pick the lock and open the door.');
+
+          if (hasKey) log('The Key of Destiny unlocks the path.');
+          else        log('You pick the lock and open the door.');
+
           if (state.gameMode === 'tutorial') {
             // Step 9 -> 10: Door unlocked
             if (state.tutorialStep === 9) {
@@ -8886,12 +9320,13 @@ function equipWeaponByName(name){
   else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); isVamp=true; }
   else if (name.includes('Ancient ')) { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
 
-  const stats = {
+const stats = {
     'Shortsword': [3,5,'one'],
     'Claymore':   [5,9,'two'],
     'Spear':      [4,7,'spear'],
     'Axe':        [4,8,'axe'],
-    'Knuckle Duster': [2,4,'hand']
+    'Knuckle Duster': [2,4,'hand'],
+    'Key of Destiny': [5,7,'one']   // <--- NEW
   }[baseName];
 
   if(!stats) return;
@@ -9145,6 +9580,12 @@ if (!rollHitFor(w.type)){
 SFX.swingFor(w.type);
 // base swing
 let dmg = rand(w.min, w.max);
+
+// --- NEW: Cleric Blessing Buff ---
+if (state.player.blessTicks > 0) {
+  dmg += 2; // Flat +2 Damage
+}
+// --------------------------------
 
 // --- NEW: Floor Effect Modifiers ---
 if (state.floorEffect === 'AntiMagic') {
@@ -10462,6 +10903,62 @@ window.openCartographer = function openCartographer(){
   setMobileControlsVisible?.(false);
 };
 
+// --- NEW: Cleric Wiring ---
+(function(){
+  const modal = document.getElementById('clericModal');
+  const msg = document.getElementById('clericMsg');
+  const buyBtn = document.getElementById('clBuyBless');
+  const doneBtn = document.getElementById('clDone');
+  const closeBtn = document.getElementById('clBack');
+  const goldNow = document.getElementById('clGoldNow');
+
+  function close(){
+    if (modal) modal.style.display = 'none';
+    state._inputLocked = false;
+    if (!state._pauseOpen) setMobileControlsVisible?.(true);
+  }
+
+  window.openCleric = function(){
+    if (!modal) return;
+    if (goldNow) goldNow.textContent = state.inventory.gold|0;
+    
+    // Check if already blessed
+    if (state.player.blessTicks > 0) {
+       msg.textContent = "You are already walking in the light.";
+       buyBtn.disabled = true;
+       buyBtn.textContent = "Blessed";
+    } else {
+       msg.textContent = "The shadows are deep here. I can bless you for a price.";
+       buyBtn.disabled = false;
+       buyBtn.textContent = "Blessing (50g)";
+    }
+    
+    modal.style.display = 'flex';
+    state._inputLocked = true;
+    setMobileControlsVisible?.(false);
+  };
+
+  if (closeBtn) closeBtn.onclick = close;
+  if (doneBtn) doneBtn.onclick = close;
+  
+  if (buyBtn) buyBtn.onclick = ()=>{
+    if ((state.inventory.gold|0) < 50) {
+      msg.textContent = "The light is free, but my time is not. Come back with gold.";
+      return;
+    }
+    state.inventory.gold -= 50;
+    state.player.blessTicks = 50; // Lasts 50 turns
+    
+    SFX.levelUp(); // Holy sound
+    spawnParticles(state.player.x, state.player.y, '#fbbf24', 12);
+    log("You feel a holy power surround you! (+ATK, +DEF)");
+    
+    close();
+    updateBars();
+    draw();
+  };
+})();
+// --------------------------
 
   if (closeBtn) closeBtn.onclick = close;
   if (doneBtn)  doneBtn.onclick  = close;
@@ -10782,11 +11279,21 @@ if (!sh && have <= 0){
 
       const left = document.createElement('div');
       const wType = ({'Shortsword':'one','Claymore':'two','Spear':'spear','Axe':'axe','Knuckle Duster':'hand','Fists':'hand'}[name]) || 'hand';
-      // Potential damage preview = base(min–max) + your skill bonus for that weapon type
-const ws = weaponStatsFor(name) || (name === 'Fists'
-  ? { min: 1, max: 2, type: 'hand' }
-  : { min: 1, max: 1, type: wType }  // safe fallback
-);
+      
+      // Determine stats: Use ACTUAL equipped stats (including Omen buffs to base) if equipped
+      const isEquipped = state.player.weapon && state.player.weapon.name === name;
+      let ws;
+      
+      if (isEquipped && state.player.weapon.base) {
+          // Use the live modified base stats from the player object
+          ws = { ...state.player.weapon.base, type: state.player.weapon.type };
+      } else {
+          // Use the template stats for unequipped items
+          ws = weaponStatsFor(name) || (name === 'Fists' 
+            ? { min: 1, max: 2, type: 'hand' } 
+            : { min: 1, max: 1, type: wType });
+      }
+
 // --- FIX: Include Global Omen Bonus ---
 const flat = state.globalWeaponFlatBonus || 0;
 const bonus = skillDamageBonus(ws.type) + flat;
@@ -10809,7 +11316,6 @@ if (state.floorEffect === 'AntiMagic') {
 }
 // ---------------------------------------------
 
-const isEquipped = state.player.weapon && state.player.weapon.name === name;
 const durTxt = (isEquipped && Number.isFinite(state.player.weapon.durMax))
   ? ` — Dur ${state.player.weapon.dur}/${state.player.weapon.durMax}` : '';
 
@@ -12892,21 +13398,17 @@ document.addEventListener('DOMContentLoaded', ()=>{   // <-- ensure elements exi
 
     // after:  const playAgain = document.getElementById('btnPlayAgain');
 if (playAgain) playAgain.addEventListener('click', ()=>{
-  // hide leaderboard modal
-  const scoreM = document.getElementById('scoreModal');
-  if (scoreM) scoreM.style.display = 'none';
-  if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);  // restore controls
+      // hide leaderboard modal
+      const scoreM = document.getElementById('scoreModal');
+      if (scoreM) scoreM.style.display = 'none';
+      
+      // Also ensure Game Over modal is closed (it might be underneath)
+      const goM = document.getElementById('gameOverModal');
+      if (goM) goM.style.display = 'none';
 
-
-  // restart immediately (skip Game Over screen)
-  if (typeof doRestart === 'function') {
-    doRestart();
-  } else {
-    // fallback: click the existing Restart button if present
-    const r = document.getElementById('btnRestart');
-    if (r) r.click();
-  }
-});
+      // Return to Main Menu instead of instant restart
+      if (typeof goMenu === 'function') goMenu();
+    });
 
     // Observe Game Over modal becoming visible → trigger score entry once
     if (m){
@@ -12966,7 +13468,10 @@ if (playAgain) playAgain.addEventListener('click', ()=>{
 
 
 document.addEventListener('click', (ev)=>{
-  if(ev.target && ev.target.id==='btnRestart'){ doRestart(); }
+  if(ev.target && ev.target.id==='btnRestart'){ 
+    document.getElementById('gameOverModal').style.display = 'none';
+    goMenu(); 
+  }
 });
 </script>
 
@@ -13313,6 +13818,17 @@ if (warpBtn) warpBtn.addEventListener('click', ()=>{
   log('[debug] Added 1 Warp Stone.');
 });
 
+// --- NEW: Key Blade Debug ---
+const keyBtn = document.getElementById('dbgGiveKeyBlade');
+if (keyBtn) keyBtn.addEventListener('click', ()=>{
+  state.inventory.weapons['Key of Destiny'] = 1;
+  if(typeof equipWeaponByName === 'function') equipWeaponByName('Key of Destiny');
+  updateInvBody?.();
+  updateEquipUI?.();
+  hideDebug?.();
+  log('[debug] Granted Key of Destiny.');
+});
+
 // --- NEW: Unlock All Classes Cheat ---
 const clsBtn = document.getElementById('dbgUnlockClasses');
 if (clsBtn) clsBtn.addEventListener('click', ()=>{
@@ -13329,6 +13845,29 @@ if (clsBtn) clsBtn.addEventListener('click', ()=>{
   saveMeta(m);
   hideDebug?.();
   log('[debug] All Classes unlocked. Click Restart to see the menu.');
+});
+
+// --- NEW: Spawn Key Debug ---
+const spKeyBtn = document.getElementById('dbgSpawnKey');
+if (spKeyBtn) spKeyBtn.addEventListener('click', ()=>{
+  state.pickups ||= {};
+  const px = state.player.x;
+  const py = state.player.y + 1;
+
+  if (!inBounds(px, py)) { log('[debug] Out of bounds.'); return; }
+  const t = state.tiles[py][px];
+  if (t !== 1 && t !== 5) { log('[debug] Tile below is not floor.'); return; }
+
+  const kxy = key(px, py);
+  state.tiles[py][px] = 5;
+  state.pickups[kxy] = { 
+    kind: 'weapon', 
+    payload: { name: 'Key of Destiny', type: 'one', min:5, max:7 } 
+  };
+
+  draw?.();
+  hideDebug?.();
+  log('[debug] Key of Destiny spawned below.');
 });
 
 const healBtn = document.getElementById('dbgSpawnHeal');
