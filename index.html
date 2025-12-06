@@ -3008,6 +3008,7 @@ function gen(){
   state.tiles = Array.from({length:H},()=>Array.from({length:W},()=>0));
   state.rooms=[]; state.corridor=new Set(); state.seen=new Set();
   state.enemies=[]; state.pickups={};
+  state.props={}; // <--- NEW: Init props
   state.lockedDoors = new Set();     // ← reset per-floor
 state._starterChest = null;        // ← avoid stale pointer
 
@@ -3056,6 +3057,25 @@ state.noFog = true;
 for (let y = ry; y < ry + rh; y++) {
   for (let x = rx; x < rx + rw; x++) {
     state.seen.add(key(x,y));
+    
+    // --- NEW: Throne Room Columns (Floor 50 only) ---
+    if (state.floor === 50) {
+      // Create pillars in a grid pattern (every 4th tile)
+      // Keep center clear for the cutscene walking
+      const relX = x - rx;
+      const relY = y - ry;
+      
+      // Safety lane in the middle (height/2)
+      const isCenterLane = Math.abs(relY - Math.floor(rh/2)) < 2;
+      
+      if (!isCenterLane && relX > 2 && relX < rw-2 && relX % 4 === 0 && relY % 3 === 0) {
+        state.tiles[y][x] = 8; // Solid obstacle (Pillar)
+        // Optional: Assign a prop look if you want specific pillar art
+        if(!state.props) state.props = {};
+        state.props[key(x,y)] = { type: 'pillar' }; 
+      }
+    }
+    // ------------------------------------------------
   }
 }
 
@@ -3796,11 +3816,47 @@ if (
 }
 
 
-  // Sync respawn cap to what we just spawned
-  state.enemyCap = state.enemies.length;
+  // keep cap in sync
+state.enemyCap = state.enemies.length;
+
+// --- NEW: Scenery / Props Generation ---
+// Add 8-15 random flavor objects (passable) per floor
+// --- NEW: Scenery / Props Generation ---
+let propCount = rand(8, 15);
+let propSafe = 0;
+while(propCount > 0 && propSafe < 1000){
+  propSafe++;
+  const rx = rand(1, state.size.w-2);
+  const ry = rand(1, state.size.h-2);
+  
+  // 1. NEW: Must be strictly inside a room (padded by 1) to avoid blocking hallways/doors
+  const inRoom = state.rooms.some(r => 
+    rx >= r.x + 1 && rx < r.x + r.w - 1 && 
+    ry >= r.y + 1 && ry < r.y + r.h - 1
+  );
+  if (!inRoom) continue;
+
+  // Must be empty floor (1), no pickup (5), no stairs (4), no trap (7)
+  if (state.tiles[ry][rx] !== 1) continue; 
+  if (state.pickups[key(rx,ry)]) continue;
+  if (enemyAt(rx,ry)) continue;
+  if (rx===state.player.x && ry===state.player.y) continue;
+  
+  // Don't put on NPC tiles
+  if (isMerchantTile(rx,ry) || isBlacksmithTile(rx,ry) || isJesterTile(rx,ry) || isCartographerTile(rx,ry)) continue;
+
+  const types = ['crate','crate','barrel','barrel','bones','rubble'];
+  state.props[key(rx,ry)] = { type: types[rand(0, types.length-1)] };
+  
+  // Set tile to 8 (Obstacle)
+  state.tiles[ry][rx] = 8; 
+  
+  propCount--;
+}
+// ---------------------------------------
 
 
-// respawn settings per floor (cap = how many we just spawned)
+// === PICKUP TOP-UP: guarantee a higher amount per floor ===
 state.enemyCap    = state.enemies.length;
 state.respawnTick = 0;
 state.respawnEvery = 50 + Math.floor(state.floor/2); // tweak pacing here
@@ -4919,6 +4975,54 @@ function drawChestPixel(ctx, x, y, tile){
   R(6,6,1,1,lockC);
 }
 
+// --- NEW: Draw Scenery Props ---
+function drawPropPixel(ctx, type, px, py, tile){
+  const { R } = gridN(ctx, px, py, tile, 12);
+  
+  if (type === 'crate') {
+    const wood = '#8b5a2b', dark = '#5c3a1e', nail = '#d7b46a';
+    R(1,2,10,9,wood);           // body
+    R(1,2,10,1,dark); R(1,10,10,1,dark); // top/bottom rim
+    R(1,2,1,9,dark);  R(10,2,1,9,dark);  // side rims
+    R(2,3,8,7,wood);            // inner
+    R(2,3,1,1,nail); R(9,3,1,1,nail); // nails
+    R(2,9,1,1,nail); R(9,9,1,1,nail);
+    // diagonal brace
+    R(3,4,1,1,dark); R(4,5,1,1,dark); R(5,6,2,1,dark); R(7,7,1,1,dark); R(8,8,1,1,dark);
+  } 
+  else if (type === 'barrel') {
+    const wood = '#a0522d', hoop = '#111827', top = '#6d3c1d';
+    R(2,3,8,8,wood);            // body
+    R(2,3,8,1,top);             // top lid
+    R(2,4,8,1,hoop);            // top hoop
+    R(2,9,8,1,hoop);            // bottom hoop
+    R(1,4,1,6,wood); R(10,4,1,6,wood); // bulge sides
+  }
+  else if (type === 'bones') {
+    const bone = '#e5e7eb', shadow = '#374151';
+    // skull
+    R(2,8,3,2,bone); R(2,9,1,1,shadow); R(4,9,1,1,shadow);
+    // rib
+    R(6,9,4,1,bone); R(7,8,1,2,bone);
+  }
+else if (type === 'rubble') {
+    const stone = '#6b7280', dust = '#9ca3af';
+    R(2,9,2,2,stone); R(5,10,1,1,dust); 
+    R(8,8,2,2,stone); R(9,7,1,1,dust);
+    R(4,5,1,1,dust);
+  }
+  // --- NEW: Pillar Visual ---
+  else if (type === 'pillar') {
+    const marble = '#d1d5db', shadow = '#9ca3af', dark = '#4b5563';
+    // Tall vertical column
+    R(2,1,8,10,marble); 
+    R(3,1,1,10,shadow); // shading
+    R(9,1,1,10,shadow);
+    R(1,0,10,2,dark);   // capital (top)
+    R(1,10,10,2,dark);  // base (bottom)
+  }
+}
+
 function drawShadowPixel(ctx, x, y, tile){
   const { s, R } = gridN(ctx, x, y, tile, 12);
   const dark='#0b141d', deep='#060a10';
@@ -5869,17 +5973,21 @@ function drawJesterWheelPixel(ctx, x, y, tile) {
 
 // --- NEW: Biome & Trap Visuals ---
 function getBiomePalette(floor) {
-  // Default (Sewers/Dungeon)
-  let p = { wall:'#061018', floor:'#152231', top:'#111c26' };
+  // Define the Biome Cycle (Order matters)
+  const BIOMES = [
+    { name: 'Sewers',          wall:'#061018', floor:'#152231', top:'#111c26' }, // 1-10
+    { name: 'Crypt',           wall:'#1a1a24', floor:'#2a2a35', top:'#252530' }, // 11-20
+    { name: 'Magma Caverns',   wall:'#261010', floor:'#3d1c1c', top:'#331515' }, // 21-30
+    { name: 'Overgrown Ruins', wall:'#0f291e', floor:'#1b3b2b', top:'#163024' }, // 31-40 (New: Green/Jungle)
+    { name: 'The Void',        wall:'#000000', floor:'#1a0b2e', top:'#0d001a' }, // 41-50 (New: Deep Purple/Space)
+    { name: 'Gilded Halls',    wall:'#2e2616', floor:'#423825', top:'#594d33' }  // 51-60 (New: Gold/Brown)
+  ];
+
+  // Calculate index based on floor (1-10 = 0, 11-20 = 1, etc.)
+  // The % BIOMES.length ensures it loops forever (Endless safe)
+  const cycleIndex = Math.floor((floor - 1) / 10) % BIOMES.length;
   
-  if (floor >= 11 && floor <= 20) { 
-    // Crypt (Cold Grey/Purple)
-    p = { wall:'#1a1a24', floor:'#2a2a35', top:'#252530' };
-  } else if (floor >= 21) { 
-    // Magma (Red/Brown)
-    p = { wall:'#261010', floor:'#3d1c1c', top:'#331515' };
-  }
-  return p;
+  return BIOMES[cycleIndex];
 }
 
 function drawSpikePixel(ctx, x, y, tile) {
@@ -5971,11 +6079,18 @@ function draw(){
         continue; 
       }
       
-      // --- NEW: Dynamic Floor Color ---
+     // --- NEW: Dynamic Floor Color ---
       ctx.fillStyle = pal.floor;
       ctx.fillRect(px,py,tile,tile);
 
       // props
+      // --- NEW: Render Scenery (Tile 8) ---
+      if (t===8) {
+        if (state.props && state.props[kxy]) {
+          drawPropPixel(ctx, state.props[kxy].type, px, py, tile);
+        }
+      }
+      // ------------------------------------
       // --- NEW: Render Spikes (Tile 7) ---
       if (t===7) {
         drawSpikePixel(ctx, px, py, tile);
@@ -6055,6 +6170,27 @@ if (state.jester) {
 
 
       
+// --- NEW: Draw Volatile Aether Bombs ---
+if (state.explosions) {
+  for (const bomb of state.explosions) {
+    if (!state.seen.has(key(bomb.x, bomb.y))) continue;
+    
+    // Draw pulsing red zone
+    const sx = (bomb.x - ox) * tile;
+    const sy = (bomb.y - oy) * tile;
+    
+    ctx.fillStyle = `rgba(255, 69, 0, ${0.3 + (Math.sin(Date.now() / 100) * 0.1)})`;
+    ctx.fillRect(sx, sy, tile, tile);
+    
+    // Draw Text Timer
+    ctx.font = "bold 16px monospace";
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = "center";
+    ctx.fillText(bomb.timer, sx + tile/2, sy + tile/2 + 5);
+  }
+}
+// ---------------------------------------
+
 // enemies (collect bosses for later, now pixel-based)
 for (const e of state.enemies){
   const s = e.size || 1;
@@ -6302,12 +6438,40 @@ function updateEquipUI(){
   
   const nameTxt = (showDur ? `${w.name} (Dur ${w.dur}/${w.durMax})` : w.name) + artStatus;
   document.getElementById('equipName').textContent = nameTxt;
-  document.getElementById('equipAtk').textContent = `ATK: ${w.min}–${w.max}`;
+
+  // --- NEW: Calculate True Weapon Damage ---
+  let effMin = w.min, effMax = w.max;
+  if (state.floorEffect === 'AntiMagic') {
+    effMin = Math.ceil(effMin * 1.5);
+    effMax = Math.ceil(effMax * 1.5);
+  } else if (state.floorEffect === 'ArcaneFlux') {
+    effMin = Math.max(1, Math.ceil(effMin * 0.25));
+    effMax = Math.max(1, Math.ceil(effMax * 0.25));
+  }
+  document.getElementById('equipAtk').textContent = `ATK: ${effMin}–${effMax}`;
+  // ----------------------------------------
+
   const es = state.equippedSpell;
 if (es){
-  const st   = getSpellStats(es.name);        // uses current tier (+ your +2 MP/tier setting)
+  const st   = getSpellStats(es.name);
   const mp   = st.cost|0;
-  document.getElementById('equipSpell').textContent = `${es.name} (${mp} MP)`;
+  
+  // --- NEW: Calculate True Spell Damage ---
+  let sMsg = "";
+  if (es.name === 'Heal') {
+     sMsg = `${es.name} (${mp} MP)`;
+  } else if (state.floorEffect === 'AntiMagic') {
+     sMsg = `${es.name} (SILENCED)`;
+  } else {
+     let sMin = st.min, sMax = st.max;
+     if (state.floorEffect === 'ArcaneFlux') {
+       sMin = Math.ceil(sMin * 1.5);
+       sMax = Math.ceil(sMax * 1.5);
+     }
+     sMsg = `${es.name} (${mp} MP) ${sMin}–${sMax} Dmg`;
+  }
+  document.getElementById('equipSpell').textContent = sMsg;
+  // ----------------------------------------
 } else {
   document.getElementById('equipSpell').textContent = 'No Spells';
 }
@@ -6902,19 +7066,208 @@ function enemyStep(){
     if (t === 0){ state.player.poisoned = false; log('The poison fades.'); }
   }
 
-  // Bow auto-reload costs one enemy phase
-  if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
+if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     state.inventory.arrows--;
     state.player.bow.loaded = 1;
     log('You notch a new arrow.');
     updateEquipUI?.();
   }
 
+  // --- NEW: Volatile Aether Ticks ---
+  if (state.explosions && state.explosions.length) {
+    // Iterate backwards to safely remove
+    for (let i = state.explosions.length - 1; i >= 0; i--) {
+      const bomb = state.explosions[i];
+      bomb.timer--;
+      
+      if (bomb.timer > 0) {
+        spawnFloatText(bomb.timer + "...", bomb.x, bomb.y, '#f97316');
+      } else {
+        // EXPLODE
+        state.explosions.splice(i, 1);
+        spawnParticles(bomb.x, bomb.y, '#f97316', 8);
+        SFX.weaponBreak(); // Explosion sound
+        
+        // 3x3 AoE
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const tx = bomb.x + dx, ty = bomb.y + dy;
+            
+            // Hit Player
+            if (tx === state.player.x && ty === state.player.y) {
+              const dmg = damageAfterDR(10);
+              state.player.hp -= dmg;
+              flashDamage();
+              log(`Aether explosion hits you for ${dmg}!`);
+            }
+            
+            // Hit Enemy
+            const e = enemyAt(tx, ty);
+            if (e) {
+              e.hp -= 10;
+              spawnFloatText(10, e.x, e.y, '#f97316');
+              if (e.hp <= 0) {
+                 // Chain reaction? (Optional: recursively add another bomb here if you want chaos)
+                 state.enemies = state.enemies.filter(x => x !== e);
+                 state.run.kills++;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // ----------------------------------
+
 // === each enemy acts ===
   for (const e of state.enemies){
 
     // 1. FIXED: Calculate distance inline (Math.abs) and use unique name (d2p) to avoid errors
     const d2p = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
+
+    // --- NEW: Shadow / Clone Logic ---
+    if (e.type === 'Clone' || e.type === 'Shadow') {
+       
+       // --- NEW: Shadow / Clone Logic ---
+    if (e.type === 'Clone' || e.type === 'Shadow') {
+       
+       // A. WEAPON MIRRORING (Passive Melee Only)
+       // We only mirror the melee weapon passively. Bow is now active-only.
+       const pWep = state.player.weapon;
+       
+       // If player changed melee weapon, copy it (reset range to 1)
+       if (e._lastWep !== pWep.name) {
+          e._lastWep = pWep.name;
+          e.range = 1;
+          e.ranged = false; 
+          // Only log if it's a significant shift (not just init)
+          if(e._lastWep) spawnFloatText("SHIFT", e.x, e.y, '#a78bfa');
+       }
+
+       // B. ACTION MIMICRY (Active)
+       if (state.lastPlayerAction) {
+          const act = state.lastPlayerAction;
+          
+          // 1. BOW SHOT MIMICRY
+          if (act.type === 'bow') {
+             // Shadow adopts bow stance permanently (until you melee)
+             e.range = 5;
+             e.ranged = true;
+             spawnFloatText("DRAW!", e.x, e.y, '#a78bfa');
+             log(`The Shadow pulls a bow from the void!`);
+             
+             // Fire back immediately
+             spawnProjectileEffect({
+                kind: 'arrow', color: '#a78bfa',
+                fromX: e.x, fromY: e.y, toX: state.player.x, toY: state.player.y,
+                onDone: () => {
+                   const dmg = rand(2, 5); 
+                   state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+                   flashDamage();
+                   spawnFloatText(dmg, state.player.x, state.player.y, '#a78bfa');
+                   updateBars();
+                }
+             });
+             state.lastPlayerAction = null; 
+             continue; // Skip movement
+          }
+          
+          // 2. HEAL MIMICRY
+          else if (act.type === 'heal') {
+             const healAmt = Math.ceil(act.amount / 2);
+             e.hp = Math.min(e.hp + healAmt, e.hpMax);
+             spawnFloatText("Mockery +" + healAmt, e.x, e.y, '#0f0');
+             log("The Shadow mocks your weakness and heals!");
+             flashEnemy(e, 'green');
+             state.lastPlayerAction = null;
+          }
+          
+          // 3. SPELL ECHO
+          else if (act.type === 'spell') {
+             spawnFloatText(act.name.toUpperCase(), e.x, e.y, '#a78bfa'); // Just the name
+             log(`The Shadow echoes your ${act.name}!`);
+             
+             spawnProjectileEffect({
+                kind: 'magic', element: 'Shadow', color: '#a78bfa',
+                fromX: e.x, fromY: e.y, toX: state.player.x, toY: state.player.y,
+                onDone: () => {
+                   const dmg = rand(3, 6);
+                   state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+                   flashDamage();
+                   spawnFloatText(dmg, state.player.x, state.player.y, '#a78bfa');
+                   updateBars();
+                }
+             });
+             state.lastPlayerAction = null; 
+             continue;
+          }
+          
+          // 4. WEAPON ART ECHO
+          else if (act.type === 'art') {
+             // Use the specific name passed from useWeaponArt
+             spawnFloatText(act.name.toUpperCase() + "!", e.x, e.y, '#ff0000');
+             log(`The Shadow mimics your ${act.name}!`);
+             
+             const dmg = rand(5, 8);
+             state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+             flashDamage();
+             updateBars();
+             state.lastPlayerAction = null; 
+             continue;
+          }
+       }
+    }
+
+       // B. ACTION MIMICRY (Active)
+       if (state.lastPlayerAction) {
+          const act = state.lastPlayerAction;
+          
+          if (act.type === 'heal') {
+             // Mockery: Shadow heals too
+             const healAmt = Math.ceil(act.amount / 2); // Heals half what you did
+             e.hp = Math.min(e.hp + healAmt, e.hpMax);
+             spawnFloatText("Mockery +" + healAmt, e.x, e.y, '#0f0');
+             log("The Shadow mocks your weakness and heals!");
+             flashEnemy(e, 'green');
+          }
+          else if (act.type === 'spell') {
+             // Echo Spell
+             spawnFloatText("ECHO: " + act.name, e.x, e.y, '#a78bfa');
+             log(`The Shadow casts a dark version of ${act.name}!`);
+             
+             // Cast it back at player
+             spawnProjectileEffect({
+                kind: 'magic', element: 'Shadow', color: '#a78bfa',
+                fromX: e.x, fromY: e.y, toX: state.player.x, toY: state.player.y,
+                onDone: () => {
+                   const dmg = rand(3, 6); // Flat shadow damage
+                   state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+                   flashDamage();
+                   spawnFloatText(dmg, state.player.x, state.player.y, '#a78bfa');
+                   updateBars();
+                }
+             });
+             state.lastPlayerAction = null; // Consume action
+             continue; // Skip normal move
+          }
+          else if (act.type === 'art') {
+             // Echo Weapon Art
+             spawnFloatText("MIMIC ART!", e.x, e.y, '#ff0000');
+             log(`The Shadow mimics your technique!`);
+             // Simple retribution damage
+             const dmg = rand(5, 8);
+             state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+             flashDamage();
+             updateBars();
+             state.lastPlayerAction = null; // Consume action
+             continue; // Skip normal move
+          }
+          
+          // Clear action after checking
+          state.lastPlayerAction = null;
+       }
+    }
+    // ---------------------------------
     
     // --- NEW: Telegraphed Attack Logic ---
     if (e.charging) {
@@ -6944,6 +7297,26 @@ function enemyStep(){
       }
       continue; // Skip normal movement/attack this turn
     }
+
+   // --- NEW: Mad King Summon Ability ---
+    // If it's the Mad King, not charging, and player is far away (range > 4)
+    if (e.type === 'Mad King' && !e.charging && d2p > 4 && Math.random() < 0.20) {
+       // Try to spawn a Skeleton nearby
+       const spot = neighbors4(e.x, e.y).find(n => state.tiles[n.y]?.[n.x] === 1 && !enemyAt(n.x, n.y));
+       if (spot) {
+         spawnFloatText("ARISE!", e.x, e.y, '#a78bfa');
+         // Spawn a weak "Royal Guard" (Skeleton)
+         state.enemies.push({
+           type: 'Skeleton', x: spot.x, y: spot.y, 
+           hp: 4, atk: [2,3], xp: 0, // Low HP/XP minions
+           _revived: true // Don't let them revive, keep clutter down
+         });
+         spawnParticles(spot.x, spot.y, '#a78bfa', 8);
+         log('The Mad King summons a Royal Guard!');
+         continue; // Use turn
+       }
+    }
+    // ------------------------------------
 
     // 15% Chance for Bosses/Elites to start charging instead of acting
     // UPDATED: Check 'd2p' (distance) to prevent off-screen spam
@@ -7141,7 +7514,8 @@ for (let step = 0; step < moves; step++){
 
 
   }
-
+// Clear player action if no shadow consumed it this turn
+  state.lastPlayerAction = null;
   // === lightweight enemy respawn pacing ===
   // Only respawn on non-boss floors so boss fights stay clean
   if (!state.gameOver && (state.floor % 10 !== 0)) {
@@ -7641,7 +8015,14 @@ function tryMove(dx,dy){
   if(enemyAt(nx,ny)) { log('An enemy blocks the way.'); return; }
   if(t===2) { log('A door blocks the way. Press E to open/unlock.'); return; }
   if(t===3) { log('A chest blocks the way. Press E to open.'); return; }
-if(t===6) { log('A mystical shrine blocks the way. Press E to interact.'); return; }
+  if(t===6) { log('A mystical shrine blocks the way. Press E to interact.'); return; }
+  
+  // 1. ADDED: Block movement into scenery
+  if(t===8) { 
+    const pType = state.props[key(nx,ny)]?.type || 'crate';
+    log(`A ${pType} blocks the way.`); 
+    return; 
+  }
 
   // --- NEW: Spike Trap Logic ---
   if(t===7) {
@@ -7691,6 +8072,29 @@ if(t===6) { log('A mystical shrine blocks the way. Press E to interact.'); retur
   state.player.x = nx; 
   state.player.y = ny;
   SFX.step();
+
+  // --- NEW: Glacial Freeze (Slide) ---
+  if (state.floorEffect === 'GlacialFreeze') {
+    // 1. ADDED: Stair Traction. If we just stepped onto Stairs (4), do not slide.
+    if (t !== 4) {
+        const slideX = nx + dx;
+        const slideY = ny + dy;
+        // Check if the NEXT tile is also walkable (Floor/Stairs/Pickup) and empty
+        const tNext = state.tiles[slideY]?.[slideX];
+        const validTile = (tNext === 1 || tNext === 4 || tNext === 5);
+        
+        // NPC/Enemy check for the slide tile
+        if (inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
+            !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
+            !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY)) {
+            
+            state.player.x = slideX;
+            state.player.y = slideY;
+            log('You slide on the ice!');
+        }
+    }
+  }
+  // ----------------------------------
 
   // (leave the rest of your function as-is)
 
@@ -7860,30 +8264,34 @@ let newBgColor = 'rgba(0,0,0,0)'; // DEFAULT: no tint (play area only)
 if (isEndless && (nextFloor % 10 !== 0)) { 
     const roll = Math.random();
     
-    if (roll < 0.15 ) { // 15% Chance for Miasma Chamber (Poison Fog)
+    if (roll < 0.12) { 
         state.floorEffect = 'MiasmaChamber';
-        newBgColor = 'rgba(34,197,94,0.18)'; // translucent green tint (play area only)
-    } else if (roll < 0.30) { // 15% Chance for Shadowy Labyrinth (Limited Vision)
-        state.floorEffect = 'ShadowyLabyrinth';
-        state.player.tempVisionRange = 2; // Set temporary vision range to 2
-    } else if (roll < 0.45) { // 45% Chance for Bloodhunt (Unseen enemies move faster)
+        newBgColor = 'rgba(34,197,94,0.18)'; 
+    } else if (roll < 0.24) { 
+        state.floorEffect = 'ShadowLabyrinth';
+        state.player.tempVisionRange = 2;
+    } else if (roll < 0.36) { 
         state.floorEffect = 'Bloodhunt';
-        newBgColor = 'rgba(190,24,93,0.14)'; // crimson/rose tint (distinct from pure red damage flash)
+        newBgColor = 'rgba(190,24,93,0.14)';
+    } else if (roll < 0.48) {
+        state.floorEffect = 'GlacialFreeze';
+        newBgColor = 'rgba(165, 243, 252, 0.15)'; // Cyan/Ice
+    } else if (roll < 0.60) {
+        state.floorEffect = 'VolatileAether';
+        newBgColor = 'rgba(234, 88, 12, 0.15)';   // Orange/Explosive
+        state.explosions = []; // Init explosion list
+    } else if (roll < 0.72) {
+        state.floorEffect = 'AntiMagic';
+        newBgColor = 'rgba(100, 100, 100, 0.25)'; // Grey/Dull
+    } else if (roll < 0.84) {
+        state.floorEffect = 'ArcaneFlux';
+        newBgColor = 'rgba(147, 51, 234, 0.15)';  // Purple/Magic
     }
 }
 
 // Set the tint ONLY on the play area (canvas wrap), not the whole page
 const tintEl = document.getElementById('floorTint');
 if (tintEl) tintEl.style.background = newBgColor;
-    
-    // Log the effect message AFTER the fade out/before the main transition
-    if (state.floorEffect === 'MiasmaChamber') {
-        log('The air is thick and green... This is a Miasma Chamber.');
-    } else if (state.floorEffect === 'ShadowyLabyrinth') {
-        log('A perpetual twilight covers this floor. Your vision is severely limited.');
-    } else if (state.floorEffect === 'Bloodhunt') {
-        log('The floor drinks the light. Something hunts you in the dark.');
-    }
 
     // --- END: FLOOR EFFECTS SETUP ---
 
@@ -7933,11 +8341,20 @@ gen(); enemyStep(); draw?.(); updateBars();
 
         if (state.floorEffect === 'MiasmaChamber') {
           showBanner('Miasma Chamber — the air itself poisons you.', 4000);
-        } else if (state.floorEffect === 'ShadowyLabyrinth') {
-  showBanner('Shadowy Labyrinth — your vision is strangled by darkness.', 4000);
+        } else if (state.floorEffect === 'ShadowLabyrinth') {
+  showBanner('Shadow Labyrinth — your vision is strangled by darkness.', 4000);
 } else if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt') {
   showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
 }
+else if (state.floorEffect === 'GlacialFreeze') {
+          showBanner('Glacial Freeze — the floor is slick. Momentum carries you.', 4000);
+        } else if (state.floorEffect === 'VolatileAether') {
+          showBanner('Volatile Aether — the air hums. Enemies explode upon death.', 4000);
+        } else if (state.floorEffect === 'AntiMagic') {
+          showBanner('Anti-Magic Field — spells act strangely silent, but your blade sings.', 4000);
+        } else if (state.floorEffect === 'ArcaneFlux') {
+          showBanner('Arcane Flux — raw magic surges, but your physical strength wanes.', 4000);
+        }
 // --- END: floor-effect popup banner ---
 
         // Depth 50 Classic: trigger intro cutscene (it will hide HUD again)
@@ -8595,6 +9012,10 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
   updateEquipUI();
   SFX.bowShot();
 
+  // --- NEW: Signal Shadow to copy ---
+  state.lastPlayerAction = { type: 'bow' };
+  // ---------------------------------
+
   // walk cells out to max range, blocked by walls/closed doors
   for (let r=1; r<=range; r++){
     const x = state.player.x + dx*r;
@@ -8723,7 +9144,17 @@ if (!rollHitFor(w.type)){
 }
 SFX.swingFor(w.type);
 // base swing
-const dmg = rand(w.min, w.max);
+let dmg = rand(w.min, w.max);
+
+// --- NEW: Floor Effect Modifiers ---
+if (state.floorEffect === 'AntiMagic') {
+  dmg = Math.ceil(dmg * 1.5); // Melee buff
+} else if (state.floorEffect === 'ArcaneFlux') {
+  dmg = Math.ceil(dmg * 0.25); // Melee nerf (weak!)
+  if (dmg < 1) dmg = 1;
+}
+// ----------------------------------
+
   let note = "";
   let isCrit = false;
 
@@ -8737,13 +9168,15 @@ const dmg = rand(w.min, w.max);
   target.hp -= dmg;
   if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); 
   
-  // --- NEW: Floating Text & Vampiric Logic ---
+// --- NEW: Floating Text & Vampiric Logic ---
   spawnFloatText(dmg + (isCrit ? "!" : ""), target.x, target.y, isCrit ? '#ff0' : '#fff');
   // Blood Particles (Reduced count)
   if (dmg > 0) spawnParticles(target.x, target.y, '#ef4444', 6);
   
-  if (w.vampiric) {
-    const heal = 1;
+  if (w.vampiric && dmg > 0) {
+    // 1. MODIFIED: Scale healing based on 25% of damage dealt (minimum 1)
+    const heal = Math.max(1, Math.floor(dmg * 0.25));
+    
     state.player.hp = Math.min(state.player.hp + heal, state.player.hpMax);
     spawnFloatText("+" + heal, state.player.x, state.player.y, '#0f0');
     updateBars();
@@ -8877,6 +9310,14 @@ if (!target.boss && Math.random() < GOLD_DROP_CHANCE){
 }
 
 
+
+// --- NEW: Volatile Aether (Death Timer) ---
+  if (state.floorEffect === 'VolatileAether') {
+    if (!state.explosions) state.explosions = [];
+    state.explosions.push({ x: target.x, y: target.y, timer: 3 }); // Explodes in 3 turns
+    spawnFloatText("3...", target.x, target.y, '#f97316');
+  }
+  // ------------------------------------------
 
 // Remove enemy, award XP
   state.enemies.splice(ti,1);
@@ -9128,17 +9569,29 @@ function useWeaponArt(){
 
   // If we used a skill, trigger turns
   if(acted) {
-    // --- NEW: Tutorial Advancement ---
+    // 1. Determine the Name of the Art based on the weapon type 't'
+    let artName = '';
+    if (t === 'two' || t === 'axe') artName = 'Cleave';
+    else if (t === 'spear')         artName = 'Pierce';
+    else if (t === 'one')           artName = 'Backstab';
+    else if (t === 'hand')          artName = 'Flurry';
+
+    // 2. Record the action so the Shadow can copy it
+    state.lastPlayerAction = { type: 'art', name: artName }; 
+    
+    // 3. Unlock the Codex entry for this specific art
+    unlockCodex('Art_' + artName, true); 
+
+    // 4. (Existing) Tutorial Advancement
     if (state.gameMode === 'tutorial' && state.tutorialStep === 6.5) {
       state.tutorialStep = 7;
       state._tutArtUsed = true;
-      // Spawn the Magic target now
       state.enemies.push({x:15, y:14, type:'Rat', hp:1, atk:[1,2], xp:3});
       hideBanner();
       showBanner("Crushed! Weapon Arts are powerful but have cooldowns. Next: A distant rat. Press Q to cast Spells.", 999999);
     }
-    // ---------------------------------
     
+    // 5. (Existing) End turn and redraw
     updateEquipUI();
     draw();
     enemyStep();
@@ -9191,6 +9644,12 @@ function cast(){
 
   const spell = state.equippedSpell;
 
+  // --- NEW: Anti-Magic Block ---
+  if (state.floorEffect === 'AntiMagic') {
+    log('A field of silence prevents magic here!');
+    return;
+  }
+  // -----------------------------
   
   
 // Heal resolves immediately (no target)
@@ -9220,6 +9679,9 @@ if (state.player.mp < st.cost){ log('Not enough MP.'); return; }
 SFX.spell();
 state.player.mp -= st.cost; updateBars();
 
+// --- NEW: Record spell for Shadow ---
+state.lastPlayerAction = { type: 'spell', name: spell.name };
+
 
   // hit/miss
   if (!rollHitFor('magic')){
@@ -9230,9 +9692,15 @@ state.player.mp -= st.cost; updateBars();
 
   
 
- // upgraded damage pulled from scaling table (+dmg affects min & max)
+// upgraded damage pulled from scaling table (+dmg affects min & max)
 const { min, max } = getSpellStats(spell.name);
-const dmg = rand(min, max);
+let dmg = rand(min, max);
+
+// --- NEW: Arcane Flux Boost ---
+if (state.floorEffect === 'ArcaneFlux') {
+  dmg = Math.ceil(dmg * 1.5);
+}
+// ------------------------------
 
 target.hp -= dmg;
   if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); 
@@ -10326,19 +10794,37 @@ const bonus = skillDamageBonus(ws.type) + flat;
 const pMin  = ws.min + bonus;
 const pMax  = ws.max + bonus;
 
+// --- NEW: Apply Floor Modifiers to Display ---
+let dMin = pMin, dMax = pMax;
+let dStyle = ''; 
+
+if (state.floorEffect === 'AntiMagic') {
+    dMin = Math.ceil(dMin * 1.5);
+    dMax = Math.ceil(dMax * 1.5);
+    dStyle = 'color:#4ade80; font-weight:bold;'; // Green (Buff)
+} else if (state.floorEffect === 'ArcaneFlux') {
+    dMin = Math.max(1, Math.ceil(dMin * 0.25));
+    dMax = Math.max(1, Math.ceil(dMax * 0.25));
+    dStyle = 'color:#f87171; font-weight:bold;'; // Red (Nerf)
+}
+// ---------------------------------------------
+
 const isEquipped = state.player.weapon && state.player.weapon.name === name;
 const durTxt = (isEquipped && Number.isFinite(state.player.weapon.durMax))
   ? ` — Dur ${state.player.weapon.dur}/${state.player.weapon.durMax}` : '';
 
-// --- NEW: Comparison Logic ---
+// --- NEW: Comparison Logic (Updated to use modified values) ---
 let diffHTML = '';
 if (!isEquipped) {
-  // Get stats of CURRENTLY EQUIPPED weapon
-  const cur = state.player.weapon;
-  // Calculate average damage of EQUIPPED
-  const curAvg = (cur.min + cur.max) / 2;
-  // Calculate average damage of THIS ROW
-  const rowAvg = (pMin + pMax) / 2;
+  const cur = state.player.weapon; // Note: 'cur' stats in state are technically raw, but we want to compare apples to apples
+  
+  // Recalculate equipped effective dmg for fair comparison
+  let curMin = cur.min, curMax = cur.max;
+  if (state.floorEffect === 'AntiMagic') { curMin*=1.5; curMax*=1.5; }
+  else if (state.floorEffect === 'ArcaneFlux') { curMin*=0.25; curMax*=0.25; }
+  
+  const curAvg = (curMin + curMax) / 2;
+  const rowAvg = (dMin + dMax) / 2;
   
   const diff = rowAvg - curAvg;
   if (diff > 0) diffHTML = ` <span style="color:#4ade80; font-weight:bold;">(+${diff.toFixed(1)})</span>`;
@@ -10346,7 +10832,7 @@ if (!isEquipped) {
   else diffHTML = ` <span style="color:#9ca3af;">(=)</span>`;
 }
 
-left.innerHTML = `${name} x${count} — Dmg ${pMin}–${pMax}${durTxt}${diffHTML}`;
+left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${dMax}</span>${durTxt}${diffHTML}`;
 // -----------------------------
 
 
@@ -10549,9 +11035,12 @@ function usePotion(){
     // --- END NEW CODE ---
 
     state.player.hp = clamp(before + gain, 0, state.player.hpMax);
-    const healed = state.player.hp - before;
-    spawnFloatText("+" + healed, state.player.x, state.player.y, '#0f0'); // Add float text to potion too
+   const healed = state.player.hp - before;
+    spawnFloatText("+" + healed, state.player.x, state.player.y, '#0f0'); 
     SFX.drink();
+    
+    // --- NEW: Record heal for Shadow ---
+    state.lastPlayerAction = { type: 'heal', amount: healed };
     updateBars();
     log(`Drank a potion (+${healed} HP).`);
     updateInvBody();
@@ -10601,11 +11090,32 @@ function updateSpellBody(){
     const left = document.createElement('div');
     const up = (state.spellUpgrades && state.spellUpgrades[s.name]) || { dmg:0, range:0 };
     const st = getSpellStats(s.name); // use tiered stats for ALL spells (incl. Heal)
+    
+    // --- NEW: Spell Floor Modifiers ---
+    let sMin = st.min, sMax = st.max;
+    let sStyle = "";
+    let sNote = "";
+
+    if (state.floorEffect === 'ArcaneFlux') {
+        sMin = Math.ceil(sMin * 1.5);
+        sMax = Math.ceil(sMax * 1.5);
+        sStyle = "color:#4ade80; font-weight:bold;"; // Green
+    } else if (state.floorEffect === 'AntiMagic') {
+        sNote = " (SILENCED)";
+        sStyle = "color:#f87171; text-decoration:line-through;"; // Red + Strike
+    }
+    // ----------------------------------
+
     if (s.name === 'Heal'){
-  const pct = Math.round((st.pct || 0) * 100);
-  left.textContent = `${s.name} Lv${s.tier||1} — ${st.cost} MP — heals ${pct}% of Max HP`;
-} else {
-      left.textContent = `${s.name} Lv${s.tier||1} — ${st.cost} MP — ${st.min}–${st.max} DMG — Range ${st.range}`;
+      const pct = Math.round((st.pct || 0) * 100);
+      // Heal is usually unaffected by damage flux, but blocked by AntiMagic
+      if (state.floorEffect === 'AntiMagic') {
+         left.innerHTML = `${s.name} Lv${s.tier||1} — <span style="${sStyle}">SILENCED</span>`;
+      } else {
+         left.textContent = `${s.name} Lv${s.tier||1} — ${st.cost} MP — heals ${pct}% of Max HP`;
+      }
+    } else {
+      left.innerHTML = `${s.name} Lv${s.tier||1} — ${st.cost} MP — <span style="${sStyle}">${sMin}–${sMax} DMG${sNote}</span> — Range ${st.range}`;
     }
 
     const btn = document.createElement('button');
@@ -12078,9 +12588,23 @@ function doRestart(className){
     
     // Show menu if ANY class is available (even just the default)
     if (unlocked.length >= 1) {
+      // --- FIX: Clear the view so we don't see the dead run behind the menu ---
+      const cvs = document.getElementById('view');
+      const cx = cvs ? cvs.getContext('2d') : null;
+      if (cx) {
+        cx.fillStyle = '#0b141d';
+        cx.fillRect(0, 0, cvs.width, cvs.height);
+      }
+      // 1. ADDED: Clear any lingering floor tint (Miasma, Bloodhunt, etc.)
+      const ft = document.getElementById('floorTint');
+      if (ft) ft.style.background = 'rgba(0,0,0,0)';
+      // -----------------------------------------------------------------------
+
       const m = document.getElementById('classSelectModal');
       const b = document.getElementById('classSelectBody');
       b.innerHTML = '';
+      
+      // 1. Show Unlocked Classes
       
       // 1. Show Unlocked Classes
       unlocked.forEach(k => {
@@ -12125,6 +12649,9 @@ function doRestart(className){
   state.player.poisoned = false;
   state.player.poisonTicks = 0;
   state.gameMode = state.gameMode || 'classic';
+
+  // 1. ADDED: Clear run flags (cutscenes, boss states)
+  state.flags = {}; 
 
   delete state.floorEffect;
   delete state.player.tempVisionRange;
@@ -12958,8 +13485,15 @@ const CODEX_DEF = {
   Cartographer: { name:'Cartographer', desc:'Maps the floor for a price.', seen:false },
   // Effects
   MiasmaChamber: { name:'Miasma Chamber', desc:'Poisonous air fills the floor.', seen:false },
-  ShadowyLabyrinth: { name:'Shadowy Labyrinth', desc:'Vision is severely limited.', seen:false },
+  ShadowLabyrinth: { name:'Shadow Labyrinth', desc:'Vision is severely limited.', seen:false },
   Bloodhunt: { name:'Bloodhunt', desc:'Enemies are stronger and faster.', seen:false },
+  
+  // --- NEW: Endless Floor Effects ---
+  GlacialFreeze:  { name:'Glacial Freeze',  desc:'The floor is ice. Movement carries momentum.', seen:false },
+  VolatileAether: { name:'Volatile Aether', desc:'Enemies explode shortly after death.', seen:false },
+  AntiMagic:      { name:'Anti-Magic Field',desc:'Magic is disabled, but Melee is stronger.', seen:false },
+  ArcaneFlux:     { name:'Arcane Flux',     desc:'Magic is amplified, but Melee is weak.', seen:false },
+  
 // Existing Interactable
   Shrine: { name:'Mystical Shrine', desc:'A holy altar that offers a blessing... or a curse.', seen:false, triggered:0 }, // Add general tracker
   
@@ -12985,6 +13519,12 @@ const CODEX_DEF = {
   Heavy:    { name:'Prefix: Heavy',    desc:'Weighted for impact. Increases Max damage by 3.', seen:false },
   Vampiric: { name:'Prefix: Vampiric', desc:'Drains life essence. Heals 1 HP on successful hits.', seen:false },
   Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Max damage by 2.', seen:false },
+  
+  // --- NEW: Weapon Arts ---
+  Art_Cleave:   { name:'Art: Cleave',   desc:'(Axe/2H) A circular swing that hits all adjacent foes.', seen:false, activated:0 },
+  Art_Pierce:   { name:'Art: Pierce',   desc:'(Spear) Strikes two tiles in a straight line.', seen:false, activated:0 },
+  Art_Backstab: { name:'Art: Backstab', desc:'(Sword) Teleports behind a foe for a critical strike.', seen:false, activated:0 },
+  Art_Flurry:   { name:'Art: Flurry',   desc:'(Fists) Unleashes three rapid strikes.', seen:false, activated:0 },
 };
 if (typeof PICK2_POOL !== 'undefined') {
   PICK2_POOL.forEach(p => {
@@ -13053,18 +13593,26 @@ function renderCodexUI(){
   list.innerHTML = '';
   const c = loadCodex();
   
-  // === UPDATE THIS LIST ===
+// === UPDATE THIS LIST ===
   const cats = [
     { title: 'Enemies', keys: ['Rat','Bat','Spider','Slime','Goblin','Skeleton','Mage','Mimic'] },
     { title: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] },
     { title: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer'] },
     { title: 'Discoveries', keys: ['Shrine'] },
-   { title: 'Floor Effects', keys: ['MiasmaChamber','ShadowyLabyrinth','Bloodhunt'] },
-    { title: 'Shrine Outcomes', keys: ['Shrine_Mimic','Shrine_Heal','Shrine_XP','Shrine_Teleport','Shrine_Blood','Shrine_Midas'] }, // Added new keys
-      { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map'] },
-    { title: 'Shrine Outcomes', keys: ['Shrine_Mimic','Shrine_Heal','Shrine_XP','Shrine_Teleport'] },
-      { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map'] },
-      { title: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] }, // <--- NEW CATEGORY
+    
+    // Updated List:
+    { title: 'Floor Effects', keys: [
+        'MiasmaChamber','ShadowLabyrinth','Bloodhunt',
+        'GlacialFreeze','VolatileAether','AntiMagic','ArcaneFlux'
+    ]},
+    
+    { title: 'Shrine Outcomes', keys: ['Shrine_Mimic','Shrine_Heal','Shrine_XP','Shrine_Teleport','Shrine_Blood','Shrine_Midas'] },
+    { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map'] },
+    
+    // 1. ADDED: Weapon Arts Category
+    { title: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Pierce', 'Art_Backstab', 'Art_Flurry'] },
+
+    { title: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
     { title: 'Omens', keys: (typeof PICK2_POOL !== 'undefined' ? PICK2_POOL.map(p => p.id) : []) }
   ];
 
