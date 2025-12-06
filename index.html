@@ -11834,15 +11834,15 @@ const META_KEY = 'dc_meta_v1';
 // --- NEW: Classes & Meta Progress ---
 const CLASSES = {
   Adventurer: { name:'Adventurer', desc:'Just a basic adventurer.', unlock:true },
-  Rogue:      { name:'Rogue',      desc:'Start with Shortsword + 5 Lockpicks.', req:'locks', val:5, msg:'Unlock: Pick 5 locks.' },
-  Barbarian: { name:'Barbarian', desc:'Start with Axe. +10 HP / -5 MP.', req:'kills_axe', val:10, msg:'Unlock: 10 Axe kills.' },
-  Wizard:    { name:'Wizard',    desc:'Start with Spark Spell + 20 MP / -5 HP.', req:'kills_magic', val:10, msg:'Unlock: 10 Magic kills.' },
-// --- Endless Only Classes ---
-  Mercenary: { name:'Mercenary', desc:'Heavy Hitter. Starts with Claymore.', req:'kills_two', val:10, msg:'Unlock: 10 Two-Handed kills.', endless:true },
-  Monk:      { name:'Monk',      desc:'Martial Artist. Starts with Knuckle Dusters.', req:'kills_hand', val:10, msg:'Unlock: 10 Unarmed kills.', endless:true },
-  Ranger:    { name:'Ranger',    desc:'Sniper. Starts with Shortsword + 20 Arrows.', req:'kills_bow', val:10, msg:'Unlock: 10 Bow kills.', endless:true }
+  Rogue:      { name:'Rogue',      desc:'Starts with a Shortsword. + 5 Lockpicks. +5 MP / -3 HP.', req:'locks', val:5, msg:'Unlock: Pick 5 locks.' },
+  Barbarian:  { name:'Barbarian',  desc:'Starts with a Axe. +10 HP / -5 MP.', req:'kills_axe', val:10, msg:'Unlock: 10 Axe kills.' },
+  Wizard:     { name:'Wizard',     desc:'Starts with the Spark Spell. +20 MP / -5 HP.', req:'kills_magic', val:10, msg:'Unlock: 10 Magic kills.' },
+  
+  // --- Endless Only Classes ---
+  Mercenary: { name:'Mercenary', desc:'Starts with a Claymore. +8 HP / -8 MP.', req:'kills_two', val:10, msg:'Unlock: 10 Two-Handed kills.', endless:true },
+  Monk:      { name:'Monk',      desc:'Starts with Knuckle Dusters. +10 MP / -5 HP.', req:'kills_hand', val:10, msg:'Unlock: 10 Unarmed kills.', endless:true },
+  Ranger:    { name:'Ranger',    desc:'Starts with a Shortsword & 20 Arrows. +5 MP / -2 HP.', req:'kills_bow', val:10, msg:'Unlock: 10 Bow kills.', endless:true }
 };
-
 
 // --- NEW: Soul Shop Definitions ---
 const SOUL_UPGRADES = {
@@ -12107,19 +12107,25 @@ function doRestart(className){
   state.player.hpMax = 20;
   state.player.mpMax = 10;
   
-  // --- Apply Class Stats Modifiers ---
+// --- Apply Class Stats Modifiers ---
   if (className === 'Barbarian') {
-    state.player.hpMax += 10;
+    state.player.hpMax += 10; // Tanky
     state.player.mpMax = Math.max(0, state.player.mpMax - 5);
   } else if (className === 'Wizard') {
-    state.player.mpMax += 20;
+    state.player.mpMax += 20; // Caster
     state.player.hpMax -= 5;
-  } else if (className === 'Paladin') {
-    state.player.hpMax += 15;
-    state.player.mpMax -= 5;
-  } else if (className === 'Ninja') {
-    state.player.hpMax -= 2;
-    // Ninja is fast but fragile
+  } else if (className === 'Rogue') {
+    state.player.mpMax += 5;  // Resourceful/Tricks
+    state.player.hpMax -= 3;  // Lightly armored
+  } else if (className === 'Mercenary') {
+    state.player.hpMax += 8;  // Battle-hardened
+    state.player.mpMax = Math.max(0, state.player.mpMax - 8); // Non-magical
+  } else if (className === 'Monk') {
+    state.player.mpMax += 10; // High Focus/Chi
+    state.player.hpMax -= 5;  // Unarmored
+  } else if (className === 'Ranger') {
+    state.player.mpMax += 5;  // Nature Focus
+    state.player.hpMax -= 2;  // Light Armor
   }
   
   // --- Apply Soul Shop Upgrades ---
