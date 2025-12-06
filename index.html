@@ -4680,36 +4680,56 @@ function projectileColorForMagic(name){
 }
 
 
-// --- NEW: Floating Text Spawner (Time-Based) ---
+// --- OPTIMIZED: Float Text with Hard Cap ---
+const MAX_FLOAT_TEXT = 8; // Limit overlapping numbers
+
 function spawnFloatText(text, x, y, color='#fff') {
   if(!state.floatingText) state.floatingText = [];
+  
   state.floatingText.push({
     text: String(text),
     x: x, 
     y: y, 
-    start: Date.now(),      // Track real time
-    duration: 2000,         // Guaranteed 2.0 seconds
+    start: Date.now(),      
+    duration: 1200,         // Reduced duration (was 2000ms) to clear buffer faster
     color: color
   });
+
+  // Culling: If too many numbers, remove the oldest
+  if (state.floatingText.length > MAX_FLOAT_TEXT) {
+    state.floatingText.shift(); 
+  }
+
   if (!state._animating) { state._animating = true; requestAnimationFrame(draw); }
 }
 
-// --- NEW: Optimized Particle Spawner ---
-function spawnParticles(x, y, color, count=5) {
+// --- OPTIMIZED: Particle Spawner with Hard Cap ---
+const MAX_PARTICLES = 30; // Hard limit on total particles
+
+function spawnParticles(x, y, color, count=4) {
   if(!state.particles) state.particles = [];
-  // Cap particles to 6 to prevent lag
-  const safeCount = Math.min(count, 6); 
+  
+  // 1. Reduced count for low-end safety (default was 5-6)
+  const safeCount = Math.min(count, 4); 
+  
   for(let i=0; i<safeCount; i++){
     state.particles.push({
       x: x, 
       y: y,
-      vx: (Math.random() - 0.5) * 0.15, // Slow drift
+      vx: (Math.random() - 0.5) * 0.15, 
       vy: (Math.random() - 0.5) * 0.15, 
-      life: rand(60, 90),               // Long life
+      life: rand(40, 70), // Slightly shorter life
       color: color,
       size: rand(2, 3)
     });
   }
+
+  // 2. FIFO Culling: If we have too many, remove the oldest ones immediately
+  if (state.particles.length > MAX_PARTICLES) {
+    // Remove the excess from the beginning of the array
+    state.particles.splice(0, state.particles.length - MAX_PARTICLES);
+  }
+
   if (!state._animating) { state._animating = true; requestAnimationFrame(draw); }
 }
 
@@ -6142,29 +6162,7 @@ ctx.fillStyle = grad;
     }
   }
 
-  // --- NEW: Particle Rendering ---
-  if (state.particles && state.particles.length > 0) {
-    state.particles = state.particles.filter(p => p.life > 0);
-    state.particles.forEach(p => {
-      // Move logic
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life--;
-      
-      // Convert to screen coords
-      const sx = (p.x - ox) * tile + tile/2;
-      const sy = (p.y - oy) * tile + tile/2;
-      
-      // Render
-      ctx.fillStyle = p.color;
-      // Fade out based on life
-      ctx.globalAlpha = Math.max(0, p.life / 30); 
-      ctx.fillRect(sx, sy, p.size, p.size);
-      ctx.globalAlpha = 1.0;
-    });
-    // Keep loop alive
-    requestAnimationFrame(draw);
-  }
+  
 
   // --- Particle Rendering (Optimized) ---
   let activeEffects = false;
@@ -6188,6 +6186,7 @@ ctx.fillStyle = grad;
   }
 
   // --- Floating Text (Time-Based & Optimized) ---
+// --- Floating Text (Highly Optimized) ---
   if (state.floatingText && state.floatingText.length > 0) {
     activeEffects = true;
     const now = Date.now();
@@ -6201,22 +6200,21 @@ ctx.fillStyle = grad;
       const elapsed = now - ft.start;
       const pct = elapsed / ft.duration;
       
-      // Float up 30 pixels over lifetime
       const rise = pct * 30; 
       
-      const sx = (ft.x - ox) * tile + tile/2;
-      const sy = (ft.y - oy) * tile; 
+      // OPTIMIZATION: Math.floor coords prevents sub-pixel rendering lag
+      const sx = Math.floor((ft.x - ox) * tile + tile/2);
+      const sy = Math.floor((ft.y - oy) * tile - rise); 
       
-      // Fade out in last 20%
+      // Fade out logic
       if (pct > 0.8) ctx.globalAlpha = 1 - (pct - 0.8) * 5;
       
-      // Shadow
-      ctx.fillStyle = 'black';
-      ctx.fillText(ft.text, sx + 1, sy - rise + 1);
+      // OPTIMIZATION: Removed the black shadow text draw. 
+      // It doubles the render cost. If visibility is an issue, 
+      // use a darker background color or just keep it simple.
       
-      // Text
       ctx.fillStyle = ft.color;
-      ctx.fillText(ft.text, sx, sy - rise);
+      ctx.fillText(ft.text, sx, sy);
       
       ctx.globalAlpha = 1.0;
     });
