@@ -6906,6 +6906,9 @@ function enemyStep(){
 
 // === each enemy acts ===
   for (const e of state.enemies){
+
+    // 1. FIXED: Calculate distance inline (Math.abs) and use unique name (d2p) to avoid errors
+    const d2p = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
     
     // --- NEW: Telegraphed Attack Logic ---
     if (e.charging) {
@@ -6937,7 +6940,8 @@ function enemyStep(){
     }
 
     // 15% Chance for Bosses/Elites to start charging instead of acting
-    if ((e.boss || e.elite) && Math.random() < 0.15 && !e.charging) {
+    // UPDATED: Check 'd2p' (distance) to prevent off-screen spam
+    if ((e.boss || e.elite) && Math.random() < 0.15 && !e.charging && d2p <= 3) {
        e.charging = true;
        log(`The ${e.type} begins to charge a massive attack!`);
        spawnFloatText("⚠️ CHARGING", e.x, e.y, '#ffae00');
@@ -12201,6 +12205,10 @@ function doRestart(className){
   renderSkills && renderSkills();
   startRunTimer();
   updateRunTimerNow();
+
+  // 1. ADDED: Restore the opening flavor text
+  log('You awaken with nothing. Explore, loot, survive.');
+  log('A chest is nearby.');
 
   const m = document.getElementById('gameOverModal');
   if (m) m.style.display = 'none';
