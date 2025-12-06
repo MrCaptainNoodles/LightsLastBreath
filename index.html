@@ -667,8 +667,14 @@ body.noscroll{
       <div class="title">Soul Shop</div>
       <button class="btn" data-close="#shopModal">Close</button>
     </div>
+    
+    <div class="row" style="gap:10px; justify-content:center; margin-bottom:8px;">
+      <button class="btn" id="btnShopClassic" style="flex:1;">Classic</button>
+      <button class="btn" id="btnShopEndless" style="flex:1;">Endless</button>
+    </div>
+
     <div style="text-align:center; margin-bottom:10px; opacity:0.8">
-      Spend Shards to empower future runs. <br>
+      <span id="shopModeLabel">Classic Upgrades</span><br>
       <span style="color:#f9d65c; font-weight:bold;" id="shopBalance">0 Shards</span>
     </div>
     <div id="shopList" style="display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto;">
@@ -11863,6 +11869,31 @@ function getSoulBalance(){
 function renderShopUI(){
   const list = document.getElementById('shopList');
   const balEl = document.getElementById('shopBalance');
+  const modeLabel = document.getElementById('shopModeLabel');
+  
+  // Default to Classic if not set
+  if (!state.ui) state.ui = {};
+  if (!state.ui.shopTab) state.ui.shopTab = 'classic'; 
+
+  const isEndless = (state.ui.shopTab === 'endless');
+  const prefix = isEndless ? 'endless_upg_' : 'upg_'; // Separate save keys
+
+  // Update Tab Visuals
+  const btnC = document.getElementById('btnShopClassic');
+  const btnE = document.getElementById('btnShopEndless');
+  if(btnC) {
+      btnC.style.border = isEndless ? '1px solid var(--chipBorder)' : '2px solid #f9d65c';
+      btnC.style.opacity = isEndless ? '0.6' : '1.0';
+      btnC.onclick = () => { state.ui.shopTab = 'classic'; renderShopUI(); };
+  }
+  if(btnE) {
+      btnE.style.border = isEndless ? '2px solid #f9d65c' : '1px solid var(--chipBorder)';
+      btnE.style.opacity = isEndless ? '1.0' : '0.6';
+      btnE.onclick = () => { state.ui.shopTab = 'endless'; renderShopUI(); };
+  }
+  
+  if (modeLabel) modeLabel.textContent = isEndless ? "Endless Mode Upgrades" : "Classic Mode Upgrades";
+
   const m = loadMeta();
   const bal = m.shards || 0;
   
@@ -11870,13 +11901,14 @@ function renderShopUI(){
   list.innerHTML = '';
 
   for(const [k, def] of Object.entries(SOUL_UPGRADES)){
-    const level = m['upg_'+k] || 0;
+    // Use the prefix to load specific data
+    const level = m[prefix + k] || 0; 
+    
     const isMax = level >= def.max;
-    // Cost scales: Base Cost * (Level + 1)
     const cost = Math.floor(def.cost * (1 + level * 0.5));
     
     const row = document.createElement('div');
-    row.className = 'card'; // reuse card style
+    row.className = 'card';
     row.style.padding = '10px';
     row.style.display = 'flex';
     row.style.justifyContent = 'space-between';
@@ -11902,10 +11934,11 @@ function renderShopUI(){
       }
       btn.onclick = () => {
         m.shards -= cost;
-        m['upg_'+k] = level + 1;
+        // Use the prefix to SAVE specific data
+        m[prefix + k] = level + 1;
         saveMeta(m);
-        SFX.levelUp(); // Cha-ching sound
-        renderShopUI(); // Refresh
+        SFX.levelUp(); 
+        renderShopUI(); 
         updateMainMenuShopLabel();
       };
     }
@@ -12132,8 +12165,12 @@ function doRestart(className){
   
   // --- Apply Soul Shop Upgrades ---
   const meta = loadMeta();
-  state.player.hpMax += ((meta['upg_vitality']||0) * 5);
-  state.player.mpMax += ((meta['upg_wisdom']||0) * 10);
+  
+  // Determine if we load Classic or Endless upgrades
+  const upgPrefix = (state.gameMode === 'endless') ? 'endless_upg_' : 'upg_';
+
+  state.player.hpMax += ((meta[upgPrefix+'vitality']||0) * 5);
+  state.player.mpMax += ((meta[upgPrefix+'wisdom']||0) * 10);
 
   state.player.hp = state.player.hpMax;
   state.player.mp = state.player.mpMax;
@@ -12142,7 +12179,7 @@ function doRestart(className){
   state.player.weapon = { name:'Fists', type:'hand', min:1, max:2, base:{min:1,max:2}, dur:null, durMax:null };
   state.player.artCooldown = 0; 
 
-  state.fovRadius = 5 + ((meta['upg_vision']||0) * 1);
+  state.fovRadius = 5 + ((meta[upgPrefix+'vision']||0) * 1);
   state.spells = [];
   state.equippedSpell = null;
   state.player.bow = { range:5, loaded:0 };
@@ -12153,10 +12190,10 @@ function doRestart(className){
 
   state.inventory = {
     lockpicks: 0, 
-    potions: ((meta['upg_pockets']||0) * 1), 
+    potions: ((meta[upgPrefix+'pockets']||0) * 1), 
     tonics: 0, antidotes: 0, 
     weapons: {}, stashed: {}, arrows: 0, 
-    gold: ((meta['upg_greed']||0) * 25),     
+    gold: ((meta[upgPrefix+'greed']||0) * 25),     
     shields: 0, bombs:0, warpStones:0
   };
 
