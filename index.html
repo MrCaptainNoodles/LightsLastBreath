@@ -1596,7 +1596,8 @@ const NPC_DIALOGUE_URLS = {
   },
   blacksmith: {
     interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_interact.mp3',
-    repair:   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_repair.mp3',
+    partialrepair:   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_partial_repair.mp3',
+    fullrepair:   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_full_repair.mp3',
     leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_leave.mp3',
   },
   jester: {
@@ -1607,6 +1608,11 @@ const NPC_DIALOGUE_URLS = {
     lose:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_lose.mp3',
   },
   cartographer: {
+    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_interact.mp3',
+    buy:      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_buy.mp3',
+    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_leave.mp3',
+  },
+  priest: {
     interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_interact.mp3',
     buy:      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_buy.mp3',
     leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_leave.mp3',
@@ -2293,36 +2299,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
   extendSfxForUtility();
   loadMissSfx();
   loadLockOkSfx();
-  loadChestOpenSfx();
+  loadChestOpenSfx(); 
   loadLevelUpSfx();          // <-- add this line
 });
 
 function defineSfx(){
-  SFX.step = ()=>playWalkSfx();
-  SFX.drink = ()=>playDrinkSfx();
+  // --- NEW: Developer Placeholder Helper (for logging) ---
+  const devSfx = (name, fn) => () => {
+    // Check for the global flag (defined in settings section)
+    if (window._devSounds) console.log(`[DEV SFX] ${name}`);
+    if (fn) fn();
+  };
+  // ----------------------------------------------------
+  
+  SFX.step = devSfx('Step', ()=>playWalkSfx());
+  SFX.drink = devSfx('Drink Potion/Tonic/Antidote', ()=>playDrinkSfx());
 
   // Combat
-  SFX.attack      = ()=>chordTo(combatGain, [440,660], 0.08, 'square', 0.25);
-  SFX.miss        = ()=>playMissSfx();
-  SFX.enemyHit    = ()=>toneTo(combatGain, 140, 0.10, 'sawtooth', 0.28);
-  SFX.kill        = ()=>chordTo(combatGain, [392, 523, 659], 0.20, 'triangle', 0.32);
-  SFX.bossDown    = ()=>chordTo(combatGain, [196, 262, 392, 523], 0.35, 'triangle', 0.35);
+  SFX.attack      = devSfx('Melee Hit: Generic Attack', ()=>chordTo(combatGain, [440,660], 0.08, 'square', 0.25));
+  SFX.miss        = devSfx('Melee/Ranged Miss', ()=>playMissSfx());
+  SFX.enemyHit    = devSfx('Player Hurt', ()=>toneTo(combatGain, 140, 0.10, 'sawtooth', 0.28));
+  SFX.kill        = devSfx('Enemy Kill', ()=>chordTo(combatGain, [392, 523, 659], 0.20, 'triangle', 0.32));
+  SFX.bossDown    = devSfx('Boss Down/Stairs Spawn', ()=>chordTo(combatGain, [196, 262, 392, 523], 0.35, 'triangle', 0.35));
 
   // Interactables
-  SFX.openChest   = ()=>playChestOpenSfx();
-  SFX.pickup      = ()=>chordTo(interactGain, [880,1320], 0.08, 'triangle', 0.22);
+  SFX.openChest   = devSfx('Chest Open', ()=>playChestOpenSfx());
+  SFX.pickup      = devSfx('Item/Gold Pickup/Upgrade Ready', ()=>chordTo(interactGain, [880,1320], 0.08, 'triangle', 0.22));
 
-  SFX.lockSuccess = ()=>playLockOkSfx();
-  SFX.lockFail    = ()=>toneTo(interactGain, 110, 0.12, 'sawtooth', 0.22);
+  SFX.lockSuccess = devSfx('Lockpick Success', ()=>playLockOkSfx());
+  SFX.lockFail    = devSfx('Lockpick Fail', ()=>toneTo(interactGain, 110, 0.12, 'sawtooth', 0.22));
 
   // Combat again
-  SFX.spell       = ()=>playCastSfx();
-  SFX.rangedZap   = ()=>toneTo(combatGain, 900, 0.11, 'sine', 0.26);
+  SFX.spell       = devSfx('Spell Cast', ()=>playCastSfx());
+  SFX.rangedZap   = devSfx('Enemy Ranged Hit', ()=>toneTo(combatGain, 900, 0.11, 'sine', 0.26));
 
-  SFX.poisonTick  = ()=>noiseTo(combatGain, 0.06, 0.25, 1000);
-  SFX.antidote    = ()=>chordTo(combatGain, [523,659], 0.12, 'triangle', 0.24);
+  SFX.poisonTick  = devSfx('Poison Tick', ()=>noiseTo(combatGain, 0.06, 0.25, 1000));
+  SFX.antidote    = devSfx('Antidote Cure', ()=>chordTo(combatGain, [523,659], 0.12, 'triangle', 0.24));
 
-  SFX.levelUp     = ()=>playLevelUpSfx();
+  SFX.levelUp     = devSfx('Player Level Up/Upgrade', ()=>playLevelUpSfx());
 }
 
 document.addEventListener('DOMContentLoaded', defineSfx);
@@ -10702,7 +10716,11 @@ function refreshBsUI(){
 
 function doRepair(points){
   const usingShield = (bsTarget === 'shield');
-
+  let repairedToFull = false;
+  let itemDur = 0;
+  let itemMax = 0;
+  let itemName = '';
+  
   if (usingShield){
     const sh = state.player.shield; if (!sh) return;
     const need = Math.max(0, SHIELD_DUR - (sh.dur|0));
@@ -10710,9 +10728,13 @@ function doRepair(points){
     const amt  = Math.max(1, Math.min(points, need));
     const cost = amt * 2;
     if ((state.inventory.gold|0) < cost){ log('Not enough gold.'); return; }
+    
+    // Perform Repair
     state.inventory.gold -= cost;
     sh.dur = (sh.dur|0) + amt;
+    repairedToFull = sh.dur >= SHIELD_DUR;
     log(`Blacksmith repaired ${SHIELD_NAME} +${amt} for ${cost}g.`);
+    itemName = SHIELD_NAME;
   } else {
     const w = state.player.weapon || {};
     if (!w.durMax) return;
@@ -10721,12 +10743,22 @@ function doRepair(points){
     const amt  = Math.max(1, Math.min(points, need));
     const cost = amt * 2;
     if ((state.inventory.gold|0) < cost){ log('Not enough gold.'); return; }
+    
+    // Perform Repair
     state.inventory.gold -= cost;
     w.dur = (w.dur|0) + amt;
+    repairedToFull = w.dur >= w.durMax;
     log(`Blacksmith repaired ${w.name} +${amt} for ${cost}g.`);
+    itemName = w.name;
   }
-
-  playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.repair);
+  
+  // --- NEW DIALOGUE LOGIC ---
+  if (repairedToFull) {
+    playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.fullrepair);
+  } else {
+    playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.partialrepair);
+  }
+  
 unlockCodex('Blacksmith_Repair', true); // <--- TRACK REPAIR
   updateEquipUI?.(); updateInvBody?.(); refreshBsUI();
 }
@@ -12902,6 +12934,10 @@ function renderShopUI(){
   if (!state.ui) state.ui = {};
   if (!state.ui.shopTab) state.ui.shopTab = 'classic'; 
 
+  const isEndlessUnlocked = localStorage.getItem('endlessUnlocked') === '1';
+  // If Endless is not unlocked, force user onto Classic tab
+  if (!isEndlessUnlocked) state.ui.shopTab = 'classic'; 
+
   const isEndless = (state.ui.shopTab === 'endless');
   const prefix = isEndless ? 'endless_upg_' : 'upg_'; // Separate save keys
 
@@ -12914,6 +12950,9 @@ function renderShopUI(){
       btnC.onclick = () => { state.ui.shopTab = 'classic'; renderShopUI(); };
   }
   if(btnE) {
+      // NEW: Show/Hide Endless Button
+      btnE.style.display = isEndlessUnlocked ? '' : 'none';
+      
       btnE.style.border = isEndless ? '2px solid #f9d65c' : '1px solid var(--chipBorder)';
       btnE.style.opacity = isEndless ? '1.0' : '0.6';
       btnE.onclick = () => { state.ui.shopTab = 'endless'; renderShopUI(); };
@@ -12978,7 +13017,7 @@ function renderShopUI(){
 
 function updateMainMenuShopLabel(){
   const el = document.getElementById('btnShop');
-  if(el) el.textContent = `Soul Shop (${getSoulBalance()})`;
+  if(el) el.textContent = `Soul Shop`;
 }
 
 function loadMeta(){ try{ return JSON.parse(localStorage.getItem(META_KEY)||'{}'); }catch{ return {}; } }
