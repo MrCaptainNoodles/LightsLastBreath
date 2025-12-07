@@ -2987,13 +2987,13 @@ const SPELL_DMG_STEP_PER_TIER_MAX = 6;  // +1 to max per tier
 
 
 
-// ====== Durability (kept) ======
 const DURABILITY = {
   Shortsword: 20,
   Claymore:   15,
   Spear:      18,
   Axe:        17,
-  'Knuckle Duster': 24      // ← singular name with quotes (space)
+  'Knuckle Duster': 24,     // ← added comma
+  'Key of Destiny': 30      // <--- NEW: High durability
 };
 function defaultDurabilityFor(name){
   return Number.isFinite(DURABILITY[name]) ? DURABILITY[name] : null; // fists/null => no durability
@@ -3868,7 +3868,7 @@ ensureCartographerAudio();
   // --- NEW: Cleric Spawn (15% chance, non-boss floors) ---
   state.cleric = null; // Reset
   // RESTRICTED: Endless Mode only
-if (state.gameMode === 'endless' && state.floor % 10 !== 0) { // <--- Removed random check     // Reuse logic: Find a room not used by others
+if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.15) { // <--- Removed random check     // Reuse logic: Find a room not used by others
      const rooms5 = state.rooms.slice(1).filter(r => r !== state._stairsRoom && !state.merchant?.room && !state.blacksmith?.room && !state.jester?.room && !state.cartographer?.room);
      const pick5 = rooms5.length ? rooms5[rand(0, rooms5.length-1)] : null;
      
@@ -4044,17 +4044,17 @@ while(propCount > 0 && propSafe < 1000){
   const f = state.floor;
   
   if (f <= 10) { // Sewers
-    types = ['crate','barrel','rubble','slime_puddle','pipe_debris','rat_nest','broken_grate','toxic_barrel'];
+    types = ['crate','barrel','rubble','slime puddle','pipe debris','rat nest','broken grate','toxic barrel'];
   } else if (f <= 20) { // Crypt
-    types = ['coffin','urn','bones','broken_tomb','candle_stand','gargoyle','spider_web','skull_pile'];
+    types = ['coffin','urn','bones','broken tomb','candle stand','gargoyle','spider web','skull pile'];
   } else if (f <= 30) { // Magma
-    types = ['obsidian_shard','ash_pile','magma_rock','burnt_cage','lava_vent','iron_chain','dragon_bone'];
+    types = ['obsidian_shard','ash pile','magma rock','burnt cage','lava vent','iron chain','dragon bone'];
   } else if (f <= 40) { // Jungle/Ruins
-    types = ['fern','broken_pillar','vine_cluster','mossy_rock','giant_flower','stone_idol','ancient_pot'];
+    types = ['fern','broken pillar','vine cluster','mossy rock','giant flower','stone idol','ancient pot'];
   } else if (f <= 50) { // Void
-    types = ['floating_rock','crystal_shard','void_tendril','star_mote','dark_monolith','energy_swirl'];
+    types = ['floating rock','crystal shard','void tendril','star mote','dark monolith','energy swirl'];
   } else { // Gilded
-    types = ['gold_vase','statue_head','velvet_stool','treasure_pile','red_carpet','chandelier_fallen'];
+    types = ['gold vase','statue head','velvet stool','treasure pile','red carpet','chandelier fallen'];
   }
 
   state.props[key(rx,ry)] = { type: types[rand(0, types.length-1)] };
@@ -7435,10 +7435,13 @@ function enemyStep(){
   // --- NEW: Cooldown Tick ---
   if (state.player.artCooldown > 0) {
     state.player.artCooldown--;
+    
+    // FIX: Update UI every turn so the number visibly counts down (9..8..7..)
+    updateEquipUI();
+
     if (state.player.artCooldown === 0) {
       log("Weapon Art ready!");
       SFX.pickup(); // Chime sound
-      updateEquipUI();
     }
   }
   // -------------------------
@@ -11286,13 +11289,21 @@ if (!sh && have <= 0){
       
       if (isEquipped && state.player.weapon.base) {
           // Use the live modified base stats from the player object
-          ws = { ...state.player.weapon.base, type: state.player.weapon.type };
-      } else {
-          // Use the template stats for unequipped items
-          ws = weaponStatsFor(name) || (name === 'Fists' 
-            ? { min: 1, max: 2, type: 'hand' } 
-            : { min: 1, max: 1, type: wType });
-      }
+        ws = { ...state.player.weapon.base, type: state.player.weapon.type };
+    } else {
+// -------------------- START OF FIX BLOCK --------------------
+        // Check for 'Key of Destiny' or default to standard stats lookup
+        if (name === 'Key of Destiny') {
+            // Hardcode base stats for Key of Destiny when unequipped
+            ws = { min: 5, max: 7, type: 'one' }; 
+        } else {
+            // Use the template stats for unequipped items (will return null for 'Key of Destiny')
+            ws = weaponStatsFor(name) || (name === 'Fists' 
+                ? { min: 1, max: 2, type: 'hand' } 
+                : { min: 1, max: 1, type: wType });
+        }
+// -------------------- END OF FIX BLOCK --------------------
+    }
 
 // --- FIX: Include Global Omen Bonus ---
 const flat = state.globalWeaponFlatBonus || 0;
