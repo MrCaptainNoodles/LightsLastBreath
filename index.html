@@ -1053,16 +1053,20 @@ input[type=range].custom-slider::-webkit-slider-thumb {
 <!-- Tutorial Mode Clear Modal -->
 <div class="modal" id="tutorialCompleteModal" style="display:none;">
   <div class="sheet">
-    <div class="title" style="text-align:center; font-weight:800; margin-bottom:6px;">
-      Tutorial Complete!
-    </div>
-    <div style="text-align:center; opacity:.9; margin-bottom:10px;">
-      Congratulations on beating the tutorial! Head back to the main menu to try Classic Mode.
+    <div class="row">
+      <div class="title">Tutorial Complete</div>
+      </div>
+    
+    <div style="text-align:center; margin:10px 0 20px 0; opacity:0.9; font-size:15px; line-height:1.5;">
+      You have mastered the basics of survival.
       <br><br>
-      (If you ever need controls, press <b>H</b>).
+      The real dungeon awaits you in Classic Mode.
+      <br>
+      <span style="font-size:13px; opacity:0.7;">(Press <b>H</b> anytime for controls)</span>
     </div>
+
     <div class="row" style="gap:10px; justify-content:center;">
-      <button class="btn" id="btnTutReturn">Main Menu</button>
+      <button class="btn" id="btnTutReturn" style="min-width:140px;">Return to Menu</button>
     </div>
   </div>
 </div>
@@ -1210,6 +1214,7 @@ input[type=range].custom-slider::-webkit-slider-thumb {
  <button class="btn" id="dbgGiveKeyBlade">Give Key of Destiny</button>
   <button class="btn" id="dbgUnlockClasses">Unlock All Classes</button>
   <button class="btn" id="dbgSpawnKey">Spawn Key Below</button>
+  <button class="btn" id="dbgSpawnCursed">Spawn Cursed Sword</button>
 </div>
 
 
@@ -1674,8 +1679,16 @@ const _npcDialogueEls = Object.create(null);
 const _npcDialogueNodes = Object.create(null);
 
 // Plays a one-shot voice line routed through Interactables volume (interactGain).
+let _currentNpcAudio = null; // Global tracker
+
 function playNpcDialogue(url){
   if (!url) return;
+
+  // STOP previous line if playing
+  if (_currentNpcAudio) {
+    try { _currentNpcAudio.pause(); _currentNpcAudio.currentTime = 0; } catch{}
+    _currentNpcAudio = null;
+  }
 
   try { initAudio(); } catch {}
   try { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{}); } catch {}
@@ -2737,9 +2750,14 @@ function syncEndlessUnlockUI(){
 }
 
 
-
-  function goMenu(e){
+function goMenu(e){
   if (e?.preventDefault) e.preventDefault();
+
+  // FIX: Force clear any lingering banners (like Tutorial steps)
+  const b = document.getElementById('banner');
+  if (b) b._queue = []; // Empty the queue so nothing else pops up
+  hideBanner();         // Hide the current text immediately
+
   unlockAudioAndLoops();
 
   // NEW: when we go back to the main menu, play the menu BGM
@@ -2765,53 +2783,64 @@ function syncEndlessUnlockUI(){
   // ▶ Make goMenu available to the pause menu and other scripts
   window.goMenu = goMenu;
 
-function startTutorial(e){
+async function startTutorial(e){
   if (e?.preventDefault) e.preventDefault();
   if (menu) menu.style.display = 'none';
   playGameBgm(CLASSIC_BGM_URL);
   
   state.gameMode = 'tutorial';
-  doRestart('Adventurer'); // Reset stats
+  doRestart('Adventurer'); 
 
-  // --- 1. Build the "Gauntlet" Map ---
-  // A long corridor: 10 wide, 30 high.
-  state.tiles = Array(30).fill().map(()=>Array(20).fill(0));
-  state.rooms = [{x:5, y:5, w:10, h:20}]; // Single long room
-  
-  for(let y=5; y<25; y++){
+  // --- 1. Init Tutorial State ---
+  state.tutorialStep = 1; // Start at Step 1
+  state._tutProgress = {}; // Generic container for sub-flags (wasd, items used)
+  state._tutMoveWASD = { w:false, a:false, s:false, d:false }; // Movement tracking
+  state._inputLocked = false;
+
+  // --- 2. Build Linear Map (10 wide, 60 high) ---
+  state.tiles = Array(60).fill().map(()=>Array(20).fill(0));
+  state.rooms = [{x:5,y:5,w:10,h:50}];
+  for(let y=5; y<55; y++){
     for(let x=5; x<15; x++){
-      state.tiles[y][x] = 1; // Floor
+      state.tiles[y][x] = 1;
     }
   }
 
-  // --- 2. Set Player Start ---
-  state.player.x = 10;
-  state.player.y = 6;
-  state.seen = new Set([`${state.player.x},${state.player.y}`]); 
+  // --- 3. Player Start ---
+  state.player.x = 10; state.player.y = 6;
+  state.player.rx=10; state.player.ry=6;
+  state.player.stamina = 10;
+  state.seen = new Set(['10,6']);
 
-  // --- 3. Obstacle 1: The Crate (Blocks path at Y=10) ---
-  // The player MUST smash this to proceed.
-  for(let x=5; x<15; x++) state.tiles[10][x] = 0; // Wall off the row
-  state.tiles[10][10] = 8; // Breakable Prop in the center
-  state.props['10,10'] = { type: 'crate' }; 
+  // --- 4. Place Static Obstacles ---
+  
+  // Step 3: Crate at Y=12
+  for(let x=5; x<15; x++) state.tiles[12][x] = 0; // Wall row
+  state.tiles[12][10] = 8; // Prop
+  state.props['10,12'] = { type:'crate' }; 
 
-  // --- 4. Obstacle 2: The Iron Door (Blocks path at Y=18) ---
-  for(let x=5; x<15; x++) state.tiles[18][x] = 0; 
-  state.tiles[18][10] = 2; // Door
-  state.lockedDoors.add('10,18'); // Locked
+  // Step 5: 3 Stunned Rats at Y=18
+  state.enemies = [
+    {x:9, y:18, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true},
+    {x:10, y:18, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true},
+    {x:11, y:18, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true},
+    // Step 6: 1 Melee Rat at Y=22
+    {x:10, y:22, type:'Rat', hp:2, atk:[1,2], xp:0, tutorialDummy:false}, // Active rat
+    // Step 8: 1 Stationary Rat at Y=30 (Bow Target)
+    {x:10, y:30, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true}
+  ];
 
-  // --- 5. The Exit (Y=22) ---
-  state.tiles[22][10] = 4; // Stairs
+  // Step 12: Locked Door at Y=45
+  for(let x=5; x<15; x++) state.tiles[45][x] = 0; 
+  state.tiles[45][10] = 2; 
+  state.lockedDoors = new Set(['10,45']);
 
-  // --- 6. Initial State ---
-  state.tutorialStep = 0; 
-  state.inventory.bombs = 0; // Clear bombs
-  state.player.stamina = 10; // Full stamina
+  // Step 13: Chest at Y=48
+  state.tiles[48][10] = 3;
 
   updateBars(); updateEquipUI(); draw();
 
-  // --- 7. Instructions ---
-  showBanner("Step 1: Move with WASD. Hold SHIFT to Sprint. Smash the Crate below!", 999999);
+  showBanner("Step 1: Move with WASD or Arrows. Press all 4 directions to continue.", 999999);
 }
 
 
@@ -3831,6 +3860,21 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < JE
       spawnedJester = true;
       ensureJesterAudio();
     }
+  }
+}
+
+// --- NEW: Gold Well (Rare 2x2 Prop) ---
+// 10% Chance on non-boss floors
+state.goldWell = null;
+if (!state.merchant && !state.blacksmith && !state.jester && state.floor % 10 !== 0 && Math.random() < 0.10) {
+  const r = state.rooms[rand(1, state.rooms.length-1)];
+  if (r && r.w >= 4 && r.h >= 4) {
+     const wx = Math.floor(r.x + r.w/2) - 1;
+     const wy = Math.floor(r.y + r.h/2) - 1;
+     // Ensure space is floor
+     if (state.tiles[wy][wx]===1 && state.tiles[wy+1][wx+1]===1) {
+       state.goldWell = { x:wx, y:wy, used:false };
+     }
   }
 }
 
@@ -6504,6 +6548,32 @@ else if (t===6){
   R(5,2,2,2,'#7df9ff'); 
   ctx.shadowBlur = 0;
 }
+// --- NEW: Draw Gold Well (2x2) ---
+    if (state.goldWell) {
+       const gw = state.goldWell;
+       // Only draw if top-left is on screen (simplified)
+       if (gx === gw.x && gy === gw.y) {
+          const s = tile; // base size
+          // Draw 2x2 Well
+          const wx = (gw.x - ox) * tile;
+          const wy = (gw.y - oy) * tile;
+          
+          const water = gw.used ? '#374151' : '#facc15'; // Gold if unused, Grey if used
+          
+          // Simple Well Art
+          ctx.fillStyle = '#4b5563'; // Stone rim
+          ctx.fillRect(wx, wy, s*2, s*2);
+          ctx.fillStyle = water;     // Liquid
+          ctx.fillRect(wx+5, wy+5, (s*2)-10, (s*2)-10);
+          
+          // Glow if active
+          if (!gw.used) {
+             ctx.fillStyle = 'rgba(250, 204, 21, 0.3)';
+             ctx.fillRect(wx, wy, s*2, s*2);
+          }
+       }
+    }
+
 // Merchant / Blacksmith NPC stands
     if (state.merchant){
       if (gx===state.merchant.left.x && gy===state.merchant.left.y){
@@ -7650,7 +7720,8 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
           
           // 2. HEAL MIMICRY
           else if (act.type === 'heal') {
-             const healAmt = Math.ceil(act.amount / 2);
+             // Nerf: Heals only 25% of what player healed
+             const healAmt = Math.max(1, Math.ceil(act.amount * 0.25));
              e.hp = Math.min(e.hp + healAmt, e.hpMax);
              spawnFloatText("Mockery +" + healAmt, e.x, e.y, '#0f0');
              log("The Shadow mocks your weakness and heals!");
@@ -8326,15 +8397,12 @@ function collectIfPickup(){
       state.inventory.weapons[it.payload.name]=(state.inventory.weapons[it.payload.name]||0)+1;
       log(`Picked up ${it.payload.name} (now x${state.inventory.weapons[it.payload.name]}).`);
 
-      // Tutorial Step 5: weapon pickup
-      if (state.gameMode === 'tutorial' && it.payload && it.payload.name === 'Axe'){
-        state._tutGotWeapon = true;
-
-        // Only prompt once Step 4 is done
-        if (state._tutBowShot && !state._tutMeleeHit){
-          say("Tutorial: Axe acquired. Press I → Weapons → Equip Axe. Then move next to the rat and press SPACE to attack.");
-        }
+      // --- TUTORIAL Step 4 (Pickup -> Equip) ---
+      if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && it.payload.name === 'Axe'){
+        hideBanner();
+        showBanner("Axe acquired! Press I and go to weapons to equip it.", 999999);
       }
+      // -----------------------------------------
 
     }else if(it.kind==='potion'){
         SFX.pickup();    
@@ -8365,45 +8433,7 @@ function collectIfPickup(){
   state.inventory.arrows = (state.inventory.arrows | 0) + (it.payload | 0);
   log(`Picked up ${it.payload} arrows.`);
 
-  // NEW: Tutorial (Step 4) — teach B, and make the first shot work immediately
-  if (state.gameMode === 'tutorial' && !state._tutGotArrows){
-    state._tutGotArrows = true;
-    state._tutArrowsPicked = true; // prevent the duplicate message block below from firing too
-
-    // ensure bow object exists
-    if (!state.player.bow) state.player.bow = { loaded:0, range:5 };
-
-    // instantly notch one arrow so pressing B doesn't say "No arrow loaded."
-    if ((state.player.bow.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
-      state.inventory.arrows--;
-      state.player.bow.loaded = 1;
-      log('You notch a new arrow.');
-      updateEquipUI?.();
-    }
-
-    hideBanner();
-    showBanner("Tutorial: Press B to shoot the training rat. Make sure you're facing it.", 999999);
-  }
-
-// Tutorial (new): teach bow shooting on arrows pickup
-if (state.gameMode === 'tutorial' && !state._tutGotArrows){
-  // set BOTH flags so all tutorial code paths agree
-  state._tutArrowsPicked = true;
-  state._tutGotArrows = true;
-
-  // Ensure bow exists and auto-load ONE arrow immediately so B works right away
-  state.player.bow = state.player.bow || { range:5, loaded:0 };
-  if ((state.player.bow.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
-    state.inventory.arrows = (state.inventory.arrows|0) - 1;
-    state.player.bow.loaded = 1;
-    SFX.bowDraw?.();
-    updateEquipUI?.();
-    updateInvBody?.();
-  }
-
-  hideBanner();
-  showBanner("Arrows acquired. Face the rat and press B to shoot.", 999999);
-}
+  
 
 
 
@@ -8505,17 +8535,17 @@ function tryMove(dx,dy){
   // 1. ADDED: Block movement into scenery
   if(t===8) { 
     const pType = state.props[key(nx,ny)]?.type || 'crate';
-    log(`A ${pType} blocks the way.`); 
+    log(`A ${pType} blocks the way. Press SPACE to smash it!`); 
     return; 
   }
 
   // --- NEW: Spike Trap Logic ---
   if(t===7) {
     // Traps are passable, but they HURT.
-    // Damage: 5 base + 1 every 10 floors
-    const trapDmg = 5 + Math.floor(state.floor/10);
+    // Damage: 10% of Max HP (Minimum 5)
+    const baseDmg = Math.max(5, Math.floor(state.player.hpMax * 0.10));
     // Apply Survivability reduction
-    const finalDmg = damageAfterDR(trapDmg);
+    const finalDmg = damageAfterDR(baseDmg);
     
     state.player.hp = clamp(state.player.hp - finalDmg, 0, state.player.hpMax);
     flashDamage();
@@ -8535,6 +8565,38 @@ function tryMove(dx,dy){
   if (isJesterTile(nx, ny)) { log('The jester blocks the way.'); return; }
   if (isCartographerTile(nx, ny)) { log('The cartographer blocks the way.'); return; }
   if (isClericTile(nx, ny)) { log('The priestess blocks the way.'); return; }
+
+  // --- NEW: Gold Well Interaction ---
+  if (state.goldWell) {
+     const w = state.goldWell;
+     // Check bounds (2x2)
+     if (nx >= w.x && nx <= w.x+1 && ny >= w.y && ny <= w.y+1) {
+        if (w.used) {
+           log("The well is empty.");
+        } else if ((state.inventory.gold|0) < 500) {
+           log("A golden shimmer... requires 500 gold.");
+        } else {
+           // Buy Stat
+           state.inventory.gold -= 500;
+           w.used = true;
+           
+           const roll = Math.random();
+           if (roll < 0.33) {
+              state.player.hpMax += 1; state.player.hp += 1;
+              log("You toss the gold. Vitality surges! (+1 Max HP)");
+           } else if (roll < 0.66) {
+              state.player.mpMax += 1; state.player.mp += 1;
+              log("You toss the gold. Mind expands! (+1 Max MP)");
+           } else {
+              state.player.staminaMax += 1; state.player.stamina += 1;
+              log("You toss the gold. Endurance grows! (+1 Max STM)");
+           }
+           spawnParticles(nx, ny, '#facc15', 10);
+           updateBars(); updateInvBody();
+        }
+        return;
+     }
+  }
 
 // NEW: set facing from movement
   if (dx>0) state.player.facing='right';
@@ -9043,12 +9105,11 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           else        log('You pick the lock and open the door.');
 
           if (state.gameMode === 'tutorial') {
-            // Step 9 -> 10: Door unlocked
-            if (state.tutorialStep === 9) {
-              state.tutorialStep = 10;
+            // --- TUTORIAL Step 12 (Door) ---
+            if (state.tutorialStep === 12) {
+              state.tutorialStep = 13;
               hideBanner();
-              showBanner("Door open! Approach the chest and press E to finish.", 2200);
-              showBanner('Note: In Classic Mode, locks are not guaranteed. You may break a pick and have to try again.', 2500);
+              showBanner("Step 13: Open the Chest with E to finish!", 999999);
             }
           }
         } else {
@@ -9099,7 +9160,30 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
 
 // --- NEW: Prop Smashing Logic ---
 function handlePropSmash(x, y) {
-  const k = key(x, y);
+  // --- TUTORIAL OVERRIDE (Step 3 -> 4) ---
+  // Allow smash to advance tutorial even if previous steps (like Sprint) were missed
+  if (state.gameMode === 'tutorial') {
+    delete state.props[key(x,y)];
+    state.tiles[y][x] = 1; 
+    SFX.weaponBreak();
+    spawnParticles(x, y, '#8b5a2b', 5);
+
+    // 1. Spawn Axe on floor (where crate was)
+    const k = key(x, y);
+    state.pickups[k] = {
+      kind: 'weapon',
+      payload: {name:'Axe', type:'axe', min:3, max:5, base:{min:3,max:5}, durMax:15, dur:15}
+    };
+    state.tiles[y][x] = 5; // Pickup tile
+
+    // 2. Force Step 4 (Pickup phase)
+    state.tutorialStep = 4;
+    hideBanner();
+    showBanner("Step 4: Walk over the Axe to pick it up.", 999999);
+    
+    draw();
+    return;
+  }
   const prop = state.props[k];
   const name = prop ? prop.type : 'crate';
   
@@ -9234,32 +9318,25 @@ function openChest(x,y){
   state.tiles[y][x] = 1;
   SFX.openChest();
   
-  // Tutorial Step 10: Bomb Lesson (Triggers on ANY chest in tutorial mode)
+// --- TUTORIAL OVERRIDE (Step 13 -> Finish) ---
   if (state.gameMode === 'tutorial') {
-    state.tutorialStep = 10.5; // Bomb Step
-    
-    // Grant Bomb
-    state.inventory.bombs = (state.inventory.bombs|0) + 1;
-    updateInvBody();
-
-    // Spawn blockade (3 rats) over the stairs or near player
-    // Coordinates assume the chest is at 15,27 (from startTutorial)
-    const ex = x + 2, ey = y; 
-    
-    // Spawn 3 rats with 1 HP each
-    state.enemies.push({x:ex, y:ey, type:'Rat', hp:1, atk:[1,1], xp:1, tutorialDummy:true});
-    state.enemies.push({x:ex+1, y:ey, type:'Rat', hp:1, atk:[1,1], xp:1, tutorialDummy:true});
-    state.enemies.push({x:ex, y:ey+1, type:'Rat', hp:1, atk:[1,1], xp:1, tutorialDummy:true});
-
-    hideBanner();
-    showBanner("You found a Bomb! A swarm blocks the way. Press 4 to throw the Bomb at them!", 999999);
-
-    // --- FIX: Force a redraw so rats appear immediately ---
-    enemyStep(); // Optional: lets enemies 'idle' or update status
-    draw(); 
-    // -----------------------------------------------------
-
-    return; // Stop normal loot logic
+    if (state.tutorialStep === 13) {
+       // Show the custom modal instead of alert()
+       const m = document.getElementById('tutorialCompleteModal');
+       if (m) {
+         m.style.display = 'flex';
+         // Ensure button works
+         const btn = document.getElementById('btnTutReturn');
+         if(btn) btn.onclick = () => {
+            m.style.display = 'none';
+            goMenu();
+         };
+       } else {
+         // Fallback just in case
+         goMenu();
+       }
+    }
+    return; 
   }
 
   const lootMsg = [];
@@ -9412,6 +9489,12 @@ function equipWeaponByName(name){
   // No-op if already equipped
   if (state.player.weapon?.name === name) return;
 
+  // --- FIX: Prevent swapping IF current weapon is Cursed ---
+  if (state.player.weapon?.cursed) {
+    log("The cursed weapon binds to your hand. You cannot switch.");
+    return; 
+  }
+
   // Ensure stash exists
   if (!state.inventory.stashed) state.inventory.stashed = {};
 
@@ -9449,12 +9532,12 @@ function equipWeaponByName(name){
   return;
 }
 
-    // Tutorial: after equipping the Axe
-    if (state.gameMode === 'tutorial' &&
-        state.tutorialStep === 2 &&
-        name === 'Axe') {
-      state.tutorialStep = 3;
-      say("Weapon equipped. Now move next to a rat and press SPACE to attack it.");
+// --- TUTORIAL Step 4 -> 5 (Equip Axe) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && name === 'Axe') {
+      state.tutorialStep = 5;
+      state.player.stamina = 10; // refill stamina for Art
+      hideBanner();
+      showBanner("Step 5: Weapon Arts. Walk to the 3 rats and press R (Cleave).", 999999);
     }
 
 
@@ -9488,15 +9571,21 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
   // Lookup durability using the BASE name (e.g. "Shortsword")
   const durMax = defaultDurabilityFor(baseName);
   
+  // --- NEW: Preserve Cursed properties when rebuilding fresh weapon ---
+  const isCursed = name.includes('Cursed ');
+  const cType = isCursed ? (name.includes('blood') ? 'blood' : (name.includes('greed') ? 'greed' : (name.includes('frailty') ? 'frailty' : 'rust'))) : null; 
+
   state.player.weapon = {
-    name, // Keep full name "Sharp Shortsword"
+    name, // Keep full name "Cursed Shortsword"
     min: stats[0] + bonMin, 
     max: stats[1] + bonMax, 
     type: stats[2],
     base: { min: stats[0] + bonMin, max: stats[1] + bonMax },
     dur: durMax, 
     durMax,
-    vampiric: isVamp
+    vampiric: isVamp,
+    cursed: isCursed, // <--- CRITICAL FIX
+    curseType: cType,  // <--- CRITICAL FIX
   };
   ensureSkill(stats[2]);
   recomputeWeapon();
@@ -9632,57 +9721,43 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
 
       log(`You shoot an arrow for ${dmg}.`);
 
-// --- Determine if this hit is FATAL AND a Tutorial Target ---
-let tutMsg = null;
-if (state.gameMode === 'tutorial' &&
-    state._tutGotArrows &&
-    !state._tutBowShot &&
-    e.tutorialDummy &&
-    e.hp - dmg <= 0) { // Check if the damage *will* kill it
-  
-  state._tutBowShot = true; // Mark shot as successful right away
-  const alreadyHasSword = ((state.inventory?.weapons?.Shortsword|0) > 0);
+      // --- TUTORIAL OVERRIDE (Step 8 -> 9) ---
+      if (state.gameMode === 'tutorial' && state.tutorialStep === 8 && e.type === 'Rat') {
+         if (e.hp - dmg <= 0) {
+            state.tutorialStep = 9;
+            // Spawn Magic Scroll at Y=35
+            state.pickups['10,35'] = {kind:'spell', payload:{name:'Spark', cost:1, tier:1}};
+            state.tiles[35][10]=5;
 
-  // Set the message to be displayed *after* the projectile animation ends
-  tutMsg = alreadyHasSword
-    ? "Nice shot. You already have the Axe — equip it (I → Weapons), then press SPACE next to the rat to attack. Careful: it’s poisonous."
-    : "Nice shot. Next: pick up the Axe, equip it (I → Weapons), then press SPACE next to the rat to attack. Careful: it’s poisonous.";
-}
-
-const isFatal = e.hp <= 0;
-
-const onDone = ()=>{ 
-  // Safety check: ensure enemy exists and is killed if fatal flag was set
-  if (isFatal) {
-    // --- INSERT DEATH LOGIC HERE (original block moved here, but we simplify the tutorial spawn) ---
-    // 1. Handle Depth 50 Transitions
-    if (state.floor === 50 && target.boss && target.type === 'Clone' && !(state.flags?.depth50Phase2)) {
-       runDepth50Phase2(target); return;
-    }
-    if (state.floor === 50 && target.boss && target.type === 'Mad King' && !(state.flags?.depth50Done)) {
-       runDepth50Outro(target); return;
-    }
-
-    // 2. Handle Boss Stairs (Only necessary if it wasn't a boss, which the tutorial rat is not)
-    // 3. Remove Enemy & Award XP
-    state.enemies = state.enemies.filter(x=>x!==e);
-    state.run.kills++; 
-    awardKill('bow', Math.max(1, e.xp|0));
-    SFX.kill();
-    // unlockCodex(target.displayName || target.type, true); // Target is a dummy, skip Codex update
-    if (typeof log === 'function') log(`${e.type} falls.`);
-
-    // --- NEW TUTORIAL LOGIC (Spawn next target and show message) ---
-    if (tutMsg) {
-      if (!state._tutSpawnedMeleeRat){
-        state._tutSpawnedMeleeRat = true;
-        state.enemies.push({x:18, y:14, type:'Rat', hp:1, atk:[1,2], xp:3});
+            // FIX: Spawn a Magic Target at Y=38
+            state.enemies.push({x:10, y:38, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true});
+            
+            hideBanner();
+            showBanner("Step 9: Pickup Scroll. Press (P) to open your spell book. Cast Magic (Q) on the Rat.", 999999);
+         }
       }
-      hideBanner();
-      showBanner(tutMsg, 999999);
-    }
-    // --- END TUTORIAL LOGIC ---
-  }
+      // ----------------------------------------
+
+      const isFatal = e.hp <= 0;
+
+      const onDone = ()=>{ 
+        // Safety check: ensure enemy exists and is killed if fatal flag was set
+        if (isFatal) {
+          // 1. Handle Depth 50 Transitions
+          if (state.floor === 50 && target.boss && target.type === 'Clone' && !(state.flags?.depth50Phase2)) {
+             runDepth50Phase2(target); return;
+          }
+          if (state.floor === 50 && target.boss && target.type === 'Mad King' && !(state.flags?.depth50Done)) {
+             runDepth50Outro(target); return;
+          }
+
+          // 2. Remove Enemy & Award XP
+          state.enemies = state.enemies.filter(x=>x!==e);
+          state.run.kills++; 
+          awardKill('bow', Math.max(1, e.xp|0));
+          SFX.kill();
+          if (typeof log === 'function') log(`${e.type} falls.`);
+        }
 
   enemyStep(); 
   draw(); 
@@ -9739,6 +9814,7 @@ function attack(){
 if (!rollHitFor(w.type)){
   log(`You miss the ${target.type}.`); SFX.miss(); enemyStep(); draw(); return;
 }
+
 SFX.swingFor(w.type);
 // base swing
 let dmg = rand(w.min, w.max);
@@ -9786,32 +9862,30 @@ if (state.floorEffect === 'AntiMagic') {
   }
   // ------------------------------------------
 
-  log(`You hit the ${target.type} for ${dmg}.${note}`);
+log(`You hit the ${target.type} for ${dmg}.${note}`);
 
-// Tutorial Step 5: first melee hit poisons + deals a little damage (once)
-if (state.gameMode === 'tutorial' &&
-    state._tutBowShot &&
-    state._tutGotWeapon &&
-    !state._tutMeleeHit &&
-    target.type === 'Rat' &&
-    !target.tutorialDummy &&
-    dmg > 0){
-
-  state._tutMeleeHit = true;
-
-  if (!state.player.poisoned) log('You are poisoned!');
-  state.player.poisoned = true;
-  state.player.poisonTicks = Math.max(state.player.poisonTicks|0, 12);
-
-  const poisonHit = 4; // small, safe tutorial hit
-  state.player.hp = clamp(state.player.hp - poisonHit, 0, state.player.hpMax);
-  flashDamage?.();
-  log(`Venom burns you for ${poisonHit}.`);
-  updateBars?.();
-
-  // show the "Ouch" tutorial line AFTER this rat is killed
-  state._tutPoisonMsgPending = true;
-}
+  // --- TUTORIAL Step 6 (Melee + Poison) ---
+  if (state.gameMode === 'tutorial' && state.tutorialStep === 6 && target.type === 'Rat') {
+     // Poison on hit
+     if (!state.player.poisoned) {
+        state.player.poisoned = true;
+        state.player.poisonTicks = 20;
+        state.player.hp = Math.max(1, state.player.hp - 5); // Hurt them
+        log("You are poisoned!");
+        updateBars();
+     }
+     
+     if (target.hp - dmg <= 0) {
+        state.tutorialStep = 7;
+        // Spawn Antidote & Potion at Y=25
+        state.pickups['10,25'] = {kind:'antidote', payload:1};
+        state.pickups['11,25'] = {kind:'potion', payload:1};
+        state.tiles[25][10]=5; state.tiles[25][11]=5;
+        
+        hideBanner();
+        showBanner("Step 7: Pick up and USE the Antidote (3) and Potion (1).", 999999);
+     }
+  }
 
 
 if (dmg > 0) {
@@ -10051,8 +10125,9 @@ function useWeaponArt(){
  // 1. CLEAVE (Two-Handed / Axe): Hit all adjacent enemies (including diagonals)
   if (t === 'two' || t === 'axe') {
     SFX.swingFor(t);
-    let hit = 0;
-    
+    let hitCount = 0;
+    const hitList = new Set(); // Prevent hitting the same 2x2 boss multiple times
+
     // Check 3x3 grid around player
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -10062,7 +10137,9 @@ function useWeaponArt(){
         const ty = state.player.y + dy;
         const e = enemyAt(tx, ty);
         
-        if (e) {
+        if (e && !hitList.has(e)) {
+          hitList.add(e); // Mark enemy as hit for this swing
+          
           // 120% Damage
           const dmg = Math.floor(rand(w.min, w.max) * 1.2);
           e.hp -= dmg;
@@ -10073,10 +10150,11 @@ function useWeaponArt(){
              state.run.kills++;
              awardKill(t, e.xp);
              SFX.kill();
+             if (e.boss) spawnBossStairs(); // Ensure stairs spawn
           } else {
              flashEnemy(e, 'red');
           }
-          hit++;
+          hitCount++;
         }
       }
     }
@@ -10181,11 +10259,6 @@ function useWeaponArt(){
 
   // If we used a skill, trigger turns
   if(acted) {
-    // --- NEW: Pay Stamina Cost ---
-    state.player.stamina -= 4; // Matches the COST check at top of function
-    updateBars();
-    // ----------------------------
-
     // 1. Determine the Name of the Art based on the weapon type 't'
     let artName = '';
     if (t === 'two' || t === 'axe') artName = 'Cleave';
@@ -10199,13 +10272,17 @@ function useWeaponArt(){
     // 3. Unlock the Codex entry for this specific art
     unlockCodex('Art_' + artName, true); 
 
-    // 4. (Existing) Tutorial Advancement
-    if (state.gameMode === 'tutorial' && state.tutorialStep === 6.5) {
-      state.tutorialStep = 7;
-      state._tutArtUsed = true;
-      state.enemies.push({x:15, y:14, type:'Rat', hp:1, atk:[1,2], xp:3});
-      hideBanner();
-      showBanner("Crushed! Weapon Arts are powerful but have cooldowns. Next: A distant rat. Press Q to cast Spells.", 999999);
+    // --- TUTORIAL Step 5 -> 6 (Weapon Art) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 5) {
+      // Check if we killed the dummies
+      const liveDummies = state.enemies.filter(e => e.tutorialDummy && e.y === 18).length;
+      if (liveDummies === 0 || acted) { // acted means Art fired successfully
+         state.tutorialStep = 6;
+         // Ensure dummies are dead if they survived somehow
+         state.enemies = state.enemies.filter(e => !(e.tutorialDummy && e.y === 18));
+         hideBanner();
+         showBanner("Step 6: Melee. Attack the next rat with SPACE. Beware poison!", 999999);
+      }
     }
     
     // 5. (Existing) End turn and redraw
@@ -10329,11 +10406,16 @@ target.hp -= dmg;
 
   log(`Your ${spell.name} hits for ${dmg}.`);
 
-// Tutorial Step 7 -> 8 (Magic used successfully)
-if (state.gameMode === 'tutorial' && state.tutorialStep === 7) {
-  state.tutorialStep = 8;
+// --- TUTORIAL Step 9 (Magic) ---
+if (state.gameMode === 'tutorial' && state.tutorialStep === 9) {
+  state.tutorialStep = 10;
+  state.player.mp = 0; // Drain MP so they need tonic
+  // Spawn Tonic
+  state.pickups['10,36'] = {kind:'tonic', payload:1};
+  state.tiles[36][10]=5;
+  
   hideBanner();
-  showBanner("Nice cast! Your Mana is low. Press 2 to drink a Tonic.", 999999);
+  showBanner("Step 10: Low Mana! Pickup and Use the Tonic (2).", 999999);
 }
 
 
@@ -10421,6 +10503,9 @@ function weaponStatsFor(name){
   let baseName = name;
   let bonMin=0, bonMax=0;
   
+  // FIX: Strip Cursed prefix so the base type/stats lookup works
+  if (name.includes('Cursed '))      { baseName = baseName.replace('Cursed ', ''); }
+
   if (name.includes('Sharp '))       { baseName = baseName.replace('Sharp ', '');   bonMin+=1; bonMax+=1; }
   else if (name.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
   else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); }
@@ -11740,6 +11825,13 @@ function useBomb(){
              state.enemies = state.enemies.filter(en => en !== e);
              state.run.kills++;
              
+             // --- FIX: Trigger Stairs if Boss ---
+             if (e.boss) {
+                spawnBossStairs();
+                log("The explosion clears the path!");
+             }
+             // ----------------------------------
+             
              // --- FIX: Award Player XP Only (No Skill XP) ---
              state.player.xp += (e.xp || 1);
              
@@ -11773,27 +11865,15 @@ log(`You throw a bomb! Hit ${hitCount} foes.`);
 
     updateInvBody();
     
-    // --- NEW: Tutorial Finish ---
-    if (state.gameMode === 'tutorial' && state.tutorialStep === 10.5) {
-      state.tutorialStep = 11;
-      // Reveal stairs where the chest was or nearby
-      state.tiles[29][17] = 4; 
-      draw();
-      
-      // Show Complete Modal
-      const m = document.getElementById('tutorialCompleteModal');
-      if (m) {
-        m.style.display = 'flex';
-        const btn = document.getElementById('btnTutReturn');
-        if (btn) {
-          btn.onclick = () => { 
-            m.style.display = 'none'; 
-            if(typeof goMenu === 'function') goMenu(); 
-          };
-        }
-      }
-      hideBanner();
-      return;
+// --- TUTORIAL Step 11 (Bomb) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 11) {
+       state.tutorialStep = 12;
+       // Spawn Lockpicks
+       state.pickups['10,42'] = {kind:'lockpicks', payload:3};
+       state.tiles[42][10]=5;
+       
+       hideBanner();
+       showBanner("Step 12: Pickup Lockpicks. Unlock the Door below (E). Note: It may fail!", 999999);
     }
     // ----------------------------
 
@@ -11850,9 +11930,30 @@ function usePotion(){
     state.lastPlayerAction = { type: 'heal', amount: healed };
     updateBars();
     log(`Drank a potion (+${healed} HP).`);
+
+    // --- TUTORIAL Step 7 (Potion Part) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 7) {
+       state._tutProgress['potion'] = true;
+       checkStep7Completion();
+    }
+    // -------------------------------------
+
     updateInvBody();
     draw();
   }
+}
+
+// --- Helper for Step 7 ---
+function checkStep7Completion() {
+   if (state._tutProgress['antidote'] && state._tutProgress['potion']) {
+      state.tutorialStep = 8;
+      // Spawn Arrows ONLY at Y=26
+      state.pickups['11,26'] = {kind:'arrows', payload:10};
+      state.tiles[26][11]=5;
+      
+      hideBanner();
+      showBanner("Step 8: Pickup Arrows. Face the Rat and press B to shoot.", 999999);
+   }
 }
 
 function useTonic(){
@@ -11866,6 +11967,17 @@ function useTonic(){
     SFX.drink();
     updateBars();
     log(`Used a tonic (+${restored} MP).`);
+    
+    // --- TUTORIAL Step 10 (Tonic) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 10) {
+       state.tutorialStep = 11;
+       // Spawn Bomb
+       state.pickups['10,40'] = {kind:'bomb', payload:1};
+       state.tiles[40][10]=5;
+       hideBanner();
+       showBanner("Step 11: Pickup Bomb. Press 4 to throw it.", 999999);
+    }
+
     updateInvBody();
     draw();
   }
@@ -11879,6 +11991,14 @@ function useAntidote(){
     SFX.drink();;
     updateBars();
     log('You use an antidote. The poison is cured.');
+    
+    // --- TUTORIAL Step 7 (Antidote Part) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 7) {
+       state._tutProgress['antidote'] = true;
+       checkStep7Completion();
+    }
+    // ---------------------------------------
+
     updateInvBody();
     draw();
   }
@@ -12912,26 +13032,18 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
- // Tutorial Step 0 (movement): require W+A+S+D OR arrows before continuing
-if (state.gameMode === 'tutorial' && state.tutorialStep === 0 && !state._tutMoveDone){
-  if (k === 'w') state._tutMoveWASD.w = true;
-  else if (k === 'a') state._tutMoveWASD.a = true;
-  else if (k === 's') state._tutMoveWASD.s = true;
-  else if (k === 'd') state._tutMoveWASD.d = true;
-  else if (k === 'arrowup') state._tutMoveArrows.up = true;
-  else if (k === 'arrowdown') state._tutMoveArrows.down = true;
-  else if (k === 'arrowleft') state._tutMoveArrows.left = true;
-  else if (k === 'arrowright') state._tutMoveArrows.right = true;
+ // Tutorial Step 1: Movement
+if (state.gameMode === 'tutorial' && state.tutorialStep === 1){
+  if (k === 'w' || k === 'arrowup') state._tutMoveWASD.w = true;
+  if (k === 'a' || k === 'arrowleft') state._tutMoveWASD.a = true;
+  if (k === 's' || k === 'arrowdown') state._tutMoveWASD.s = true;
+  if (k === 'd' || k === 'arrowright') state._tutMoveWASD.d = true;
 
-  const wasdDone = state._tutMoveWASD.w && state._tutMoveWASD.a && state._tutMoveWASD.s && state._tutMoveWASD.d;
-  const arrowsDone = state._tutMoveArrows.up && state._tutMoveArrows.down && state._tutMoveArrows.left && state._tutMoveArrows.right;
-
- if (wasdDone || arrowsDone){
-  state._tutMoveDone = true;
-  state.tutorialStep = 1;
-  hideBanner();
-  showBanner("Nice! Next: press I to open your inventory.", 999999);
-}
+  if (state._tutMoveWASD.w && state._tutMoveWASD.a && state._tutMoveWASD.s && state._tutMoveWASD.d){
+    state.tutorialStep = 2;
+    hideBanner();
+    showBanner("Step 2: Sprinting. Hold SHIFT while moving to Sprint.", 999999);
+  }
 }
 
 // --- normal controls (Updated for Sprint) ---
@@ -12955,6 +13067,14 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
          
          if (isPassableForPlayer(x1,y1) && isPassableForPlayer(x2,y2)) {
             state.player.stamina -= 3;
+
+            // --- TUTORIAL: Step 2 -> 3 (Sprint) ---
+            if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
+               state.tutorialStep = 3;
+               hideBanner();
+               showBanner("Step 3: Break the Crate! Walk up to it and press SPACE.", 999999);
+            }
+
             updateBars(); // Update UI immediately
             
             // Prevent stamina regen this turn
@@ -13070,25 +13190,7 @@ if (state.gameMode === 'tutorial' && (state._tutGotArrows || state._tutArrowsPic
     }
   }
   else if (k === '3') {
-
-    // === Tutorial Step 6: track antidote usage ===
-    if (state.gameMode === 'tutorial' && state.tutorialStep === 6) {
-
-      if (!state._tutStep6UsedAntidote) {
-        useAntidote();
-        state._tutStep6UsedAntidote = true;
-
-        hideBanner();
-        showBanner("Good. Now press 1 to drink a potion.", 999999);
-      } else {
-        hideBanner();
-        showBanner("Antidote already used. Now press 1 for a potion.", 2200);
-      }
-
-    } else {
-      // normal behavior
-      useAntidote();
-    }
+    useAntidote();
   }
   // --- NEW: Keybinds for Consumables ---
   else if (k === '4') { useBomb(); }
@@ -13455,6 +13557,11 @@ function stopRunTimerFreeze(){
 
 
 function doRestart(className){
+  // --- FIX: Toggle UI Bars ---
+  // Hide bars if in menu (no className), Show them if starting run (has className)
+  const uiBars = document.querySelector('.bars');
+  if (uiBars) uiBars.style.visibility = className ? 'visible' : 'hidden';
+
   // --- Class Selection Intercept ---
   if (!className) {
     const meta = loadMeta();
@@ -13576,14 +13683,30 @@ function doRestart(className){
     state.player.hpMax -= 2;  // Light Armor
   }
   
-  // --- Apply Soul Shop Upgrades ---
-  const meta = loadMeta();
-  
-  // Determine if we load Classic or Endless upgrades
-  const upgPrefix = (state.gameMode === 'endless') ? 'endless_upg_' : 'upg_';
+  // --- HARD RESET PLAYER STATE ---
+  state.player = {
+    x:0, y:0, rx:0, ry:0,
+    level:1, xp:0, next:PLAYER_XP_START,
+    hpMax:20, mpMax:10,
+    hp:20, mp:10,
+    stamina:10, staminaMax:10,
+    poisoned:false, poisonTicks:0,
+    facing:'down',
+    bow:{ range:5, loaded:0 },
+    artCooldown: 0,
+    shield: null
+  };
 
-  state.player.hpMax += ((meta[upgPrefix+'vitality']||0) * 5);
-  state.player.mpMax += ((meta[upgPrefix+'wisdom']||0) * 10);
+  // --- Apply Soul Shop Upgrades (IF NOT TUTORIAL) ---
+  const meta = loadMeta();
+  // Disable shop upgrades for Tutorial to keep it standard
+  const upgPrefix = (state.gameMode === 'endless') ? 'endless_upg_' : 'upg_';
+  const isTut = (state.gameMode === 'tutorial');
+
+  if (!isTut) {
+    state.player.hpMax += ((meta[upgPrefix+'vitality']||0) * 5);
+    state.player.mpMax += ((meta[upgPrefix+'wisdom']||0) * 10);
+  }
 
   state.player.hp = state.player.hpMax;
   state.player.mp = state.player.mpMax;
@@ -13601,12 +13724,16 @@ function doRestart(className){
   state._shieldParity = 0;
   state.skills = {};
 
+// Disable shop items for Tutorial
+  const pockets = isTut ? 0 : ((meta[upgPrefix+'pockets']||0) * 1);
+  const greed   = isTut ? 0 : ((meta[upgPrefix+'greed']||0) * 25);
+
   state.inventory = {
     lockpicks: 0, 
-    potions: ((meta[upgPrefix+'pockets']||0) * 1), 
+    potions: pockets, 
     tonics: 0, antidotes: 0, 
     weapons: {}, stashed: {}, arrows: 0, 
-    gold: ((meta[upgPrefix+'greed']||0) * 25),     
+    gold: greed,     
     shields: 0, bombs:0, warpStones:0
   };
 
@@ -13729,8 +13856,11 @@ function saveScore(initialsRaw){
   const initials = (initialsRaw||'???').toUpperCase().replace(/[^A-Z]/g,'').slice(0,3) || '???';
   const row = { initials, depth: state.run.depth|0, level: state.run.level|0, kills: state.run.kills|0, when: state.run.when|0, timeMs: state.run.timeMs|0  };
   // --- NEW: Calculate & Save Shards ---
-  // Formula: (Depth * 5) + (Kills * 2) + (Level * 10)
-  const earnedShards = (state.run.depth * 5) + (state.run.kills * 2) + (state.run.level * 10);
+  // --- Adjusted Shard Scaling ---
+  // Formula: (Depth * 1) + (Kills * 0.5) + (Level * 2)
+  const earnedShards = (state.gameMode === 'tutorial') ? 0 
+     : Math.floor((state.run.depth * 1) + (state.run.kills * 0.5) + (state.run.level * 2));
+
   if (earnedShards > 0) {
     const m = loadMeta();
     m.shards = (m.shards || 0) + earnedShards;
@@ -14245,9 +14375,38 @@ if (spKeyBtn) spKeyBtn.addEventListener('click', ()=>{
     payload: { name: 'Key of Destiny', type: 'one', min:5, max:7 } 
   };
 
-  draw?.();
+draw?.();
   hideDebug?.();
   log('[debug] Key of Destiny spawned below.');
+});
+
+// --- NEW: Spawn Cursed Weapon Debug ---
+const cursBtn = document.getElementById('dbgSpawnCursed');
+if (cursBtn) cursBtn.addEventListener('click', ()=>{
+  state.pickups ||= {};
+  const px = state.player.x;
+  const py = state.player.y + 1;
+
+  if (!inBounds(px, py)) { log('[debug] Out of bounds.'); return; }
+  const t = state.tiles[py][px];
+  if (t !== 1 && t !== 5) { log('[debug] Tile below is not floor.'); return; }
+
+  const kxy = key(px, py);
+  state.tiles[py][px] = 5;
+  state.pickups[kxy] = { 
+    kind: 'weapon', 
+    payload: { 
+      name: 'Cursed Shortsword', 
+      type: 'one', 
+      min: 7, max: 9, 
+      cursed: true, 
+      curseType: 'blood' // Test the HP drain curse
+    } 
+  };
+
+  draw?.();
+  hideDebug?.();
+  log('[debug] Cursed Shortsword spawned below.');
 });
 
 const healBtn = document.getElementById('dbgSpawnHeal');
