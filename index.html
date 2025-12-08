@@ -15,7 +15,12 @@
   --hp2:#ff6a88;
   --mp1:#9cd3ff;
   --mp2:#79baff;
+  /* NEW: Stamina Colors */
+  --stm1:#15803d; 
+  --stm2:#166534;
 .hp.poison .fill{ background:linear-gradient(90deg,#22c55e,#16a34a) }
+/* NEW: Stamina Bar Class */
+.stamina .fill{ background:linear-gradient(90deg,var(--stm1),var(--stm2)) }
 
 }
 /* base floating button stack — hidden by default (desktop) */
@@ -601,6 +606,53 @@ body.noscroll{
 /* Optional: tone down/hide the old card if still present anywhere */
 .menuCard{ display:none !important; }
 
+/* --- NEW SETTINGS UI --- */
+#settingsOverlay .creditsCard {
+  width: min(800px, 96vw); height: min(600px, 90vh);
+  padding: 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.settings-header {
+  padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
+  display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2);
+}
+.settings-header .title { font-weight: 900; font-size: 28px; letter-spacing: 1px; color: #f9d65c; margin:0; }
+.settings-body { display: flex; flex: 1; overflow: hidden; }
+.settings-nav {
+  width: 200px; background: rgba(0,0,0,0.3); border-right: 1px solid rgba(255,255,255,0.1);
+  display: flex; flex-direction: column; padding: 10px; gap: 8px;
+}
+.tab-btn {
+  background: transparent; border: 1px solid transparent; color: #9ca3af;
+  padding: 12px 16px; text-align: left; font-weight: 700; font-size: 16px;
+  border-radius: 8px; cursor: pointer; transition: all 0.2s;
+}
+.tab-btn:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.tab-btn.active {
+  background: #1b2a3a; border-color: var(--chipBorder); color: #f9d65c;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.settings-content {
+  flex: 1; padding: 24px; overflow-y: auto; background: rgba(20, 26, 35, 0.4); text-align:left;
+}
+.settings-panel { display: none; animation: fadeIn 0.2s ease-out; }
+.settings-panel.active { display: block; }
+.vol-group { margin-bottom: 20px; }
+.vol-header { display: flex; justify-content: space-between; margin-bottom: 6px; font-weight: 600; font-size: 14px; color: #d9e7f5; }
+input[type=range].custom-slider { -webkit-appearance: none; width: 100%; background: transparent; }
+input[type=range].custom-slider:focus { outline: none; }
+input[type=range].custom-slider::-webkit-slider-runnable-track {
+  width: 100%; height: 8px; cursor: pointer; background: #0b141d; border-radius: 4px; border: 1px solid #374151;
+}
+input[type=range].custom-slider::-webkit-slider-thumb {
+  height: 20px; width: 12px; border-radius: 2px; background: #f9d65c; border: 1px solid #b45309;
+  cursor: pointer; -webkit-appearance: none; margin-top: -7px; box-shadow: 0 0 5px rgba(249, 214, 92, 0.5);
+}
+@media (max-width: 600px) {
+  .settings-body { flex-direction: column; }
+  .settings-nav { width: 100%; flex-direction: row; overflow-x: auto; padding: 8px; flex: none; }
+  .tab-btn { flex: 1; text-align: center; padding: 10px; font-size: 14px; white-space: nowrap; }
+}
+
 
 </style>
 
@@ -718,58 +770,52 @@ body.noscroll{
 <!-- ====== SETTINGS (full-screen overlay) ====== -->
 <div id="settingsOverlay" class="fullOverlay" style="display:none;" aria-label="Settings">
   <div class="creditsWrap">
-    <button class="btn closeBtn" data-close="#settingsOverlay" title="Close">Close</button>
-    <!-- Optional background image; remove if you want a solid color -->
-    <img class="creditsBg" src="https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawler@main/testing_title_screen.png" alt="" />
-
-
-    <!-- Reuse the same card layout as credits -->
-    <!-- Reuse the same card layout as credits -->
-<div class="creditsCard">
-  <div class="creditsTitle">Settings</div>
-  <div class="creditsBody">
-    <p style="margin-bottom:8px;">Audio Levels</p>
-
-    <label style="display:block; margin:6px 0 2px;">
-      Music (BGM, title/menu, bosses)
-      <input id="volMusic" type="range" min="0" max="100" value="80">
-    </label>
-
-    <label style="display:block; margin:6px 0 2px;">
-      Combat (weapons, magic, bow, hits, level-ups)
-      <input id="volCombat" type="range" min="0" max="100" value="90">
-    </label>
-
-    <label style="display:block; margin:6px 0 2px;">
-      Interactables (doors, chests, loot, stairs, merchant/blacksmith)
-      <input id="volInteract" type="range" min="0" max="100" value="90">
-    </label>
-
-    <label style="display:block; margin:6px 0 2px;">
-      Footsteps
-      <input id="volFoot" type="range" min="0" max="100" value="100">
-    </label>
-
-    <label style="display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); cursor:pointer;">
-      <span style="font-weight:700; color:#ff9a8b;">Arachnophobia Mode</span>
-      <input id="chkArachno" type="checkbox" style="width:24px; height:24px; accent-color:#ff9a8b;">
-    </label>
-
-    <label style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); cursor:pointer;">
-      <span style="font-weight:700; color:#facc15;">Developer Sounds</span>
-      <input id="chkDevSounds" type="checkbox" style="width:24px; height:24px; accent-color:#facc15;">
-    </label>
-
-    <div style="margin-top:16px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1);">
-      <button id="btnResetData" class="btn" style="width:100%; background:#7f1d1d; border-color:#991b1b; color:#fee2e2;">Reset All Save Data</button>
+    <div class="creditsCard">
+      <div class="settings-header">
+        <div class="title">Settings</div>
+        <button class="btn" data-close="#settingsOverlay">Close</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-nav">
+          <button class="tab-btn active" onclick="switchTab('sound')">Audio</button>
+          <button class="tab-btn" onclick="switchTab('graphics')">Graphics</button>
+          <button class="tab-btn" onclick="switchTab('gameplay')">Gameplay</button>
+        </div>
+        <div class="settings-content">
+          <div id="tab-sound" class="settings-panel active">
+            <div class="vol-group"><div class="vol-header"><span>Master Volume</span><span id="valMaster">50%</span></div>
+              <input id="volMaster" class="custom-slider" type="range" min="0" max="100" value="50"></div>
+            <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 20px 0;">
+            <div class="vol-group"><div class="vol-header"><span>Music</span><span id="valMusic">80%</span></div>
+              <input id="volMusic" class="custom-slider" type="range" min="0" max="100" value="80"></div>
+            <div class="vol-group"><div class="vol-header"><span>Combat (Hits, Magic)</span><span id="valCombat">90%</span></div>
+              <input id="volCombat" class="custom-slider" type="range" min="0" max="100" value="90"></div>
+            <div class="vol-group"><div class="vol-header"><span>System / UI (Pickups, Level Up)</span><span id="valUi">90%</span></div>
+              <input id="volUi" class="custom-slider" type="range" min="0" max="100" value="90"></div>
+            <div class="vol-group"><div class="vol-header"><span>Environment (Doors, NPCs)</span><span id="valInteract">90%</span></div>
+              <input id="volInteract" class="custom-slider" type="range" min="0" max="100" value="90"></div>
+            <div class="vol-group"><div class="vol-header"><span>Footsteps</span><span id="valFoot">100%</span></div>
+              <input id="volFoot" class="custom-slider" type="range" min="0" max="100" value="100"></div>
+          </div>
+          <div id="tab-graphics" class="settings-panel">
+            <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer;">
+              <div><div style="font-weight:700; color:#ff9a8b;">Arachnophobia Mode</div><div style="font-size:12px; opacity:0.7;">Replaces spiders with text labels.</div></div>
+              <input id="chkArachno" type="checkbox" style="width:24px; height:24px; accent-color:#ff9a8b;">
+            </label>
+          </div>
+          <div id="tab-gameplay" class="settings-panel">
+            <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer; margin-bottom:15px;">
+              <div><div style="font-weight:700; color:#facc15;">Developer Sounds [Work In Progress]</div><div style="font-size:12px; opacity:0.7;">Logs audio events to console (Debug).</div></div>
+              <input id="chkDevSounds" type="checkbox" style="width:24px; height:24px; accent-color:#facc15;">
+            </label>
+            <div style="padding:15px; border:1px solid #7f1d1d; background:rgba(127, 29, 29, 0.1); border-radius:8px;">
+              <div style="font-weight:bold; color:#fee2e2; margin-bottom:8px;">Danger Zone</div>
+              <button id="btnResetData" class="btn" style="width:100%; background:#7f1d1d; border-color:#991b1b; color:#fee2e2;">Reset All Save Data</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-
-    <p style="margin-top:10px; font-size:12px; opacity:0.8;">
-      (These settings are saved in your browser between runs.)
-    </p>
-  </div>
-</div>
-
   </div>
 </div>
 
@@ -873,6 +919,10 @@ body.noscroll{
       <div>MP</div>
       <div class="bar mp"><div class="fill" id="mpFill" style="width:60%"></div></div>
       <div id="mpText">10/10</div>
+
+      <div>STM</div>
+      <div class="bar stamina"><div class="fill" id="stmFill" style="width:100%"></div></div>
+      <div id="stmText">10/10</div>
     </div>
   </div>
 
@@ -930,8 +980,9 @@ body.noscroll{
           Choose your bonus:
         </div>
         <div class="row" style="margin-top:8px;justify-content:space-between;gap:8px;">
-          <button class="btn" id="btnHP"  style="flex:1;">+Max HP</button>
-          <button class="btn" id="btnMP"  style="flex:1;">+Max MP</button>
+          <button class="btn" id="btnHP"   style="flex:1; padding:10px 4px; font-size:13px;">+Max HP</button>
+          <button class="btn" id="btnMP"   style="flex:1; padding:10px 4px; font-size:13px;">+Max MP</button>
+          <button class="btn" id="btnStam" style="flex:1; padding:10px 4px; font-size:13px;">+Max STM</button>
         </div>
       </div>
     </div>
@@ -1262,10 +1313,10 @@ async function say(text){
 
 
 
-const PLAYER_XP_START   = 22;   // was 24
-const PLAYER_XP_GROWTH  = 1.30; // was 1.40
-const SKILL_XP_START    = 22;   // was 25
-const SKILL_XP_GROWTH   = 1.40; // was 1.50
+const PLAYER_XP_START   = 22;   
+const PLAYER_XP_GROWTH  = 1.20; // Reduced from 1.30 (Smoother late-game leveling)
+const SKILL_XP_START    = 22;   
+const SKILL_XP_GROWTH   = 1.30; // Reduced from 1.40 (Skills level up more often)
 
 
 
@@ -1788,68 +1839,58 @@ const SHIELD_DUR  = 20;     // max durability
 // ====== Audio (WebAudio, synthesized SFX) ======
 
 // Per-group volume (0..1). These are the *sliders*.
-let _volMusic    = 0.8; // background tracks (title/menu/game/boss)
-let _volCombat   = 0.9; // all combat: swings, hits, spells, bow, level-ups
-let _volInteract = 0.9; // doors, chests, loot, stairs, merchant/blacksmith loops
-let _volFoot     = 1.0; // footsteps only
+let _volMaster   = 0.5; // New Master slider
+let _volMusic    = 0.8; 
+let _volCombat   = 0.9; 
+let _volInteract = 0.9; 
+let _volUi       = 0.9; // New UI Group
+let _volFoot     = 1.0; 
 
-// Try to restore saved volumes from localStorage (safe if it fails)
+// Try to restore saved volumes from localStorage
 (function restoreVolumePrefs(){
   try{
-    const m = localStorage.getItem('volMusic');
-    if (m !== null) _volMusic = clamp(parseFloat(m), 0, 1);
-
-    const c = localStorage.getItem('volCombat');
-    if (c !== null) _volCombat = clamp(parseFloat(c), 0, 1);
-
-    const i = localStorage.getItem('volInteract');
-    if (i !== null) _volInteract = clamp(parseFloat(i), 0, 1);
-
-    const f = localStorage.getItem('volFoot');
-    if (f !== null) _volFoot = clamp(parseFloat(f), 0, 1);
-  } catch(e){
-    // ignore storage errors
-  }
+    const get = (k, def) => { const v = localStorage.getItem(k); return v!==null ? parseFloat(v) : def; };
+    _volMaster   = clamp(get('volMaster', 0.5), 0, 1);
+    _volMusic    = clamp(get('volMusic', 0.8), 0, 1);
+    _volCombat   = clamp(get('volCombat', 0.9), 0, 1);
+    _volInteract = clamp(get('volInteract', 0.9), 0, 1);
+    _volUi       = clamp(get('volUi', 0.9), 0, 1);
+    _volFoot     = clamp(get('volFoot', 1.0), 0, 1);
+  } catch(e){}
 })();
 
 // Main audio nodes
 let audioCtx, masterGain,
-    musicGain, combatGain, interactGain, footstepGain,
+    musicGain, combatGain, interactGain, uiGain, footstepGain, 
     muted = false;
 
 const SFX = {};
-
 
 function initAudio(){
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-  // Master gain (mute button still controls this)
+  // Master Gain
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.5; // master volume
   masterGain.connect(audioCtx.destination);
 
-  // NEW: per-group gains so sliders can control different sounds
-  musicGain    = audioCtx.createGain(); // BGM, title/menu, bosses
-  combatGain   = audioCtx.createGain(); // all combat SFX
-  interactGain = audioCtx.createGain(); // doors, chests, pickups, stairs, merchant/blacksmith
-  footstepGain = audioCtx.createGain(); // footsteps
+  // Group Gains
+  musicGain    = audioCtx.createGain(); musicGain.connect(masterGain);
+  combatGain   = audioCtx.createGain(); combatGain.connect(masterGain);
+  interactGain = audioCtx.createGain(); interactGain.connect(masterGain);
+  uiGain       = audioCtx.createGain(); uiGain.connect(masterGain); // New
+  footstepGain = audioCtx.createGain(); footstepGain.connect(masterGain);
 
-  musicGain.connect(masterGain);
-  combatGain.connect(masterGain);
-  interactGain.connect(masterGain);
-  footstepGain.connect(masterGain);
-
-  // Apply current slider values
   applyGroupVolumes();
 }
 
-
 function applyGroupVolumes(){
   if (!audioCtx) return;
+  if (masterGain)   masterGain.gain.value   = muted ? 0 : _volMaster;
   if (musicGain)    musicGain.gain.value    = _volMusic;
   if (combatGain)   combatGain.gain.value   = _volCombat;
   if (interactGain) interactGain.gain.value = _volInteract;
+  if (uiGain)       uiGain.gain.value       = _volUi;
   if (footstepGain) footstepGain.gain.value = _volFoot;
 }
 
@@ -2282,14 +2323,15 @@ function playLevelUpSfx(){
   if (levelUpBuf){
     const src = audioCtx.createBufferSource();
     src.buffer = levelUpBuf;
-    src.playbackRate.value = 1.0;   // keep triumphant pitch
+    src.playbackRate.value = 1.0;
     const g = audioCtx.createGain(); g.gain.value = 0.42;
-src.connect(g); g.connect(combatGain || masterGain);
+    // Changed: Routes to UI Gain instead of Combat Gain
+    src.connect(g); g.connect(uiGain || masterGain);
     src.start(now);
   }else{
-    // tasteful fallback fanfare if file isn't ready
-chordTo(combatGain, [392,523,659], 0.28, 'triangle', 0.32);
-    tone(1046.5, 0.10, 'sine', 0.22); // octave sparkle
+    // Fallback: Routes to UI Gain
+    chordTo(uiGain, [392,523,659], 0.28, 'triangle', 0.32);
+    toneTo(uiGain, 1046.5, 0.10, 'sine', 0.22); 
   }
 }
 
@@ -2315,28 +2357,27 @@ function defineSfx(){
   SFX.step = devSfx('Step', ()=>playWalkSfx());
   SFX.drink = devSfx('Drink Potion/Tonic/Antidote', ()=>playDrinkSfx());
 
-  // Combat
+  // Combat (Attacks, Hits, Deaths)
   SFX.attack      = devSfx('Melee Hit: Generic Attack', ()=>chordTo(combatGain, [440,660], 0.08, 'square', 0.25));
   SFX.miss        = devSfx('Melee/Ranged Miss', ()=>playMissSfx());
   SFX.enemyHit    = devSfx('Player Hurt', ()=>toneTo(combatGain, 140, 0.10, 'sawtooth', 0.28));
   SFX.kill        = devSfx('Enemy Kill', ()=>chordTo(combatGain, [392, 523, 659], 0.20, 'triangle', 0.32));
-  SFX.bossDown    = devSfx('Boss Down/Stairs Spawn', ()=>chordTo(combatGain, [196, 262, 392, 523], 0.35, 'triangle', 0.35));
-
-  // Interactables
-  SFX.openChest   = devSfx('Chest Open', ()=>playChestOpenSfx());
-  SFX.pickup      = devSfx('Item/Gold Pickup/Upgrade Ready', ()=>chordTo(interactGain, [880,1320], 0.08, 'triangle', 0.22));
-
-  SFX.lockSuccess = devSfx('Lockpick Success', ()=>playLockOkSfx());
+  
+  // Environment (Interactables: Chests, Doors, Stairs)
+  SFX.openChest   = devSfx('Chest Open', ()=>playChestOpenSfx()); // Uses interactGain internally
+  SFX.lockSuccess = devSfx('Lockpick Success', ()=>playLockOkSfx()); // Uses interactGain internally
   SFX.lockFail    = devSfx('Lockpick Fail', ()=>toneTo(interactGain, 110, 0.12, 'sawtooth', 0.22));
+  SFX.bossDown    = devSfx('Boss Down/Stairs Spawn', ()=>chordTo(interactGain, [196, 262, 392, 523], 0.35, 'triangle', 0.35)); // Moved to Interact
 
-  // Combat again
+  // UI / System (Pickups, Level Up)
+  SFX.pickup      = devSfx('Item/Gold Pickup/Upgrade Ready', ()=>chordTo(uiGain, [880,1320], 0.08, 'triangle', 0.22)); // Moved to UI
+  SFX.levelUp     = devSfx('Player Level Up/Upgrade', ()=>playLevelUpSfx()); // Route changed in player function below
+
+  // Magic / Status (Combat)
   SFX.spell       = devSfx('Spell Cast', ()=>playCastSfx());
   SFX.rangedZap   = devSfx('Enemy Ranged Hit', ()=>toneTo(combatGain, 900, 0.11, 'sine', 0.26));
-
   SFX.poisonTick  = devSfx('Poison Tick', ()=>noiseTo(combatGain, 0.06, 0.25, 1000));
   SFX.antidote    = devSfx('Antidote Cure', ()=>chordTo(combatGain, [523,659], 0.12, 'triangle', 0.24));
-
-  SFX.levelUp     = devSfx('Player Level Up/Upgrade', ()=>playLevelUpSfx());
 }
 
 document.addEventListener('DOMContentLoaded', defineSfx);
@@ -2353,47 +2394,39 @@ document.addEventListener('DOMContentLoaded', ()=>{
   };
 });
 
+// --- NEW: Tab Switching Logic ---
+window.switchTab = function(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if(event) event.target.classList.add('active');
+  document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tabName).classList.add('active');
+};
+
 // Settings sliders → per-group volume
 document.addEventListener('DOMContentLoaded', ()=>{
-  const sMusic    = document.getElementById('volMusic');
-  const sCombat   = document.getElementById('volCombat');
-  const sInteract = document.getElementById('volInteract');
-  const sFoot     = document.getElementById('volFoot');
+  const bind = (id, get, set, key) => {
+    const el = document.getElementById(id);
+    const label = document.getElementById(id.replace('vol','val')); // e.g. valMaster
+    if (!el) return;
+    
+    el.value = Math.round(get() * 100);
+    if(label) label.textContent = el.value + '%';
 
-  function bindSlider(sl, get, set, storageKey){
-    if (!sl) return;
-    // Initialize slider position from current 0..1 value
-    sl.value = Math.round(get() * 100);
-    sl.addEventListener('input', ()=>{
-      const v = clamp(sl.value / 100, 0, 1);
+    el.addEventListener('input', ()=>{
+      const v = clamp(el.value / 100, 0, 1);
       set(v);
-      try{ localStorage.setItem(storageKey, String(v)); }catch(e){}
+      if(label) label.textContent = el.value + '%';
+      if (!audioCtx) initAudio();
+      try{ localStorage.setItem(key, String(v)); }catch(e){}
     });
-  }
+  };
 
-  bindSlider(sMusic, ()=>_volMusic, (v)=>{
-    _volMusic = v;
-    if (!audioCtx) initAudio();
-    applyGroupVolumes();
-  }, 'volMusic');
-
-  bindSlider(sCombat, ()=>_volCombat, (v)=>{
-    _volCombat = v;
-    if (!audioCtx) initAudio();
-    applyGroupVolumes();
-  }, 'volCombat');
-
-  bindSlider(sInteract, ()=>_volInteract, (v)=>{
-    _volInteract = v;
-    if (!audioCtx) initAudio();
-    applyGroupVolumes();
-  }, 'volInteract');
-
-  bindSlider(sFoot, ()=>_volFoot, (v)=>{
-    _volFoot = v;
-    if (!audioCtx) initAudio();
-    applyGroupVolumes();
-  }, 'volFoot');
+  bind('volMaster',   ()=>_volMaster,   (v)=>{ _volMaster=v;   applyGroupVolumes(); }, 'volMaster');
+  bind('volMusic',    ()=>_volMusic,    (v)=>{ _volMusic=v;    applyGroupVolumes(); }, 'volMusic');
+  bind('volCombat',   ()=>_volCombat,   (v)=>{ _volCombat=v;   applyGroupVolumes(); }, 'volCombat');
+  bind('volInteract', ()=>_volInteract, (v)=>{ _volInteract=v; applyGroupVolumes(); }, 'volInteract');
+  bind('volUi',       ()=>_volUi,       (v)=>{ _volUi=v;       applyGroupVolumes(); }, 'volUi');
+  bind('volFoot',     ()=>_volFoot,     (v)=>{ _volFoot=v;     applyGroupVolumes(); }, 'volFoot');
 
   // --- Arachnophobia Mode Wiring ---
   const chkArachno = document.getElementById('chkArachno');
@@ -2732,94 +2765,53 @@ function syncEndlessUnlockUI(){
   // ▶ Make goMenu available to the pause menu and other scripts
   window.goMenu = goMenu;
 
-async function startTutorial(e){
+function startTutorial(e){
   if (e?.preventDefault) e.preventDefault();
   if (menu) menu.style.display = 'none';
   playGameBgm(CLASSIC_BGM_URL);
   
- state.gameMode = 'tutorial';
-  
-  // SKIP CLASS SELECTION: Pass 'Adventurer' explicitly
-  doRestart('Adventurer');
+  state.gameMode = 'tutorial';
+  doRestart('Adventurer'); // Reset stats
 
-  // Manually build two connected rooms:
-  state.tiles = Array(state.size.h).fill().map(()=>Array(state.size.w).fill(0));
-  state.rooms = [
-    {x:10,y:10,w:20,h:14},    // Main room at depth 1
-    {x:13,y:25,w:7, h:5 }     // Secondary room below
-  ];
-  // Fill those room areas with floor (1)
-  for(const r of state.rooms){
-    for(let yy=r.y; yy<r.y+r.h; yy++){
-      for(let xx=r.x; xx<r.x+r.w; xx++){
-        state.tiles[yy][xx] = 1;
-      }
+  // --- 1. Build the "Gauntlet" Map ---
+  // A long corridor: 10 wide, 30 high.
+  state.tiles = Array(30).fill().map(()=>Array(20).fill(0));
+  state.rooms = [{x:5, y:5, w:10, h:20}]; // Single long room
+  
+  for(let y=5; y<25; y++){
+    for(let x=5; x<15; x++){
+      state.tiles[y][x] = 1; // Floor
     }
   }
-  // Place a locked door between the rooms:
-  const doorX=15, doorY=24;
-  state.tiles[doorY][doorX] = 2;
-  state.lockedDoors = new Set([`${doorX},${doorY}`]);
-  // Place a chest in the lower room:
-  const chestX=15, chestY=27;
-  state.tiles[chestY][chestX] = 3;
-  
-  // Spawn enemies (tutorial): stationary bow target
-  state.enemies = [
-    // CHANGE: hp:1 for instant kill
-    {x:18, y:11, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true}
-  ];
 
-  state._tutSpawnedMeleeRat = false;
-  state._tutGotArrows  = false;
-  state._tutBowShot    = false;
-  state._tutGotWeapon  = false;
-  state._tutMeleeHit   = false;
-
-  state.pickups = {};
-  function dropPickup(x,y, kind, payload){
-    state.pickups[`${x},${y}`] = {kind, payload};
-    state.tiles[y][x] = 5;
-  }
-
-  // Step 4 arrows
-  dropPickup(12,11, 'arrows', 6);
-
-  state.inventory.potions   = 1;
-  state.inventory.tonics    = 1;
-  state.inventory.antidotes = 1;
-  state.inventory.lockpicks = 1;
-
-  state.spellUpgrades = {}; 
-  const pebbleSpell = { name:'Pebble', cost:(SPELL_BOOK?.Pebble?.cost ?? 1), tier:1 };
-  state.spells = [pebbleSpell];
-  state.equippedSpell = pebbleSpell;
-  if (typeof ensureSpellUpgradeSlot === 'function') ensureSpellUpgradeSlot('Pebble');
-
-  dropPickup(10,12, 'weapon', {name:'Axe', type:'axe', min:3, max:5, base:{min:3,max:5}, durMax:15, dur:15});
-
-  state._tutArtUsed = false; 
-  state._tutBombUsed = false;
-  
+  // --- 2. Set Player Start ---
   state.player.x = 10;
-  state.player.y = 10;
+  state.player.y = 6;
   state.seen = new Set([`${state.player.x},${state.player.y}`]); 
+
+  // --- 3. Obstacle 1: The Crate (Blocks path at Y=10) ---
+  // The player MUST smash this to proceed.
+  for(let x=5; x<15; x++) state.tiles[10][x] = 0; // Wall off the row
+  state.tiles[10][10] = 8; // Breakable Prop in the center
+  state.props['10,10'] = { type: 'crate' }; 
+
+  // --- 4. Obstacle 2: The Iron Door (Blocks path at Y=18) ---
+  for(let x=5; x<15; x++) state.tiles[18][x] = 0; 
+  state.tiles[18][10] = 2; // Door
+  state.lockedDoors.add('10,18'); // Locked
+
+  // --- 5. The Exit (Y=22) ---
+  state.tiles[22][10] = 4; // Stairs
+
+  // --- 6. Initial State ---
+  state.tutorialStep = 0; 
+  state.inventory.bombs = 0; // Clear bombs
+  state.player.stamina = 10; // Full stamina
 
   updateBars(); updateEquipUI(); draw();
 
-  try{
-    window.focus();
-    const cw = document.getElementById('cw');
-    if (cw){ if (!cw.hasAttribute('tabindex')) cw.tabIndex = 0; cw.focus({ preventScroll:true }); } 
-    else { document.body?.focus?.(); }
-  }catch{}
-
- state.tutorialStep = 0;
- state._tutMoveWASD = { w:false, a:false, s:false, d:false };
- state._tutMoveArrows = { up:false, down:false, left:false, right:false };
- state._tutMoveDone = false;
-
- showBanner("Tutorial: Move with WASD or Arrow Keys. Press W A S D (or ↑ ↓ ← →) at least once each to continue.", 999999);
+  // --- 7. Instructions ---
+  showBanner("Step 1: Move with WASD. Hold SHIFT to Sprint. Smash the Crate below!", 999999);
 }
 
 
@@ -2988,8 +2980,8 @@ window.addEventListener('beforeunload', ()=>{ try{ unloadBgm(); }catch{} });
 const ENABLE_RANDOM_DOORS = true;
 
 // --- Healing percentages ---
-const POTION_PCT = 0.35;   // 35% of Max HP (change as you like)
-const TONIC_PCT  = 0.40;   // 40% of Max MP (change as you like)
+const POTION_PCT = 0.25;   // 35% of Max HP (change as you like)
+const TONIC_PCT  = 0.30;   // 40% of Max MP (change as you like)
 // --- Heal spell percentage (per tier) ---
 const HEAL_PCT_BASE     = 0.20; // Lv1 Heal = 20% of Max HP
 const HEAL_PCT_PER_TIER = 0.075; // +7.5% per tier (Lv2=26%, Lv3=32%, etc.)
@@ -4518,15 +4510,32 @@ const pool=[
     {name:'Claymore',min:5,max:9,type:'two'},
     {name:'Spear',min:4,max:7,type:'spear'},
     {name:'Axe',min:4,max:8,type:'axe'},
-    {name:'Knuckle Duster',min:2,max:4,type:'hand'},
+    {name:'Knuckle Duster',min:3,max:5,type:'hand'}, // Buffed
     {name:'Key of Destiny',min:5,max:7,type:'one'} // <--- NEW
   ];
   let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
 
   // --- NEW: Affix System (25% chance) ---
-  if (Math.random() < 0.25) {
+  // MODIFIED: Exclude Key of Destiny from getting random affixes
+  if (choice.name !== 'Key of Destiny' && Math.random() < 0.25) {
     const roll = Math.random();
-    if (roll < 0.3) {
+    
+    // --- NEW: Cursed Weapons (5% chance within affix roll) ---
+    if (roll < 0.05) { // Ultra Rare
+      choice.name = 'Cursed ' + choice.name;
+      choice.min += 4; 
+      choice.max += 5; 
+      choice.cursed = true;
+      
+      const cTypes = ['blood', 'greed', 'rust', 'frailty'];
+      choice.curseType = cTypes[Math.floor(Math.random() * cTypes.length)];
+      
+      // Unlock specific curse in Codex
+      const key = 'Curse_' + choice.curseType.charAt(0).toUpperCase() + choice.curseType.slice(1);
+      unlockCodex(key, true);
+    }
+    // Standard Affixes
+    else if (roll < 0.3) {
       choice.name = 'Sharp ' + choice.name;
       choice.min += 1; choice.max += 1;
       unlockCodex('Sharp'); // <--- Unlock
@@ -4565,10 +4574,11 @@ function randomSpell(){
 
 // ====== Spell scaling (duplicate scroll upgrades) ======
 const SPELL_BOOK = {
-  Spark:  { cost:2, baseMin:2, baseMax:3, baseRange:2 },
+  // Buffed: Spark cost 2->1. Gust cost 2->1.
+  Spark:  { cost:1, baseMin:2, baseMax:3, baseRange:2 },
   Ember:  { cost:3, baseMin:3, baseMax:5, baseRange:3 },
   Frost:  { cost:3, baseMin:2, baseMax:4, baseRange:3 },
-  Gust:   { cost:2, baseMin:1, baseMax:3, baseRange:2 },
+  Gust:   { cost:1, baseMin:1, baseMax:3, baseRange:2 }, 
   Pebble: { cost:1, baseMin:1, baseMax:4, baseRange:3 },
   Heal:   { cost:4, baseMin:4, baseMax:6, baseRange:0 }
 };
@@ -4730,10 +4740,15 @@ function damageAfterDR(raw){
   // Cleric Blessing: +20% Damage Reduction
   if (state.player.blessTicks > 0) { dr += 0.20; }
 
-  dr = Math.min(dr, 0.80);                 // cap total DR at 80%
-  const dmg = Math.ceil(raw * (1 - dr));
+dr = Math.min(dr, 0.80);                 // cap total DR at 80%
+  let dmg = Math.ceil(raw * (1 - dr));
 
-  if (usedShield && dmg > 0){              // only when it actually reduced real damage
+  // Frailty Curse: You take +2 damage from everything
+  if (state.player.weapon?.curseType === 'frailty' && dmg > 0) {
+    dmg += 2;
+  }
+
+  if (usedShield && dmg > 0){              // only when it actually reduced real damage           // only when it actually reduced real damage
   state._shieldParity = (state._shieldParity + 1);
   if (state._shieldParity % 2 === 0){    // every other hit taken
     sh.dur = Math.max(0, (sh.dur|0) - 1);
@@ -4917,8 +4932,8 @@ function typeNice(type){
     hand:'Hand to Hand',
     one:'One-Handed',
     two:'Two-Handed',
-    spear:'Spear',
-    axe:'Axe',
+    spear:'Polearm', // Changed display name
+    axe:'Hafted',
     bow:'Archery',
     lockpicking:'Lockpicking',
     magic:'Magic',
@@ -6776,6 +6791,13 @@ function updateBars(){
   document.getElementById('mpText').textContent = state.player.mp + '/' + state.player.mpMax;
   document.getElementById('hpFill').style.width = clamp((state.player.hp/state.player.hpMax)*100,0,100)+'%';
   document.getElementById('mpFill').style.width = clamp((state.player.mp/state.player.mpMax)*100,0,100)+'%';
+  
+  // --- NEW: Update Stamina Bar ---
+  const stm = state.player.stamina || 0;
+  const stmMax = state.player.staminaMax || 10;
+  document.getElementById('stmText').textContent = stm + '/' + stmMax;
+  document.getElementById('stmFill').style.width = clamp((stm/stmMax)*100, 0, 100)+'%';
+  
   document.getElementById('levelChip').textContent = `Lvl ${state.player.level} — ${state.player.xp}/${state.player.next}`;
   document.getElementById('floorChip').textContent = `Depth ${state.floor}`;
 }
@@ -7446,6 +7468,39 @@ function triggerGameOver(){
 
 
 function enemyStep(){
+  // --- NEW: Stamina Regen ---
+  // If we just sprinted, skip the regen for this turn
+  if (state._skipStaminaRegen) {
+    state._skipStaminaRegen = false; // Reset flag, do not recover
+  } 
+  else if (state.player.stamina < state.player.staminaMax) {
+    state.player.stamina++;
+    updateBars();
+  }
+
+  // --- NEW: Cursed Weapon Tick ---
+  const cw = state.player.weapon;
+  if (cw && cw.cursed) {
+    if (cw.curseType === 'blood') {
+      // 15% chance per turn to lose 1 HP
+      if (Math.random() < 0.15) {
+        state.player.hp = Math.max(1, state.player.hp - 1);
+        spawnFloatText("-1 HP", state.player.x, state.player.y, '#ef4444');
+        log("The cursed blade drinks your blood.");
+        updateBars();
+      }
+    } else if (cw.curseType === 'greed') {
+      // 20% chance per turn to lose 1-2 Gold
+      if (Math.random() < 0.20 && state.inventory.gold > 0) {
+        const loss = rand(1,2);
+        state.inventory.gold = Math.max(0, state.inventory.gold - loss);
+        spawnFloatText("-" + loss + "g", state.player.x, state.player.y, '#facc15');
+        log("The cursed blade consumes your wealth.");
+      }
+    }
+  }
+  // ------------------------------
+
   // --- NEW: Cooldown Tick ---
   if (state.player.artCooldown > 0) {
     state.player.artCooldown--;
@@ -7690,10 +7745,18 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     }
     // ---------------------------------
     
+    // --- NEW: Recovery Logic (Post-Charge) ---
+    if (e.recovering) {
+      e.recovering = false; // Clear flag
+      spawnFloatText("Recovering...", e.x, e.y, '#9ca3af');
+      continue; // Skip turn entirely
+    }
+
     // --- NEW: Telegraphed Attack Logic ---
     if (e.charging) {
       // Execute the charged attack
       e.charging = false; // Reset state
+      e.recovering = true; // <--- Boss must rest next turn
       
       // Check if player is STILL adjacent
       let adj = false;
@@ -9034,6 +9097,74 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
 
 
 
+// --- NEW: Prop Smashing Logic ---
+function handlePropSmash(x, y) {
+  const k = key(x, y);
+  const prop = state.props[k];
+  const name = prop ? prop.type : 'crate';
+  
+  // Remove prop visual and physical block
+  if (state.props[k]) delete state.props[k];
+  state.tiles[y][x] = 1; // Turn into floor
+  
+  SFX.weaponBreak(); // Crunch sound
+  spawnParticles(x, y, '#8b5a2b', 5); // Wood chips
+
+  const roll = Math.random();
+
+  // 1. Bad Outcome (10%): Enemy or Poison
+  if (roll < 0.10) {
+    if (Math.random() < 0.5) {
+      // Spawn Rat or Slime
+      const type = (Math.random() < 0.5) ? 'Rat' : 'Slime';
+      const hp = (type === 'Rat') ? 4 : 5;
+      state.enemies.push({ x, y, type, hp, atk:[1,2], xp:3, size:1 });
+      log(`A ${type} bursts out of the ${name}!`);
+      spawnFloatText("!", x, y, '#ef4444');
+    } else {
+      // Poison Cloud (Damage Player)
+      const dmg = damageAfterDR(3);
+      state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+      state.player.poisoned = true; 
+      state.player.poisonTicks = 8;
+      flashDamage();
+      log(`Noxious gas leaks from the ${name}! Took ${dmg} dmg.`);
+      spawnFloatText("POISON", x, y, '#22c55e');
+      updateBars();
+    }
+  }
+  // 2. Good Outcome (20%): Loot
+  else if (roll < 0.30) {
+    const lootR = Math.random();
+    if (lootR < 0.4) {
+      const g = rand(5, 15);
+      state.inventory.gold += g;
+      log(`Found ${g} gold inside.`);
+      spawnFloatText(`+${g}g`, x, y, '#facc15');
+    } else if (lootR < 0.7) {
+      state.inventory.arrows += 3;
+      log('Found a bundle of arrows.');
+      spawnFloatText("+3 Arrows", x, y, '#9ca3af');
+    } else if (lootR < 0.9) {
+      state.inventory.potions++;
+      log('Found a potion.');
+      spawnFloatText("+1 Potion", x, y, '#ef4444');
+    } else {
+      state.inventory.bombs++;
+      log('Found a bomb!');
+      spawnFloatText("+1 Bomb", x, y, '#f97316');
+    }
+    updateInvBody();
+  } 
+  // 3. Empty (70%)
+  else {
+    log(`You smash the ${name}. It was empty.`);
+  }
+  
+  enemyStep(); // Consumes a turn
+  draw();
+}
+
 // Chest weapon chance scales with depth (floor 1 ≈ 45%, +1%/floor, capped 65%)
 const CHEST_WEAPON_BASE        = 0.40;
 const CHEST_WEAPON_FLOOR_BONUS = 0.01;
@@ -9438,7 +9569,11 @@ function breakEquippedWeaponIfNeeded(){
 function handleSuccessfulHitDurabilityTick(){
   const w = state.player.weapon;
   state._hitParity = (state._hitParity + 1);
-  if(Number.isFinite(w?.durMax) && (state._hitParity % 2 === 0)){
+  
+  // Rust Curse: degrades every hit. Normal: degrades every 2nd hit.
+  const degrade = (w.curseType === 'rust') || (state._hitParity % 2 === 0);
+
+  if(Number.isFinite(w?.durMax) && degrade){
     w.dur = Math.max(0, (w.dur ?? w.durMax) - 1);
     updateEquipUI();
     if(w.dur===0) breakEquippedWeaponIfNeeded();
@@ -9485,8 +9620,9 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
         enemyStep(); draw(); return;
       }
       const bonus = skillDamageBonus('bow');
-      const dmg = rand(2+bonus, 4+bonus);      
-      SFX.rangedZap();                         
+      // Buffed: Was 2-4, now 3-6 (rewarding ammo usage)
+      const dmg = rand(3+bonus, 6+bonus);      
+      SFX.rangedZap();                      
       e.hp -= dmg;
       
       // --- FIX: Show Bow Damage Text ---
@@ -9589,7 +9725,16 @@ function attack(){
     const e=state.enemies[i]; const s=e.size||1;
     if(nbs.some(nb=> nb.x>=e.x && nb.x<e.x+s && nb.y>=e.y && nb.y<e.y+s)){ target=e; ti=i; break; }
   }
-  if(!target){ log('No enemy adjacent.'); return; }
+  if(!target){ 
+    // --- NEW: Check for Smashable Props if no enemy ---
+    for(const nb of nbs){
+      if(inBounds(nb.x, nb.y) && state.tiles[nb.y][nb.x] === 8){
+        handlePropSmash(nb.x, nb.y);
+        return; 
+      }
+    }
+    log('No enemy adjacent.'); return; 
+  }
   const w = state.player.weapon;
 if (!rollHitFor(w.type)){
   log(`You miss the ${target.type}.`); SFX.miss(); enemyStep(); draw(); return;
@@ -9890,6 +10035,15 @@ function useWeaponArt(){
     return;
   }
 
+  // --- NEW: Stamina Check ---
+  const COST = 4;
+  if (state.player.stamina < COST) {
+    spawnFloatText("Need Stamina", state.player.x, state.player.y, '#9ca3af');
+    log(`Not enough Stamina for Weapon Art (${state.player.stamina}/${COST}).`);
+    return;
+  }
+  // --------------------------
+
   const w = state.player.weapon;
   const t = w.type;
   let acted = false;
@@ -10027,6 +10181,11 @@ function useWeaponArt(){
 
   // If we used a skill, trigger turns
   if(acted) {
+    // --- NEW: Pay Stamina Cost ---
+    state.player.stamina -= 4; // Matches the COST check at top of function
+    updateBars();
+    // ----------------------------
+
     // 1. Determine the Name of the Art based on the weapon type 't'
     let artName = '';
     if (t === 'two' || t === 'axe') artName = 'Cleave';
@@ -10272,7 +10431,7 @@ function weaponStatsFor(name){
     'Claymore':   [5,9,'two'],
     'Spear':      [4,7,'spear'],
     'Axe':        [4,8,'axe'],
-    'Knuckle Duster': [2,4,'hand']
+    'Knuckle Duster': [3,5,'hand'] // Buffed from [2,4]
   }[baseName]; // ← same as your equipWeaponByName mapping
   
   return stats ? { name, min:stats[0]+bonMin, max:stats[1]+bonMax, type:stats[2] } : null;
@@ -10706,10 +10865,13 @@ function refreshBsUI(){
   }
 
   const need = max - dur;
-  const costFull = need * 2;
-  bsMsg.textContent = `Equipped: ${name} ${dur}/${max}. Repairs cost 2g each. Full repair costs ${costFull}g.`;
-  b1.disabled = (state.inventory.gold|0) < 2;
-  b5.disabled = ((state.inventory.gold|0) < (2 * Math.min(5, need))) || need < 1;
+  // Cost scales: 2 base + 0.5 per floor. (Floor 10 = 7g/point, Floor 50 = 27g/point)
+  const costPerPoint = Math.ceil(2 + (state.floor * 0.5)); 
+  const costFull = need * costPerPoint;
+  
+  bsMsg.textContent = `Equipped: ${name} ${dur}/${max}. Repairs cost ${costPerPoint}g each. Full repair costs ${costFull}g.`;
+  b1.disabled = (state.inventory.gold|0) < costPerPoint;
+  b5.disabled = ((state.inventory.gold|0) < (costPerPoint * Math.min(5, need))) || need < 1;
   bf.disabled = (state.inventory.gold|0) < costFull;
 }
 
@@ -10726,7 +10888,8 @@ function doRepair(points){
     const need = Math.max(0, SHIELD_DUR - (sh.dur|0));
     if (need <= 0) return;
     const amt  = Math.max(1, Math.min(points, need));
-    const cost = amt * 2;
+    const costPerPoint = Math.ceil(2 + (state.floor * 0.5)); 
+    const cost = amt * costPerPoint;
     if ((state.inventory.gold|0) < cost){ log('Not enough gold.'); return; }
     
     // Perform Repair
@@ -10953,12 +11116,42 @@ window.openCartographer = function openCartographer(){
     if (!state._pauseOpen) setMobileControlsVisible?.(true);
   }
 
-  window.openCleric = function(){
+window.openCleric = function(){
     if (!modal) return;
+    unlockCodex('Cleric'); // <--- NEW: Unlocks the entry
     if (goldNow) goldNow.textContent = state.inventory.gold|0;
     
-    // Check if already blessed
-    if (state.player.blessTicks > 0) {
+    const w = state.player.weapon;
+    
+    // --- NEW: Check for Cursed Weapon ---
+    if (w && w.cursed) {
+       msg.textContent = "I sense a dark binding on your weapon. I can purify it.";
+       buyBtn.disabled = false;
+       buyBtn.textContent = "Purify (100g)";
+       
+       // Override click handler for this specific case
+       buyBtn.onclick = () => {
+         if ((state.inventory.gold|0) < 100) {
+           msg.textContent = "Purification requires a sacrifice of 100 gold.";
+           return;
+         }
+         state.inventory.gold -= 100;
+         
+         // Remove curse properties
+         delete w.cursed;
+         delete w.curseType;
+         // Note: We leave the high stats as a reward for surviving/paying!
+         
+         SFX.levelUp();
+         log("The curse is lifted! The weapon is now yours to command.");
+         close();
+         updateEquipUI();
+         updateInvBody();
+         updateBars();
+       };
+    } 
+    // Normal Blessing Logic
+    else if (state.player.blessTicks > 0) {
        msg.textContent = "You are already walking in the light.";
        buyBtn.disabled = true;
        buyBtn.textContent = "Blessed";
@@ -10966,6 +11159,22 @@ window.openCartographer = function openCartographer(){
        msg.textContent = "The shadows are deep here. I can bless you for a price.";
        buyBtn.disabled = false;
        buyBtn.textContent = "Blessing (50g)";
+       
+       // Restore standard blessing handler
+       buyBtn.onclick = ()=>{
+         if ((state.inventory.gold|0) < 50) {
+           msg.textContent = "The light is free, but my time is not. Come back with gold.";
+           return;
+         }
+         state.inventory.gold -= 50;
+         state.player.blessTicks = 50; 
+         SFX.levelUp(); 
+         spawnParticles(state.player.x, state.player.y, '#fbbf24', 12);
+         log("You feel a holy power surround you! (+ATK, +DEF)");
+         close();
+         updateBars();
+         draw();
+       };
     }
     
     modal.style.display = 'flex';
@@ -11302,18 +11511,47 @@ if (!sh && have <= 0){
     sec.innerHTML = '<div id="weaponsList"></div>';
     const wDiv = sec.querySelector('#weaponsList');
     const entries = Object.entries(state.inventory.weapons);
+
+    // Helper to get type safely (handles Key of Destiny + Affixes)
+    const getType = (name) => {
+      if (name === 'Key of Destiny') return 'one';
+      return weaponStatsFor(name)?.type || 'hand';
+    };
+
+    // Sort by Skill Name so groups stay together
+    entries.sort((a, b) => {
+      const skillA = typeNice(getType(a[0]));
+      const skillB = typeNice(getType(b[0]));
+      return skillA.localeCompare(skillB);
+    });
+
     if (!entries.length) {
       wDiv.innerHTML = '<div>(none)</div>';
       return;
     }
+    
     wDiv.innerHTML = '';
+    let lastSkill = null; // Tracks the current group header
+
     for (const [name,count] of entries) {
+      // --- NEW: Header Logic ---
+      const wType = getType(name); 
+      const skillLabel = typeNice(wType); // e.g. "One-Handed"
+
+      if (skillLabel !== lastSkill) {
+        const h = document.createElement('div');
+        h.style.cssText = 'color:#f9d65c; font-weight:800; font-size:12px; text-transform:uppercase; margin:10px 0 4px 0; border-bottom:1px solid rgba(255,255,255,0.1); opacity:0.8;';
+        h.textContent = skillLabel;
+        wDiv.appendChild(h);
+        lastSkill = skillLabel;
+      }
+      // ------------------------
+
       const row = document.createElement('div');
       row.className = 'row';
       row.style.justifyContent = 'space-between';
 
       const left = document.createElement('div');
-      const wType = ({'Shortsword':'one','Claymore':'two','Spear':'spear','Axe':'axe','Knuckle Duster':'hand','Fists':'hand'}[name]) || 'hand';
       
       // Determine stats: Use ACTUAL equipped stats (including Omen buffs to base) if equipped
       const isEquipped = state.player.weapon && state.player.weapon.name === name;
@@ -11387,7 +11625,27 @@ left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${
 
       const btn = document.createElement('button');
       btn.className = 'btn';
-      btn.textContent = isEquipped ? 'Unequip' : 'Equip';
+      
+      // --- NEW: Cursed Logic ---
+      const curWep = state.player.weapon;
+      if (curWep && curWep.cursed) {
+        // If we are currently holding a cursed weapon...
+        if (isEquipped) {
+          btn.textContent = "BOUND";
+          btn.disabled = true;
+          btn.style.color = "#ef4444"; // Red text
+          btn.title = "Visit a Cleric to remove this curse.";
+        } else {
+          // Cannot equip other things while cursed
+          btn.textContent = "Equip";
+          btn.disabled = true;
+          btn.style.opacity = "0.5";
+        }
+      } else {
+        // Normal behavior
+        btn.textContent = isEquipped ? 'Unequip' : 'Equip';
+      }
+      // --------------------------
 
       // Hide button when you truly have zero copies (keeps row but disables action)
       const stashCount = (state.inventory.stashed?.[name]?.length) || 0;
@@ -11716,10 +11974,11 @@ function levelMpGain() {
 }
 
 
-// ====== Level Up choice modal (HP / MP) ======
+// ====== Level Up choice modal (HP / MP / Stamina) ======
 const lvlupModal = document.getElementById('lvlupModal');
 const btnHP      = document.getElementById('btnHP');
 const btnMP      = document.getElementById('btnMP');
+const btnStam    = document.getElementById('btnStam'); // <--- NEW
 
 function openLevelUpModal(){
   if (!lvlupModal) return;
@@ -11747,7 +12006,26 @@ if (btnHP){
     // restore mobile controls (unless paused)
     if (!state._pauseOpen) setMobileControlsVisible?.(true);
 
-    log('You feel tougher.');
+    log('You feel more attuned to magic.');
+  };
+}
+
+// --- NEW: Stamina Level Up Logic ---
+if (btnStam){
+  btnStam.onclick = ()=>{
+    // Increase Max Stamina by 5
+    state.player.staminaMax = (state.player.staminaMax || 10) + 5;
+    
+    // Full Refill (Reward for picking it)
+    state.player.stamina = state.player.staminaMax;
+
+    updateBars();
+    lvlupModal.style.display='none';
+    state._inputLocked = false;
+
+    if (!state._pauseOpen) setMobileControlsVisible?.(true);
+
+    log('Your endurance grows. Max Stamina increased.');
   };
 }
 if (btnMP){
@@ -11825,9 +12103,9 @@ const PICK2_POOL = [
   },
   {
     id: 'gold_up_hp_down',
-    label: '+60 Gold / -6 Max HP',
+    label: '+35 Gold / -6 Max HP',
     apply(){
-      state.inventory.gold = (state.inventory.gold|0) + 60;
+      state.inventory.gold = (state.inventory.gold|0) + 35;
       const p = state.player;
       p.hpMax = Math.max(5, p.hpMax - 6);
       if (p.hp > p.hpMax) p.hp = p.hpMax;
@@ -11990,9 +12268,9 @@ const PICK2_POOL = [
   },
   {
     id: 'gambler',
-    label: '+200 Gold / -2 Vision Range',
+    label: '+120 Gold / -2 Vision Range',
     apply(){
-      state.inventory.gold = (state.inventory.gold|0) + 200;
+      state.inventory.gold = (state.inventory.gold|0) + 120;
       state.fovRadius = Math.max(2, (state.fovRadius || 5) - 2);
       if (typeof updateInvBody === 'function') updateInvBody();
       log('[Omen] Riches, at the edge of darkness.');
@@ -12349,9 +12627,9 @@ const PICK2_POOL = [
   },
   {
     id: 'blood_for_gold',
-    label: '+300 Gold / -15% Max HP',
+    label: '+180 Gold / -15% Max HP',
     apply(){
-      state.inventory.gold = (state.inventory.gold|0) + 300;
+      state.inventory.gold = (state.inventory.gold|0) + 180;
       const p = state.player;
       p.hpMax = Math.max(5, Math.floor(p.hpMax * 0.85));
       if (p.hp > p.hpMax) p.hp = p.hpMax;
@@ -12656,11 +12934,54 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 0 && !state._tutMove
 }
 }
 
-// --- normal controls ---
-if (k === 'arrowup'   || k === 'w') tryMove(0,-1);
-else if (k === 'arrowdown' || k === 's') tryMove(0, 1);
-else if (k === 'arrowleft' || k === 'a') tryMove(-1,0);
-else if (k === 'arrowright'|| k === 'd') tryMove(1, 0);
+// --- normal controls (Updated for Sprint) ---
+if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arrowleft' || k === 'a' || k === 'arrowright'|| k === 'd') {
+  
+  let dx = 0, dy = 0;
+  if (k === 'arrowup'   || k === 'w') dy = -1;
+  if (k === 'arrowdown' || k === 's') dy = 1;
+  if (k === 'arrowleft' || k === 'a') dx = -1;
+  if (k === 'arrowright'|| k === 'd') dx = 1;
+
+// SPRINT CHECK: Holding Shift?
+    if (e.shiftKey) {
+      if (state.player.stamina >= 3) {
+         // Attempt to move 2 tiles
+         const x1 = state.player.x + dx;
+         // ... (rest of existing sprint logic inside this block) ...
+         const y1 = state.player.y + dy;
+         const x2 = x1 + dx;
+         const y2 = y1 + dy;
+         
+         if (isPassableForPlayer(x1,y1) && isPassableForPlayer(x2,y2)) {
+            state.player.stamina -= 3;
+            updateBars(); // Update UI immediately
+            
+            // Prevent stamina regen this turn
+            state._skipStaminaRegen = true; 
+
+            spawnFloatText("Sprint", state.player.x, state.player.y, '#4ade80');
+            // ... (facing/move logic) ...
+            if (dx>0) state.player.facing='right'; else if (dx<0) state.player.facing='left';
+            else if (dy>0) state.player.facing='down'; else if (dy<0) state.player.facing='up';
+            
+            state.player.x = x2; state.player.y = y2;
+            SFX.step(); 
+            collectIfPickup();
+            enemyStep(); 
+            draw();
+            return; 
+         }
+      } else {
+         // --- NEW: Not enough Stamina feedback ---
+         spawnFloatText("No Stamina", state.player.x, state.player.y, '#9ca3af');
+         // We let the code fall through to tryMove() below so you still walk
+      }
+    }
+  
+  // Normal Move (1 tile)
+  tryMove(dx, dy);
+}
 
   else if (k === 'e') interact();
   else if (k === ' ') attack();        // melee
@@ -13030,6 +13351,11 @@ function incrementMetaStat(key, amt=1){
   // Check for unlocks immediately
   for(const cKey in CLASSES){
     const c = CLASSES[cKey];
+
+    // --- NEW: Prevent unlocking Endless classes while playing Classic ---
+    if (c.endless && state.gameMode !== 'endless') continue;
+    // ------------------------------------------------------------------
+
     if(c.req === key && m[key] >= c.val && !m['unlocked_'+cKey]){
       m['unlocked_'+cKey] = true;
       showBanner(`Unlocked Class: ${c.name}!`, 4000);
@@ -13225,6 +13551,10 @@ function doRestart(className){
   state.player.hpMax = 20;
   state.player.mpMax = 10;
   
+  // --- NEW: Stamina Init ---
+  state.player.staminaMax = 10;
+  state.player.stamina = 10;
+
 // --- Apply Class Stats Modifiers ---
   if (className === 'Barbarian') {
     state.player.hpMax += 10; // Tanky
@@ -14070,8 +14400,9 @@ const CODEX_DEF = {
   // NPCs
   Merchant: { name:'Merchant', desc:'Buys and sells goods.', seen:false },
   Blacksmith: { name:'Blacksmith', desc:'Repairs your equipment.', seen:false },
-  Jester: { name:'Jester', desc:'Plays games of chance.', seen:false },
+ Jester: { name:'Jester', desc:'Plays games of chance.', seen:false },
   Cartographer: { name:'Cartographer', desc:'Maps the floor for a price.', seen:false },
+  Cleric: { name:'Cleric', desc:'A holy figure who offers blessings and purification.', seen:false }, // <--- NEW
   // Effects
   MiasmaChamber: { name:'Miasma Chamber', desc:'Poisonous air fills the floor.', seen:false },
   ShadowLabyrinth: { name:'Shadow Labyrinth', desc:'Vision is severely limited.', seen:false },
@@ -14107,8 +14438,14 @@ const CODEX_DEF = {
   Sharp:    { name:'Prefix: Sharp',    desc:'Refined edge. Increases Min and Max damage by 1.', seen:false },
   Heavy:    { name:'Prefix: Heavy',    desc:'Weighted for impact. Increases Max damage by 3.', seen:false },
   Vampiric: { name:'Prefix: Vampiric', desc:'Drains life essence. Heals 1 HP on successful hits.', seen:false },
-  Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Max damage by 2.', seen:false },
+Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Max damage by 2.', seen:false },
   
+  // --- NEW: Curses ---
+  Curse_Blood:   { name:'Curse: Blood',   desc:'The weapon hungers. Drains HP periodically.', seen:false },
+  Curse_Greed:   { name:'Curse: Greed',   desc:'A hole in your pocket. Drains Gold periodically.', seen:false },
+  Curse_Rust:    { name:'Curse: Rust',    desc:'Brittle steel. Durability degrades twice as fast.', seen:false },
+  Curse_Frailty: { name:'Curse: Frailty', desc:'Cursed skin. You take +2 Damage from all sources.', seen:false },
+
   // --- NEW: Weapon Arts ---
   Art_Cleave:   { name:'Art: Cleave',   desc:'(Axe/2H) A circular swing that hits all adjacent foes.', seen:false, activated:0 },
   Art_Pierce:   { name:'Art: Pierce',   desc:'(Spear) Strikes two tiles in a straight line.', seen:false, activated:0 },
@@ -14185,8 +14522,9 @@ function renderCodexUI(){
 // === UPDATE THIS LIST ===
   const cats = [
     { title: 'Enemies', keys: ['Rat','Bat','Spider','Slime','Goblin','Skeleton','Mage','Mimic'] },
-    { title: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] },
-    { title: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer'] },
+{ title: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] },
+    // Added 'Cleric' to the list
+    { title: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer','Cleric'] },
     { title: 'Discoveries', keys: ['Shrine'] },
     
     // Updated List:
@@ -14202,6 +14540,8 @@ function renderCodexUI(){
     { title: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Pierce', 'Art_Backstab', 'Art_Flurry'] },
 
     { title: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
+    { title: 'Active Curses', keys: ['Curse_Blood', 'Curse_Greed', 'Curse_Rust', 'Curse_Frailty'] },
+    
     { title: 'Omens', keys: (typeof PICK2_POOL !== 'undefined' ? PICK2_POOL.map(p => p.id) : []) }
   ];
 
