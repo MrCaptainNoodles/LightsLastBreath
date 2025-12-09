@@ -2887,9 +2887,16 @@ document.getElementById('btnReturnToMenu')?.addEventListener('click', ()=>{
   const m = document.querySelector('#classicClearModal');
   if (m){ m.style.display='none'; document.body.classList.remove('noscroll'); }
 
-  // reflect unlock in the menu and go there
+  // reflect unlock in the menu
   if (typeof syncEndlessUnlockUI === 'function') syncEndlessUnlockUI();
-  if (typeof goMenu === 'function') goMenu();
+  
+  // --- FIX: Go to Score Entry instead of Menu ---
+  // This triggers the saveScore() logic which awards Soul Shards
+  if (typeof openScoreEntry === 'function') {
+      openScoreEntry();
+  } else {
+      if (typeof goMenu === 'function') goMenu();
+  }
 });
 
 
@@ -7760,11 +7767,7 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     // --- NEW: Shadow / Clone Logic ---
     if (e.type === 'Clone' || e.type === 'Shadow') {
        
-       // --- NEW: Shadow / Clone Logic ---
-    if (e.type === 'Clone' || e.type === 'Shadow') {
-       
        // A. WEAPON MIRRORING (Passive Melee Only)
-       // We only mirror the melee weapon passively. Bow is now active-only.
        const pWep = state.player.weapon;
        
        // If player changed melee weapon, copy it (reset range to 1)
@@ -7779,16 +7782,15 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
        // B. ACTION MIMICRY (Active)
        if (state.lastPlayerAction) {
           const act = state.lastPlayerAction;
-          
+          let didMimic = false; // <--- Track if we actually did something
+
           // 1. BOW SHOT MIMICRY
           if (act.type === 'bow') {
-             // Shadow adopts bow stance permanently (until you melee)
              e.range = 5;
              e.ranged = true;
              spawnFloatText("DRAW!", e.x, e.y, '#a78bfa');
              log(`The Shadow pulls a bow from the void!`);
              
-             // Fire back immediately
              spawnProjectileEffect({
                 kind: 'arrow', color: '#a78bfa',
                 fromX: e.x, fromY: e.y, toX: state.player.x, toY: state.player.y,
@@ -7800,24 +7802,22 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
                    updateBars();
                 }
              });
-             state.lastPlayerAction = null; 
-             continue; // Skip movement
+             didMimic = true;
           }
           
           // 2. HEAL MIMICRY
           else if (act.type === 'heal') {
-             // Nerf: Heals only 25% of what player healed
              const healAmt = Math.max(1, Math.ceil(act.amount * 0.25));
              e.hp = Math.min(e.hp + healAmt, e.hpMax);
-             spawnFloatText("Mockery +" + healAmt, e.x, e.y, '#0f0');
+             spawnFloatText("+" + healAmt, e.x, e.y, '#0f0');
              log("The Shadow mocks your weakness and heals!");
              flashEnemy(e, 'green');
-             state.lastPlayerAction = null;
+             didMimic = true;
           }
           
           // 3. SPELL ECHO
           else if (act.type === 'spell') {
-             spawnFloatText(act.name.toUpperCase(), e.x, e.y, '#a78bfa'); // Just the name
+             spawnFloatText(act.name.toUpperCase(), e.x, e.y, '#a78bfa');
              log(`The Shadow echoes your ${act.name}!`);
              
              spawnProjectileEffect({
@@ -7831,73 +7831,25 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
                    updateBars();
                 }
              });
-             state.lastPlayerAction = null; 
-             continue;
+             didMimic = true;
           }
           
           // 4. WEAPON ART ECHO
           else if (act.type === 'art') {
-             // Use the specific name passed from useWeaponArt
              spawnFloatText(act.name.toUpperCase() + "!", e.x, e.y, '#ff0000');
              log(`The Shadow mimics your ${act.name}!`);
-             
              const dmg = rand(5, 8);
              state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
              flashDamage();
              updateBars();
-             state.lastPlayerAction = null; 
-             continue;
+             didMimic = true;
           }
-       }
-    }
 
-       // B. ACTION MIMICRY (Active)
-       if (state.lastPlayerAction) {
-          const act = state.lastPlayerAction;
-          
-          if (act.type === 'heal') {
-             // Mockery: Shadow heals too
-             const healAmt = Math.ceil(act.amount / 2); // Heals half what you did
-             e.hp = Math.min(e.hp + healAmt, e.hpMax);
-             spawnFloatText("Mockery +" + healAmt, e.x, e.y, '#0f0');
-             log("The Shadow mocks your weakness and heals!");
-             flashEnemy(e, 'green');
+          // <--- CRITICAL FIX: STOP TURN IF MIMIC HAPPENED ---
+          if (didMimic) {
+             state.lastPlayerAction = null; 
+             continue; // Forces the game to skip the "Zap" or "Attack" logic below
           }
-          else if (act.type === 'spell') {
-             // Echo Spell
-             spawnFloatText("ECHO: " + act.name, e.x, e.y, '#a78bfa');
-             log(`The Shadow casts a dark version of ${act.name}!`);
-             
-             // Cast it back at player
-             spawnProjectileEffect({
-                kind: 'magic', element: 'Shadow', color: '#a78bfa',
-                fromX: e.x, fromY: e.y, toX: state.player.x, toY: state.player.y,
-                onDone: () => {
-                   const dmg = rand(3, 6); // Flat shadow damage
-                   state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
-                   flashDamage();
-                   spawnFloatText(dmg, state.player.x, state.player.y, '#a78bfa');
-                   updateBars();
-                }
-             });
-             state.lastPlayerAction = null; // Consume action
-             continue; // Skip normal move
-          }
-          else if (act.type === 'art') {
-             // Echo Weapon Art
-             spawnFloatText("MIMIC ART!", e.x, e.y, '#ff0000');
-             log(`The Shadow mimics your technique!`);
-             // Simple retribution damage
-             const dmg = rand(5, 8);
-             state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
-             flashDamage();
-             updateBars();
-             state.lastPlayerAction = null; // Consume action
-             continue; // Skip normal move
-          }
-          
-          // Clear action after checking
-          state.lastPlayerAction = null;
        }
     }
     // ---------------------------------
@@ -8169,8 +8121,10 @@ for (let step = 0; step < moves; step++){
 
 
   }
-// Clear player action if no shadow consumed it this turn
-  state.lastPlayerAction = null;
+
+  // FORCE CLEAR ACTION: Prevents Shadow from mimicking the same arrow on the next turn (e.g. during a Sprint)
+  state.lastPlayerAction = null; 
+
   // === lightweight enemy respawn pacing ===
   // Only respawn on non-boss floors so boss fights stay clean
   if (!state.gameOver && (state.floor % 10 !== 0)) {
@@ -8460,13 +8414,18 @@ async function runDepth50Outro(deadKing){
     state.enemies = state.enemies.filter(e => e !== deadKing);
 
 if (state.gameMode === 'classic') {
-  // No stairs — unlock Endless and show the congrats popup
+  // No stairs — unlock Endless
   localStorage.setItem('endlessUnlocked', '1');
+  
+  // --- FIX: Finalize Run Stats ---
+  state.gameOver = true;       // Stop game loop/inputs
+  state.run.ended = true;      // Flag run as complete
+  stopRunTimerFreeze();        // Lock the timer
+  // -----------------------------
 
   if (typeof window.openModal === 'function') {
     window.openModal('#classicClearModal');
   } else {
-    // Hard fallback so you ALWAYS see the modal
     const m = document.getElementById('classicClearModal');
     if (m){ m.style.display = 'flex'; document.body.classList.add('noscroll'); }
   }
@@ -12032,6 +11991,22 @@ function useBomb(){
            e.hp -= dmg;
            spawnFloatText(dmg, e.x, e.y, '#ff0000');
            if (e.hp <= 0) {
+             
+             // --- FIX: Depth 50 Boss Cutscene Checks ---
+             if (state.floor === 50 && e.boss) {
+                // Phase 1 -> Phase 2
+                if (e.type === 'Clone' && !state.flags.depth50Phase2) {
+                   runDepth50Phase2(e); 
+                   return; // Stop here, let the cutscene handle the rest
+                }
+                // Phase 2 -> Outro
+                if (e.type === 'Mad King' && !state.flags.depth50Done) {
+                   runDepth50Outro(e); 
+                   return; // Stop here, let the cutscene handle the rest
+                }
+             }
+             // ------------------------------------------
+
              state.enemies = state.enemies.filter(en => en !== e);
              state.run.kills++;
              
