@@ -11263,13 +11263,15 @@ unlockCodex('Jester_Spin', true); // <--- TRACK SPIN
     const wheelCanvas = document.getElementById('jesterWheel');
 
     // 1) Spin to a random angle (so the result is visual-first)
-    const baseTurns    = 6;                 // full spins for drama
+    const baseTurns    = 25;                // Increased turns so it spins fast for 10s
     const extraDegrees = Math.random() * 360; // 0–359.999
     const finalDeg     = baseTurns * 360 + extraDegrees;
 
+    // Override CSS transition to match the 10.6s audio length
+    wheelCanvas.style.transition = "transform 10.6s ease-out";
     wheelCanvas.style.transform = `rotate(${finalDeg}deg)`;
 
-    // 2) After the spin finishes, figure out which slice is under the TOP arrow
+    // 2) After the spin finishes (10600ms = 10.6s), figure out which slice is under the TOP arrow
     setTimeout(() => {
       wheelCanvas.classList.add('glow');
 
