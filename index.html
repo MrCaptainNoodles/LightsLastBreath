@@ -7622,12 +7622,7 @@ function enemyStep(){
     updateBars();
   }
 
-  // New: Passive Mana Regeneration (1 MP every 8 turns)
-  state._turnCount = (state._turnCount || 0) + 1;
-  if (state._turnCount % 8 === 0 && state.player.mp < state.player.mpMax) {
-    state.player.mp++;
-    updateBars();
-  }
+  // (Passive MP Regen REMOVED)
 
   // --- NEW: Cursed Weapon Tick ---
   const cw = state.player.weapon;
@@ -10818,7 +10813,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       'Claymore':   [5,9,'two'],
       'Spear':      [4,7,'spear'],
       'Axe':        [4,8,'axe'],
-      'Knuckle Duster': [2,4,'hand']
+      'Knuckle Duster': [2,4,'hand'],
+      'Key of Destiny': [5,7,'one']
     }[name];
     return stats ? { name, min:stats[0], max:stats[1], type:stats[2] } : null;
   }
@@ -14251,9 +14247,7 @@ window.openGoldWell = function(){
 const MAX_WEAPON_CAT = 5;
 
 function getWeaponType(name) {
-  // Helper to resolve type from name string
-  if (name.includes('Key of Destiny')) return 'one';
-  // Use existing lookup
+  // Reliance on weaponStatsFor ensures a single source of truth
   const st = weaponStatsFor(name);
   return st ? st.type : 'hand';
 }
@@ -14323,8 +14317,8 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
     const btn = document.createElement('button');
     btn.className = 'btn';
     btn.style.cssText = 'text-align:left; padding:8px; border:1px solid #ef4444; color:#fca5a5;';
-    const val = 10 + (state.floor * 2);
-    btn.innerHTML = `SCRAP (+${val}g): ${fmt(name, stats.min, stats.max)}`;
+    const xpVal = 10 + (state.floor * 2);
+    btn.innerHTML = `SCRAP (+${xpVal} XP): ${fmt(name, stats.min, stats.max)}`;
     
     // ACTION: Scrap Old -> Take New
     btn.onclick = () => {
@@ -14339,13 +14333,34 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
        delete state.pickups[pickupKey];
        state.tiles[y][x] = 1;
        
-       // --- NEW: Grant Scrap Value (Gold) ---
-       const scrapValue = 10 + (state.floor * 2); // 10g + 2 per floor
-       state.inventory.gold = (state.inventory.gold|0) + scrapValue;
-       spawnFloatText(`+${scrapValue}g`, state.player.x, state.player.y, '#facc15');
+       // --- NEW: Grant Weapon Skill XP ---
+       // Award XP to the weapon category (e.g., One-Handed)
+       // Base 10 XP + 2 per floor
+       const xpAmt = 10 + (state.floor * 2);
+       
+       ensureSkill(wType);
+       const s = state.skills[wType];
+       s.xp += xpAmt;
+       
+       // Handle Level Up immediately
+       let leveled = false;
+       while(s.xp >= s.next){ 
+           s.xp -= s.next; 
+           s.lvl++; 
+           s.next = Math.floor(s.next * SKILL_XP_GROWTH); 
+           leveled = true;
+       }
+       
+       if(leveled) {
+           log(`${typeNice(wType)} advanced to ${s.lvl}!`);
+           renderSkills(); // Update UI
+           recomputeWeapon(); // Apply new damage bonus
+       }
+
+       spawnFloatText(`+${xpAmt} XP`, state.player.x, state.player.y, '#a78bfa');
        // -------------------------------------
 
-       log(`Scrapped ${name} for ${newItemPayload.name} (+${scrapValue}g).`);
+       log(`Dismantled ${name}. Learned from its design.`);
        SFX.weaponBreak(); // Crunch sound for scrapping
        SFX.pickup();      // Pickup sound
        
