@@ -8056,6 +8056,17 @@ for (let yy=0; yy<s && !adjacent; yy++){
 }
 
 if (adjacent){
+  
+  // --- NEW: Enemy Accuracy Check ---
+  // Base 85% accuracy. Bosses/Elites get 95%.
+  const accuracy = (e.boss || e.elite) ? 0.95 : 0.85;
+  
+  if (Math.random() > accuracy) {
+     spawnFloatText("Miss", state.player.x, state.player.y, '#9ca3af');
+     log(`The ${e.type} attacks but misses you.`);
+     continue; // Skip the rest of the attack logic
+  }
+  // ---------------------------------
 
   let dmgRoll = rand(e.atk[0], e.atk[1]);
   if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
@@ -9835,6 +9846,7 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
     if (e){
       ensureSkill('bow');
       if (!rollHitFor('bow')){
+        spawnFloatText("Miss", e.x, e.y, '#9ca3af'); // <--- ADDED
         SFX.miss();
         log('Your arrow misses.');
         enemyStep(); draw(); return;
@@ -9956,6 +9968,7 @@ function attack(){
   }
   const w = state.player.weapon;
 if (!rollHitFor(w.type)){
+  spawnFloatText("Miss", target.x, target.y, '#9ca3af'); // <--- ADDED
   log(`You miss the ${target.type}.`); SFX.miss(); enemyStep(); draw(); return;
 }
 
@@ -10535,6 +10548,7 @@ state.lastPlayerAction = { type: 'spell', name: spell.name };
 
   // hit/miss
   if (!rollHitFor('magic')){
+    spawnFloatText("Miss", target.x, target.y, '#9ca3af'); // <--- ADDED
     log(`Your ${spell.name} misses.`);
     SFX.miss();
     enemyStep(); draw(); return;
