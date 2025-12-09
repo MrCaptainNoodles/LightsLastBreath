@@ -7872,20 +7872,19 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     }
     // ---------------------------------
     
-    // --- NEW: Recovery Logic (Post-Charge) ---
+    // 1. RECOVERY PHASE (The "Rest")
     if (e.recovering) {
-      e.recovering = false; // Clear flag
-      spawnFloatText("Recovering...", e.x, e.y, '#9ca3af');
+      e.recovering = false; // Clear flag, act next turn
+      spawnFloatText("Vulnerable!", e.x, e.y, '#9ca3af');
       continue; // Skip turn entirely
     }
 
-    // --- NEW: Telegraphed Attack Logic ---
+    // 2. CHARGE EXECUTION (The "Crush")
     if (e.charging) {
-      // Execute the charged attack
-      e.charging = false; // Reset state
-      e.recovering = true; // <--- Boss must rest next turn
+      e.charging = false; 
+      e.recovering = true; // <--- Restore: Boss must rest next turn
       
-      // Check if player is STILL adjacent
+      // Check adjacency
       let adj = false;
       const s = e.size || 1;
       for (let yy=0; yy<s; yy++){
@@ -7895,8 +7894,7 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
       }
       
       if (adj) {
-        // Massive damage hit
-        const dmg = rand(e.atk[1] * 2, e.atk[1] * 3); // 2x-3x Max damage
+        const dmg = rand(e.atk[1] * 2, e.atk[1] * 3); // Massive Dmg
         state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
         flashDamage();
         spawnFloatText("CRUSH: " + dmg, state.player.x, state.player.y, '#ff0000');
@@ -7905,8 +7903,9 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
         if (state.player.hp <= 0){ triggerGameOver(); return; }
       } else {
         log(`The ${e.type} swings wildly and misses!`);
+        spawnFloatText("Miss!", e.x, e.y, '#9ca3af');
       }
-      continue; // Skip normal movement/attack this turn
+      continue; 
     }
 
    // --- NEW: Mad King Summon Ability ---
@@ -7929,9 +7928,9 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     }
     // ------------------------------------
 
-    // 15% Chance for Bosses/Elites to start charging instead of acting
-    // UPDATED: Check 'd2p' (distance) to prevent off-screen spam
-    if ((e.boss || e.elite) && Math.random() < 0.15 && !e.charging && d2p <= 3) {
+// 3. START CHARGE (15% Chance if Player is close)
+    // "Sprinkled in" - mostly they will skip this and do normal attacks below
+    if ((e.boss || e.elite) && !e.charging && !e.recovering && d2p <= 2 && Math.random() < 0.15) {
        e.charging = true;
        log(`The ${e.type} begins to charge a massive attack!`);
        spawnFloatText("⚠️ CHARGING", e.x, e.y, '#ffae00');
