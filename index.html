@@ -9730,7 +9730,7 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
       state.tutorialStep === 2 &&
       name === 'Shortsword') {
     state.tutorialStep = 3;
-    say("Weapon equipped. Now move next to a rat and press SPACE to attack it.");
+    say("Weapon equipped. Now move next to a rat and press SPACE to attack it. Be careful this consumes stamina");
   }
 
 
@@ -13214,7 +13214,7 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 1){
   if (state._tutMoveWASD.w && state._tutMoveWASD.a && state._tutMoveWASD.s && state._tutMoveWASD.d){
     state.tutorialStep = 2;
     hideBanner();
-    showBanner("Step 2: Sprinting. Hold SHIFT while moving to Sprint.", 999999);
+    showBanner("Step 2: Sprinting. Hold SHIFT while moving to Sprint. Be careful this consumes stamina.", 999999);
   }
 }
 
@@ -13255,7 +13255,7 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
             if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
                state.tutorialStep = 3;
                hideBanner();
-               showBanner("Step 3: Break the Crate! Walk up to it and press SPACE.", 999999);
+               showBanner("Step 3: Break the Crate! Walk up to it and press SPACE. Be careful this consumes stamina", 999999);
             }
 
             updateBars(); // Update UI immediately
