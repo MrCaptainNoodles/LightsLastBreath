@@ -1645,34 +1645,45 @@ const DEFAULT_BGM_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCra
 // ---- NPC dialogue (one-shot voice lines) ----
 // Replace these placeholder URLs with your recorded lines.
 const NPC_DIALOGUE_URLS = {
+  // Use arrays ['url1', 'url2'] for random variations.
   merchant: {
-    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_interact.mp3',
-    buy:      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_buy.mp3',
-    sell:     'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_sell.mp3',
-    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_leave.mp3',
+    interact: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_interact.mp3'],
+    buy:      ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_buy.mp3'],
+    sell:     ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_sell.mp3'],
+    leave:    ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_merchant_leave.mp3'],
   },
   blacksmith: {
-    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_interact.mp3',
-    partialrepair:   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_partial_repair.mp3',
-    fullrepair:   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_full_repair.mp3',
-    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_leave.mp3',
+    interact: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_interact.mp3'],
+    partialrepair:   ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_partial_repair.mp3'],
+    fullrepair:   ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_full_repair.mp3'],
+    leave:    ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_blacksmith_leave.mp3'],
   },
   jester: {
-    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_interact.mp3',
-    spin:     'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_spin.mp3',
-    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_leave.mp3',
-    win:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_win.mp3',
-    lose:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_lose.mp3',
+    interact: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_interact.mp3'],
+    spin:     ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_spin.mp3'],
+    leave:    ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_leave.mp3'],
+    win:      ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_win.mp3'],
+    lose:     ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_jester_lose.mp3'],
   },
   cartographer: {
-    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_interact.mp3',
-    buy:      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_buy.mp3',
-    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_leave.mp3',
+    interact: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_interact.mp3'],
+    buy:      ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_buy.mp3'],
+    leave:    ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_leave.mp3'],
   },
-  priest: {
-    interact: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_interact.mp3',
-    buy:      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_buy.mp3',
-    leave:    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cartographer_leave.mp3',
+cleric: {
+    interact: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cleric_interact.mp3'],
+    buy:      ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cleric_buy.mp3'],
+    purify:   ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cleric_purify.mp3'], 
+    leave:    ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cleric_leave.mp3'],
+  },
+  // --- NEW: Boss Voices ---
+  shadow: {
+    intro:  ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_shadow_intro.mp3'],
+    defeat: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_shadow_defeat.mp3']
+  },
+  madking: {
+    intro:  ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_madking_intro.mp3'],
+    defeat: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_madking_defeat.mp3']
   }
 };
 
@@ -1682,8 +1693,15 @@ const _npcDialogueNodes = Object.create(null);
 // Plays a one-shot voice line routed through Interactables volume (interactGain).
 let _currentNpcAudio = null; // Global tracker
 
-function playNpcDialogue(url){
-  if (!url) return;
+function playNpcDialogue(input){
+  if (!input) return;
+
+  // --- NEW: Randomize if Array ---
+  // If input is an array ['a.mp3', 'b.mp3'], pick one. If string, use as is.
+  const url = Array.isArray(input) 
+    ? input[Math.floor(Math.random() * input.length)] 
+    : input;
+  // -------------------------------
 
   // STOP previous line if playing
   if (_currentNpcAudio) {
@@ -8304,8 +8322,9 @@ async function runDepth50Intro(){
     state.enemies.push(clone); draw();
 
     // Player advances this line
+    playNpcDialogue(NPC_DIALOGUE_URLS.shadow.intro); // <--- VOICE ADDED
     await say('So you’ve finally made it. This is where your journey ends.');
-await say('Submit to the darkness!');  // click to dismiss
+    await say('Submit to the darkness!');  // click to dismiss
 
     // Cut to black, remove shadow, start boss music, fade back
     await fadeToBlack(360);
@@ -8343,10 +8362,10 @@ remnant.size = 1; remnant.boss = false; remnant.hp = remnant.hpMax = 1;
 state.enemies.push(remnant);
 
 // draw while black so the “move” happens during the fade
-draw?.();
-await fadeFromBlack(360);
+    draw?.();
+    await fadeFromBlack(360);
 
-
+    playNpcDialogue(NPC_DIALOGUE_URLS.shadow.defeat); // <--- VOICE: Shadow dying
     await say('No! This cannot be!');
 
     // Remove remnant → triple flash → hooded appears
@@ -8355,6 +8374,7 @@ await fadeFromBlack(360);
     const hood = { type:'Hooded', x:far.x, y:far.y, hp:1, size:1, _scene:true, static:true };
     state.enemies.push(hood); draw();
 
+    playNpcDialogue(NPC_DIALOGUE_URLS.madking.intro); // <--- VOICE: King appears
     await say("You’ve come this far, and yet you understand nothing.");
     await say('Fine, I will be your opponent.');  // click to dismiss
 
@@ -8408,6 +8428,8 @@ async function runDepth50Outro(deadKing){
     if (!state.enemies.includes(deadKing)) state.enemies.push(deadKing);
 
     await fadeFromBlack(260);
+    
+    playNpcDialogue(NPC_DIALOGUE_URLS.madking.defeat); // <--- VOICE ADDED
     await say('Very well, you may have bested me. But be warned there are even worse things deeper down in the dungeon.');
 
     await fadeToBlack(260);
@@ -11364,15 +11386,22 @@ window.openCartographer = function openCartographer(){
   const goldNow = document.getElementById('clGoldNow');
 
   function close(){
-    if (modal) modal.style.display = 'none';
+    if (modal && modal.style.display !== 'none') {
+        playNpcDialogue(NPC_DIALOGUE_URLS.cleric.leave); // <--- Play Goodbye
+        modal.style.display = 'none';
+    }
     state._inputLocked = false;
     if (!state._pauseOpen) setMobileControlsVisible?.(true);
   }
 
 window.openCleric = function(){
     if (!modal) return;
-    unlockCodex('Cleric'); // <--- NEW: Unlocks the entry
-    unlockCodex('Cleric_Bless', true); // <--- Track interaction count
+    unlockCodex('Cleric'); 
+    unlockCodex('Cleric_Bless', true);
+    
+    // Play Hello
+    playNpcDialogue(NPC_DIALOGUE_URLS.cleric.interact);
+
     if (goldNow) goldNow.textContent = state.inventory.gold|0;
     
     const w = state.player.weapon;
@@ -11397,6 +11426,7 @@ window.openCleric = function(){
          // Note: We leave the high stats as a reward for surviving/paying!
          
          SFX.levelUp();
+         playNpcDialogue(NPC_DIALOGUE_URLS.cleric.purify); // <--- Play Purify line
          log("The curse is lifted! The weapon is now yours to command.");
          close();
          updateEquipUI();
@@ -11447,7 +11477,8 @@ window.openCleric = function(){
     state.inventory.gold -= 50;
     state.player.blessTicks = 50; // Lasts 50 turns
     
-    SFX.levelUp(); // Holy sound
+    SFX.levelUp(); 
+    playNpcDialogue(NPC_DIALOGUE_URLS.cleric.buy); // <--- Play Blessing line
     spawnParticles(state.player.x, state.player.y, '#fbbf24', 12);
     log("You feel a holy power surround you! (+ATK, +DEF)");
     
