@@ -3881,7 +3881,7 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < JE
 // --- NEW: Gold Well (Rare 2x2 Prop) ---
 // 25% Chance on non-boss floors (Can now co-exist with NPCs)
 state.goldWell = null;
-if (state.floor % 10 !== 0 && Math.random() < 0.25) {
+if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < 0.25) {
   const r = state.rooms[rand(1, state.rooms.length-1)];
   if (r && r.w >= 4 && r.h >= 4) {
      const wx = Math.floor(r.x + r.w/2) - 1;
@@ -14521,6 +14521,7 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
        
        ensureSkill(wType);
        const s = state.skills[wType];
+       s.shown = true; // <--- ADD THIS: Force the UI to show this skill
        s.xp += xpAmt;
        
        // Handle Level Up immediately
@@ -14937,6 +14938,12 @@ if (clsBtn) clsBtn.addEventListener('click', ()=>{
   m.unlocked_Mercenary = true;
   m.unlocked_Monk = true;
   m.unlocked_Ranger = true;
+  // --- NEW CLASSES ---
+  m.unlocked_Lancer = true;
+  m.unlocked_Soldier = true;
+  m.unlocked_Spellblade = true;
+  m.unlocked_Grenadier = true;
+  m.unlocked_Legionary = true;
   
   saveMeta(m);
   hideDebug?.();
