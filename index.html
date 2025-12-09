@@ -3872,17 +3872,21 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < JE
 }
 
 // --- NEW: Gold Well (Rare 2x2 Prop) ---
-// 10% Chance on non-boss floors
+// 25% Chance on non-boss floors (Can now co-exist with NPCs)
 state.goldWell = null;
-if (!state.merchant && !state.blacksmith && !state.jester && state.floor % 10 !== 0 && Math.random() < 0.10) {
+if (state.floor % 10 !== 0 && Math.random() < 0.25) {
   const r = state.rooms[rand(1, state.rooms.length-1)];
   if (r && r.w >= 4 && r.h >= 4) {
      const wx = Math.floor(r.x + r.w/2) - 1;
      const wy = Math.floor(r.y + r.h/2) - 1;
-     // Ensure space is floor
-     if (state.tiles[wy][wx]===1 && state.tiles[wy+1][wx+1]===1) {
+     
+     // Ensure space is floor AND not occupied by an existing NPC
+     if (state.tiles[wy][wx]===1 && state.tiles[wy+1][wx+1]===1 &&
+         !isMerchantTile(wx, wy) && !isBlacksmithTile(wx, wy) && 
+         !isJesterTile(wx, wy) && !isCartographerTile(wx, wy)) {
+         
        state.goldWell = { x:wx, y:wy, used:false };
-       showBanner("A Golden Well shimmers nearby...", 4000); // <--- ADDED
+       showBanner("A Golden Well shimmers nearby...", 4000); 
      }
   }
 }
@@ -8583,13 +8587,14 @@ function collectIfPickup(){
     log(`${name} upgraded to Lv${have.tier}.`);
 
   } else {
-    // Extra copies → Magic skill XP instead of shards
-    ensureSkill('magic');
-    const mg   = state.skills.magic;
-    const gain = MAGIC_SCROLL_XP;
+          // Extra copies → Magic skill XP instead of shards
+          ensureSkill('magic');
+          const mg   = state.skills.magic;
+          // Base 4 + 1 XP for every 5 floors depth
+          const gain = MAGIC_SCROLL_XP + Math.floor(state.floor / 5);
 
-    mg.xp += gain;
-    if (!mg.shown) mg.shown = true;
+          mg.xp += gain;
+          if (!mg.shown) mg.shown = true;
 
     let leveled = false;
     while (mg.xp >= mg.next){
