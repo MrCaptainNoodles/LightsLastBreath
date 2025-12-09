@@ -8084,14 +8084,17 @@ if (adjacent){
         state.player.poisonTicks = Math.max(state.player.poisonTicks|0, 15);
       }
 
-      // BAT: Vampiric (heals 100% of dmg dealt)
+      // BAT: Vampiric (heals dmg dealt)
       if (e.type === 'Bat' && dmg > 0) {
-        const healAmt = dmg;
+        // Nerf: Bosses only heal 33% of damage dealt, regular bats 100%
+        const ratio = (e.boss || e.elite) ? 0.33 : 1.0; 
+        const healAmt = Math.max(1, Math.floor(dmg * ratio));
+
         const oldHp = e.hp;
         e.hp = Math.min(e.hp + healAmt, (e.hpMax || 999));
         if (e.hp > oldHp) {
             flashEnemy(e, 'green');
-            // optional: log('The Bat drains your life!');
+            if (e.boss) spawnFloatText("+" + healAmt, e.x, e.y, '#0f0'); // Visual feedback
         }
       }
 
@@ -9871,7 +9874,7 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
             state.enemies.push({x:10, y:38, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true});
             
             hideBanner();
-            showBanner("Step 9: Pickup Scroll. Press (P) to open your spell book. Cast Magic (Q) on the Rat.", 999999);
+            showBanner("Step 9: Pickup Scroll. Press (P) to open your spell book. Press (F) to swap between spells. Cast Magic (Q) on the Rat.", 999999);
          }
       }
       // ----------------------------------------
@@ -13302,6 +13305,26 @@ if (state.gameMode === 'tutorial' && (state._tutGotArrows || state._tutArrowsPic
   else if (k === 'q') cast();
   else if (k === 'r') useWeaponArt(); // --- NEW: Bind R for Ability ---
 
+  // --- NEW: Cycle Spells (F) ---
+  else if (k === 'f') {
+    if (state.spells && state.spells.length > 0) {
+       let idx = -1;
+       if (state.equippedSpell) {
+         idx = state.spells.findIndex(s => s.name === state.equippedSpell.name);
+       }
+       // Cycle forward, loop to start
+       const next = state.spells[(idx + 1) % state.spells.length];
+       state.equippedSpell = next;
+       
+       updateEquipUI();
+       spawnFloatText(next.name, state.player.x, state.player.y, '#60a5fa'); // Blue text
+       SFX.pickup(); // Click sound
+    } else {
+       log("No spells memorized.");
+    }
+  }
+  // -----------------------------
+
     // --- Hotkeys / modals / tutorial steps ---
     else if (k === '1') {
 
@@ -14398,6 +14421,7 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
       <div><b>Space</b></div><div>Attack (adjacent)</div>
       <div><b>E</b></div><div>Interact (open chest, unlock door, descend)</div>
       <div><b>Q</b></div><div>Cast equipped spell (faced direction)</div>
+      <div><b>F</b></div><div>Cycle Spells</div>
       <div><b>R</b></div><div>Weapon Art (Special Ability)</div>
       <div><b>I</b></div><div>Inventory</div>
       <div><b>P</b></div><div>Spells</div>
