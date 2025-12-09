@@ -1214,8 +1214,9 @@ input[type=range].custom-slider::-webkit-slider-thumb {
  <button class="btn" id="dbgGiveKeyBlade">Give Key of Destiny</button>
   <button class="btn" id="dbgUnlockClasses">Unlock All Classes</button>
   <button class="btn" id="dbgSpawnKey">Spawn Key Below</button>
-  <button class="btn" id="dbgSpawnCursed">Spawn Cursed Sword</button>
-</div>
+<button class="btn" id="dbgSpawnCursed">Spawn Cursed Sword</button>
+  <button class="btn" id="dbgSpawnGoldWell">Spawn Gold Well</button>
+  <button class="btn" id="dbgSpawnCleric">Spawn Cleric</button> <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button> </div>
 
 
     </div>
@@ -1717,6 +1718,7 @@ function playNpcDialogue(url){
   try{
     el.currentTime = 0;
     el.play().catch(()=>{});
+    _currentNpcAudio = el; // <--- FIX: Track the currently playing audio
   }catch{}
 }
 
@@ -3177,6 +3179,12 @@ function enemyCanEnter(x,y){
   // --- NEW: Block enemies from walking on the Cleric ---
   if (state.cleric && x === state.cleric.x && y === state.cleric.y) return false;
 
+  // --- NEW: Block Golden Well (2x2) ---
+  if (state.goldWell) {
+     const w = state.goldWell;
+     if (x >= w.x && x <= w.x+1 && y >= w.y && y <= w.y+1) return false;
+  }
+
   const t = state.tiles[y][x];
   return t===1 || t===4;
 }
@@ -3874,6 +3882,7 @@ if (!state.merchant && !state.blacksmith && !state.jester && state.floor % 10 !=
      // Ensure space is floor
      if (state.tiles[wy][wx]===1 && state.tiles[wy+1][wx+1]===1) {
        state.goldWell = { x:wx, y:wy, used:false };
+       showBanner("A Golden Well shimmers nearby...", 4000); // <--- ADDED
      }
   }
 }
@@ -5897,16 +5906,28 @@ if (kind === 'key'){ // big horizontal key
     return;
   }
   if (kind === 'warp'){
-    // Mystic rune stone
-    const stone = '#3b82f6'; // blue
-    const glow  = '#06b6d4'; // cyan
-    P(3,3,stone,6,6); 
-    // Spiral pattern
-    P(4,4,glow,4,1);
-    P(7,5,glow,1,3);
-    P(4,7,glow,3,1);
-    P(4,5,glow,1,2);
-    P(5,6,glow,1,1);
+    // Advanced Warp Rune
+    const core = '#22d3ee'; // Cyan
+    const dark = '#0c4a6e'; // Deep blue
+    const outer= '#0ea5e9'; // Sky blue
+    
+    // Outer diamond
+    P(6,2,outer,1,1); P(5,3,outer,1,1); P(7,3,outer,1,1);
+    P(4,4,outer,1,1); P(8,4,outer,1,1);
+    P(3,5,outer,1,1); P(9,5,outer,1,1);
+    P(6,10,outer,1,1); P(5,9,outer,1,1); P(7,9,outer,1,1);
+    P(4,8,outer,1,1); P(8,8,outer,1,1);
+    P(3,7,outer,1,1); P(9,7,outer,1,1);
+    
+    // Inner dark stone
+    P(4,5,dark,5,3);
+    
+    // Glowing rune symbol
+    P(6,5,core,1,3); P(5,6,core,3,1);
+    
+    // Pulse animation
+    const tick = Math.floor(Date.now() / 200);
+    if(tick % 2 === 0) P(2,2, '#fff',1,1); // Sparkle
     return;
   }
 
@@ -6551,25 +6572,59 @@ else if (t===6){
 // --- NEW: Draw Gold Well (2x2) ---
     if (state.goldWell) {
        const gw = state.goldWell;
-       // Only draw if top-left is on screen (simplified)
-       if (gx === gw.x && gy === gw.y) {
+       // FIX: Draw when at the BOTTOM-RIGHT tile so we render ON TOP of the floor
+       if (gx === gw.x + 1 && gy === gw.y + 1) {
           const s = tile; // base size
-          // Draw 2x2 Well
+          // Draw 2x2 Well (Calculate Top-Left relative to current Bottom-Right)
           const wx = (gw.x - ox) * tile;
           const wy = (gw.y - oy) * tile;
           
           const water = gw.used ? '#374151' : '#facc15'; // Gold if unused, Grey if used
           
-          // Simple Well Art
-          ctx.fillStyle = '#4b5563'; // Stone rim
-          ctx.fillRect(wx, wy, s*2, s*2);
-          ctx.fillStyle = water;     // Liquid
-          ctx.fillRect(wx+5, wy+5, (s*2)-10, (s*2)-10);
+          // Advanced Well Art (2x2)
+          const { R } = gridN(ctx, wx, wy, s*2, 24); // 24x24 pixel grid spread over 2 tiles
           
-          // Glow if active
+          // 1. Base Platform (Stone steps)
+          R(1, 1, 22, 22, '#1f2937'); // Dark shadow/base
+          R(2, 2, 20, 20, '#374151'); // Stone Step 1
+          
+          // 2. The Well Wall (Marble/White Stone)
+          R(4, 4, 16, 16, '#9ca3af'); // Outer wall
+          R(5, 5, 14, 14, '#e5e7eb'); // Inner rim highlight
+          R(5, 5, 14, 1,  '#f3f4f6'); // Top lip highlight
+
+          // 3. The Liquid (Gold or Empty)
+          if (gw.used) {
+             R(6, 6, 12, 12, '#111827'); // Empty/Dark
+          } else {
+             R(6, 6, 12, 12, '#eab308'); // Gold Base
+             R(7, 7, 10, 10, '#facc15'); // Gold Shine
+             
+             // Dynamic Sparkles inside liquid
+             const tick = Math.floor(Date.now() / 300);
+             if (tick % 3 === 0) R(8, 8, 2, 2, '#fff');
+             if (tick % 3 === 1) R(13, 10, 2, 2, '#fff');
+             if (tick % 3 === 2) R(10, 13, 2, 2, '#fff');
+          }
+
+          // 4. Roof Structure (Wooden supports & Roof)
+          // Pillars
+          R(3, 8, 2, 12, '#5c4033'); // Left Pillar
+          R(19, 8, 2, 12, '#5c4033'); // Right Pillar
+          
+          // Roof (Triangle ish)
+          R(2, 6, 20, 2, '#78350f'); // Base beam
+          R(3, 4, 18, 2, '#92400e'); // Roof mid
+          R(5, 2, 14, 2, '#b45309'); // Roof top
+          R(11, 0, 2, 2, '#fcd34d'); // Gold finial on top
+
+          // 5. Aura (if active)
           if (!gw.used) {
-             ctx.fillStyle = 'rgba(250, 204, 21, 0.3)';
+             ctx.save();
+             ctx.shadowColor = '#facc15'; ctx.shadowBlur = 20;
+             ctx.fillStyle = 'rgba(250, 204, 21, 0.15)';
              ctx.fillRect(wx, wy, s*2, s*2);
+             ctx.restore();
           }
        }
     }
@@ -6703,12 +6758,31 @@ if (state.cleric) {
   const cx = (state.cleric.x - ox) * tile;
   const cy = (state.cleric.y - oy) * tile;
   if (state.seen.has(key(state.cleric.x, state.cleric.y))) {
-     // White robe with gold trim
+     // High Priestess Sprite
      const { R } = gridN(ctx, cx, cy, tile, 12);
-     R(3,3, 6,7, '#f3f4f6'); // Robe
-     R(4,2, 4,3, '#efd8b8'); // Face
-     R(3,6, 6,4, '#fbbf24'); // Gold Sash
-     R(5,7, 2,3, '#f3f4f6'); // Center fold
+     const robe = '#f8fafc', gold = '#fbbf24', skin = '#ffe4c4';
+     const hoodShadow = '#94a3b8';
+     
+     // Robe Base
+     R(3,4, 6,8, robe); 
+     
+     // Gold Trim (Vertical Vestment)
+     R(4,4, 1,8, gold); R(7,4, 1,8, gold);
+     
+     // Head/Hood
+     R(3,1, 6,3, robe); // Hood shape
+     R(4,2, 4,2, skin); // Face
+     R(4,1, 4,1, hoodShadow); // Inner hood shadow
+     
+     // Staff
+     R(9,1, 1,11, '#d4d4d8'); // Silver staff
+     R(8,1, 3,1, gold);       // Top cross
+     R(9,2, 1,2, gold);       // Top head
+     
+     // Magic Aura
+     const tick = Math.floor(Date.now() / 300);
+     if (tick % 2 === 0) R(2,2, 1,1, '#fff'); // Sparkle left
+     else R(10,5, 1,1, '#fff'); // Sparkle right
   }
 }
 // ----------------------------
@@ -7542,9 +7616,16 @@ function enemyStep(){
   // If we just sprinted, skip the regen for this turn
   if (state._skipStaminaRegen) {
     state._skipStaminaRegen = false; // Reset flag, do not recover
-  } 
+} 
   else if (state.player.stamina < state.player.staminaMax) {
     state.player.stamina++;
+    updateBars();
+  }
+
+  // New: Passive Mana Regeneration (1 MP every 8 turns)
+  state._turnCount = (state._turnCount || 0) + 1;
+  if (state._turnCount % 8 === 0 && state.player.mp < state.player.mpMax) {
+    state.player.mp++;
     updateBars();
   }
 
@@ -7597,7 +7678,8 @@ function enemyStep(){
     state.player.poisonTicks--;
     const t = state.player.poisonTicks;
     if (t > 0 && (t % 2 === 0)){
-      const p = damageAfterDR(1);
+      // Scale: 1 dmg base + 1 per 15 floors (F1=1, F15=2, F30=3)
+      const p = damageAfterDR(1 + Math.floor(state.floor/15));
       if (p > 0){
         state.player.hp = clamp(state.player.hp - p, 0, state.player.hpMax);
         flashDamage();
@@ -7653,7 +7735,10 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
               e.hp -= 10;
               spawnFloatText(10, e.x, e.y, '#f97316');
               if (e.hp <= 0) {
-                 // Chain reaction? (Optional: recursively add another bomb here if you want chaos)
+                 // Chain reaction: Spawn new bomb on death
+                 state.explosions.push({ x: e.x, y: e.y, timer: 2 }); // 2-turn fuse for chains
+                 spawnFloatText("2...", e.x, e.y, '#f97316');
+
                  state.enemies = state.enemies.filter(x => x !== e);
                  state.run.kills++;
               }
@@ -8393,6 +8478,18 @@ function collectIfPickup(){
   if(state.tiles[state.player.y][state.player.x]===5 && state.pickups[kxy]){
     const it=state.pickups[kxy];
         if(it.kind==='weapon'){
+          
+      // --- NEW: Check Category Limit ---
+      const wType = getWeaponType(it.payload.name);
+      const curCount = countWeaponsInCategory(wType);
+      
+      if (curCount >= MAX_WEAPON_CAT) {
+         // Trigger Swap UI
+         openWeaponSwapModal(it.payload, kxy, state.player.x, state.player.y);
+         return; // STOP pickup
+      }
+      // ---------------------------------
+
         SFX.pickup();
       state.inventory.weapons[it.payload.name]=(state.inventory.weapons[it.payload.name]||0)+1;
       log(`Picked up ${it.payload.name} (now x${state.inventory.weapons[it.payload.name]}).`);
@@ -8569,31 +8666,9 @@ function tryMove(dx,dy){
   // --- NEW: Gold Well Interaction ---
   if (state.goldWell) {
      const w = state.goldWell;
-     // Check bounds (2x2)
+     // Block movement into the 2x2 area (x,y to x+1,y+1)
      if (nx >= w.x && nx <= w.x+1 && ny >= w.y && ny <= w.y+1) {
-        if (w.used) {
-           log("The well is empty.");
-        } else if ((state.inventory.gold|0) < 500) {
-           log("A golden shimmer... requires 500 gold.");
-        } else {
-           // Buy Stat
-           state.inventory.gold -= 500;
-           w.used = true;
-           
-           const roll = Math.random();
-           if (roll < 0.33) {
-              state.player.hpMax += 1; state.player.hp += 1;
-              log("You toss the gold. Vitality surges! (+1 Max HP)");
-           } else if (roll < 0.66) {
-              state.player.mpMax += 1; state.player.mp += 1;
-              log("You toss the gold. Mind expands! (+1 Max MP)");
-           } else {
-              state.player.staminaMax += 1; state.player.stamina += 1;
-              log("You toss the gold. Endurance grows! (+1 Max STM)");
-           }
-           spawnParticles(nx, ny, '#facc15', 10);
-           updateBars(); updateInvBody();
-        }
+        log("A Golden Well blocks the way. Press E to interact.");
         return;
      }
   }
@@ -8625,6 +8700,20 @@ function tryMove(dx,dy){
   if (state.floorEffect === 'GlacialFreeze') {
     // 1. ADDED: Stair Traction. If we just stepped onto Stairs (4), do not slide.
     if (t !== 4) {
+        // --- FIX: Check for Hallway/Intersection at the FIRST step (nx, ny) ---
+        // If the tile we just stepped on (nx, ny) allows movement perpendicular to our slide,
+        // we should STOP there to allow the player to turn.
+        const perp = (dx !== 0) ? [[0,1], [0,-1]] : [[1,0], [-1,0]];
+        let isIntersection = false;
+        for (const [px, py] of perp) {
+           const tx = nx + px, ty = ny + py;
+           // If a perpendicular neighbor is walkable, it's an intersection/hallway
+           if (state.tiles[ty]?.[tx] === 1 || state.tiles[ty]?.[tx] === 4 || state.tiles[ty]?.[tx] === 5) {
+              isIntersection = true;
+           }
+        }
+        // ----------------------------------------------------------------------
+
         const slideX = nx + dx;
         const slideY = ny + dy;
         // Check if the NEXT tile is also walkable (Floor/Stairs/Pickup) and empty
@@ -8632,7 +8721,7 @@ function tryMove(dx,dy){
         const validTile = (tNext === 1 || tNext === 4 || tNext === 5);
         
         // NPC/Enemy check for the slide tile
-        if (inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
+        if (!isIntersection && inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
             !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
             !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY)) {
             
@@ -8660,7 +8749,8 @@ function tryMove(dx,dy){
 if (state.floorEffect === 'MiasmaChamber'){
   state._miasmaSteps = (state._miasmaSteps|0) + 1;
   if (state._miasmaSteps % 3 === 0){
-    const damage = 1;
+    // Scale: 1 dmg base + 1 per 15 floors
+    const damage = 1 + Math.floor(state.floor/15);
 
     // Player Damage
     const p = damageAfterDR(damage);
@@ -8964,6 +9054,24 @@ function interact(){
     if (typeof window.openCleric === 'function') window.openCleric();
     return;
   }
+  
+  // --- NEW: Gold Well Check ---
+  if (state.goldWell) {
+     const w = state.goldWell;
+     // Check proximity: Player must be adjacent to the 2x2 box
+     // The well covers (w.x, w.y) to (w.x+1, w.y+1).
+     // We expand bounds by 1 to check adjacency.
+     if (state.player.x >= w.x - 1 && state.player.x <= w.x + 2 &&
+         state.player.y >= w.y - 1 && state.player.y <= w.y + 2) {
+         // Ensure we aren't somehow inside it (though tryMove blocks that)
+         const inside = (state.player.x >= w.x && state.player.x <= w.x+1 && state.player.y >= w.y && state.player.y <= w.y+1);
+         if (!inside && typeof window.openGoldWell === 'function') { 
+            window.openGoldWell(); 
+            return; 
+         }
+     }
+  }
+  // -------------------------
   // -------------------------
 
   let did = false;
@@ -9160,16 +9268,17 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
 
 // --- NEW: Prop Smashing Logic ---
 function handlePropSmash(x, y) {
+  const k = key(x, y); // <--- MOVED UP: Define 'k' at the very top so it is available everywhere
+
   // --- TUTORIAL OVERRIDE (Step 3 -> 4) ---
   // Allow smash to advance tutorial even if previous steps (like Sprint) were missed
   if (state.gameMode === 'tutorial') {
-    delete state.props[key(x,y)];
+    delete state.props[k]; // Use 'k' here
     state.tiles[y][x] = 1; 
     SFX.weaponBreak();
     spawnParticles(x, y, '#8b5a2b', 5);
 
     // 1. Spawn Axe on floor (where crate was)
-    const k = key(x, y);
     state.pickups[k] = {
       kind: 'weapon',
       payload: {name:'Axe', type:'axe', min:3, max:5, base:{min:3,max:5}, durMax:15, dur:15}
@@ -9550,6 +9659,7 @@ function equipWeaponByName(name){
   else if (name.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
   else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); isVamp=true; }
   else if (name.includes('Ancient ')) { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
+  else if (name.includes('Cursed '))  { baseName = baseName.replace('Cursed ', ''); } // <--- ADDED THIS
 
 const stats = {
     'Shortsword': [3,5,'one'],
@@ -9590,6 +9700,18 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
   ensureSkill(stats[2]);
   recomputeWeapon();
   updateEquipUI();
+
+  // New: Cursed Banner Notification
+  if (state.player.weapon.cursed) {
+    let msg = "You are Cursed.";
+    if (state.player.weapon.curseType === 'blood') msg = "Blood Curse: The weapon drains your HP.";
+    else if (state.player.weapon.curseType === 'greed') msg = "Greed Curse: The weapon consumes Gold.";
+    else if (state.player.weapon.curseType === 'frailty') msg = "Frailty Curse: You take extra damage.";
+    else if (state.player.weapon.curseType === 'rust') msg = "Rust Curse: Durability degrades rapidly.";
+    
+    showBanner(msg, 4000);
+    SFX.descend(); // Ominous sound
+  }
 }
 
   // Tutorial: after equipping the Shortsword
@@ -9672,8 +9794,17 @@ function handleSuccessfulHitDurabilityTick(){
 function shootBow(){
   if (state.gameOver) return;
   if (state._inputLocked || state._descending) return;
+  
+  // New: Stamina Cost
+  if (state.player.stamina < 1) { spawnFloatText("No Stamina", state.player.x, state.player.y, '#9ca3af'); return; }
+
   // need a loaded arrow
   if (!state.player?.bow?.loaded){ log('No arrow loaded.'); return; }
+
+  // Deduct Stamina
+  state.player.stamina--; 
+  state._skipStaminaRegen = true; // <--- ADD THIS
+  updateBars();
 
   // fire straight along current facing up to range
   const bowLvl = (state.skills?.bow?.lvl || 1);
@@ -9786,6 +9917,19 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
 function attack(){
     if (state.gameOver) return;
     if (state._inputLocked || state._descending) return;
+
+    // New: Stamina Cost for Normal Attack
+    if (state.player.stamina < 1) { 
+       // Auto-Rest: Pass the turn to regenerate Stamina
+       spawnFloatText("Resting...", state.player.x, state.player.y, '#9ca3af'); 
+       log("You are out of breath and take a moment to recover.");
+       enemyStep(); // Triggers natural regeneration
+       draw();
+       return; 
+    }
+    state.player.stamina--; 
+    state._skipStaminaRegen = true; // <--- ADD THIS
+    updateBars();
 
     // Tutorial Step 5: require weapon pickup before teaching melee
     if (state.gameMode === 'tutorial' && state._tutBowShot && !state._tutGotWeapon){
@@ -10116,6 +10260,10 @@ function useWeaponArt(){
     log(`Not enough Stamina for Weapon Art (${state.player.stamina}/${COST}).`);
     return;
   }
+  
+  // Deduct Stamina
+  state.player.stamina -= COST;
+  updateBars();
   // --------------------------
 
   const w = state.player.weapon;
@@ -10151,6 +10299,14 @@ function useWeaponArt(){
              awardKill(t, e.xp);
              SFX.kill();
              if (e.boss) spawnBossStairs(); // Ensure stairs spawn
+             
+             // --- NEW: Trigger Volatile Aether ---
+             if (state.floorEffect === 'VolatileAether') {
+                if (!state.explosions) state.explosions = [];
+                state.explosions.push({ x: e.x, y: e.y, timer: 3 }); 
+                spawnFloatText("3...", e.x, e.y, '#f97316');
+             }
+             // ------------------------------------
           } else {
              flashEnemy(e, 'red');
           }
@@ -10159,8 +10315,8 @@ function useWeaponArt(){
       }
     }
 
-    if(hit > 0) {
-      log(`You Cleave around you, hitting ${hit} foes!`);
+    if(hitCount > 0) { // <--- FIXED TYPO (was 'hit')
+      log(`You Cleave around you, hitting ${hitCount} foes!`);
       acted = true;
       state.player.artCooldown = 15; 
     } else {
@@ -10415,7 +10571,7 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 9) {
   state.tiles[36][10]=5;
   
   hideBanner();
-  showBanner("Step 10: Low Mana! Pickup and Use the Tonic (2).", 999999);
+  showBanner("Step 10: Low Mana! Mana recharges slowly. Pickup and use the Tonic (2) for instant recharge.", 999999);
 }
 
 
@@ -10516,7 +10672,8 @@ function weaponStatsFor(name){
     'Claymore':   [5,9,'two'],
     'Spear':      [4,7,'spear'],
     'Axe':        [4,8,'axe'],
-    'Knuckle Duster': [3,5,'hand'] // Buffed from [2,4]
+    'Knuckle Duster': [3,5,'hand'],
+    'Key of Destiny': [5,7,'one'] // <--- ADDED THIS
   }[baseName]; // ← same as your equipWeaponByName mapping
   
   return stats ? { name, min:stats[0]+bonMin, max:stats[1]+bonMax, type:stats[2] } : null;
@@ -11204,6 +11361,7 @@ window.openCartographer = function openCartographer(){
 window.openCleric = function(){
     if (!modal) return;
     unlockCodex('Cleric'); // <--- NEW: Unlocks the entry
+    unlockCodex('Cleric_Bless', true); // <--- Track interaction count
     if (goldNow) goldNow.textContent = state.inventory.gold|0;
     
     const w = state.player.weapon;
@@ -13067,6 +13225,17 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
          
          if (isPassableForPlayer(x1,y1) && isPassableForPlayer(x2,y2)) {
             state.player.stamina -= 3;
+            
+            // --- NEW: Glacial Slide (Extra Step) ---
+            if (state.floorEffect === 'GlacialFreeze') {
+               const x3 = x2 + dx, y3 = y2 + dy;
+               if (isPassableForPlayer(x3, y3)) {
+                  // Extend movement to 3rd tile without extra stamina cost
+                  x2 = x3; y2 = y3; // Update target
+                  spawnFloatText("Slide!", state.player.x, state.player.y, '#6ec5ff');
+               }
+            }
+            // ---------------------------------------
 
             // --- TUTORIAL: Step 2 -> 3 (Sprint) ---
             if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
@@ -13662,28 +13831,7 @@ function doRestart(className){
   state.player.staminaMax = 10;
   state.player.stamina = 10;
 
-// --- Apply Class Stats Modifiers ---
-  if (className === 'Barbarian') {
-    state.player.hpMax += 10; // Tanky
-    state.player.mpMax = Math.max(0, state.player.mpMax - 5);
-  } else if (className === 'Wizard') {
-    state.player.mpMax += 20; // Caster
-    state.player.hpMax -= 5;
-  } else if (className === 'Rogue') {
-    state.player.mpMax += 5;  // Resourceful/Tricks
-    state.player.hpMax -= 3;  // Lightly armored
-  } else if (className === 'Mercenary') {
-    state.player.hpMax += 8;  // Battle-hardened
-    state.player.mpMax = Math.max(0, state.player.mpMax - 8); // Non-magical
-  } else if (className === 'Monk') {
-    state.player.mpMax += 10; // High Focus/Chi
-    state.player.hpMax -= 5;  // Unarmored
-  } else if (className === 'Ranger') {
-    state.player.mpMax += 5;  // Nature Focus
-    state.player.hpMax -= 2;  // Light Armor
-  }
-  
-  // --- HARD RESET PLAYER STATE ---
+// --- HARD RESET PLAYER STATE (Moved Above Class Modifiers) ---
   state.player = {
     x:0, y:0, rx:0, ry:0,
     level:1, xp:0, next:PLAYER_XP_START,
@@ -13696,6 +13844,27 @@ function doRestart(className){
     artCooldown: 0,
     shield: null
   };
+
+  // --- Apply Class Stats Modifiers ---
+  if (className === 'Barbarian') {
+    state.player.hpMax += 10; state.player.hp = state.player.hpMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 5); state.player.mp = state.player.mpMax;
+  } else if (className === 'Wizard') {
+    state.player.mpMax += 20; state.player.mp = state.player.mpMax;
+    state.player.hpMax -= 5;  state.player.hp = state.player.hpMax;
+  } else if (className === 'Rogue') {
+    state.player.mpMax += 5;  state.player.mp = state.player.mpMax;
+    state.player.hpMax -= 3;  state.player.hp = state.player.hpMax;
+  } else if (className === 'Mercenary') {
+    state.player.hpMax += 8;  state.player.hp = state.player.hpMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 8); state.player.mp = state.player.mpMax;
+  } else if (className === 'Monk') {
+    state.player.mpMax += 10; state.player.mp = state.player.mpMax;
+    state.player.hpMax -= 5;  state.player.hp = state.player.hpMax;
+  } else if (className === 'Ranger') {
+    state.player.mpMax += 5;  state.player.mp = state.player.mpMax;
+    state.player.hpMax -= 2;  state.player.hp = state.player.hpMax;
+  }
 
   // --- Apply Soul Shop Upgrades (IF NOT TUTORIAL) ---
   const meta = loadMeta();
@@ -13755,14 +13924,12 @@ function doRestart(className){
     // Claymore: High damage, cleave ability
     state.inventory.weapons['Claymore'] = 1;
     equipWeaponByName('Claymore');
-    state.player.hpMax += 10; // Beefy
-    state.player.hp = state.player.hpMax;
+    // REMOVED DUPLICATE STATS (Already applied at top of function)
   } else if (className === 'Monk') {
     // Knuckle Duster: Fast attack, stun chance
     state.inventory.weapons['Knuckle Duster'] = 1;
     equipWeaponByName('Knuckle Duster');
-    state.player.mpMax += 5; // Focus
-    state.player.mp = state.player.mpMax;
+    // REMOVED DUPLICATE STATS (Already applied at top of function)
   } else if (className === 'Ranger') {
     // Ranger gets standard sword backup + lots of ammo
     state.inventory.weapons['Shortsword'] = 1;
@@ -13983,6 +14150,214 @@ document.addEventListener('click', (ev)=>{
     goMenu(); 
   }
 });
+
+// --- Gold Well Modal Logic ---
+window.openGoldWell = function(){
+  // 1. Inject HTML if missing
+  if (!document.getElementById('goldWellModal')) {
+    const d = document.createElement('div');
+    d.id = 'goldWellModal'; d.className = 'modal'; d.style.display = 'none';
+    d.innerHTML = `
+      <div class="sheet">
+        <div class="row"><div class="title">Golden Well</div><button class="btn" id="gwClose">Close</button></div>
+        <div id="gwMsg" style="opacity:.9; margin:10px 0; text-align:center;">
+           A mystical well glows with power. Toss 500 gold to receive a blessing?
+        </div>
+        <div class="row" style="justify-content:center; gap:10px;">
+           <button class="btn" id="gwBuy">Toss Gold (500g)</button>
+        </div>
+        <div style="text-align:center; margin-top:8px; opacity:0.8;">
+           Gold: <span id="gwGold">0</span>
+        </div>
+      </div>`;
+    document.body.appendChild(d);
+    
+    // Wire buttons
+    d.querySelector('#gwClose').onclick = () => {
+       d.style.display = 'none'; state._inputLocked = false;
+       if (!state._pauseOpen) setMobileControlsVisible(true);
+    };
+    
+    d.querySelector('#gwBuy').onclick = () => {
+       const w = state.goldWell;
+       if (!w || w.used) { document.getElementById('gwMsg').textContent = "The well is empty."; return; }
+       if ((state.inventory.gold|0) < 500) { document.getElementById('gwMsg').textContent = "Not enough gold."; return; }
+       
+       state.inventory.gold -= 500;
+       w.used = true;
+       unlockCodex('Gold_Well', true); // Increment count ONLY when gold is tossed
+       
+       // Roll Reward
+       const roll = Math.random();
+       let msg = "";
+       if (roll < 0.33) {
+          state.player.hpMax += 1; state.player.hp += 1; msg = "Vitality surges! (+1 Max HP)";
+       } else if (roll < 0.66) {
+          state.player.mpMax += 1; state.player.mp += 1; msg = "Mind expands! (+1 Max MP)";
+       } else {
+          state.player.staminaMax += 1; state.player.stamina += 1; msg = "Endurance grows! (+1 Max STM)";
+       }
+       
+       SFX.levelUp();
+       spawnParticles(state.player.x, state.player.y, '#facc15', 12);
+       log(msg);
+       updateBars(); updateInvBody();
+       
+       d.style.display = 'none'; state._inputLocked = false;
+       if (!state._pauseOpen) setMobileControlsVisible(true);
+    };
+  }
+  
+  const m = document.getElementById('goldWellModal');
+  const w = state.goldWell;
+  const msg = document.getElementById('gwMsg');
+  const btn = document.getElementById('gwBuy');
+  const g = document.getElementById('gwGold');
+  
+  if (g) g.textContent = state.inventory.gold|0;
+  
+  unlockCodex('Gold_Well'); // Mark as seen, but DO NOT increment here
+  
+  if (w.used) {
+     msg.textContent = "The waters are still. The magic is gone.";
+     btn.style.display = 'none';
+  } else {
+     msg.textContent = "A mystical well glows with power. Toss 500 gold to receive a blessing?";
+     btn.style.display = '';
+     btn.textContent = "Toss Gold (500g)";
+     btn.disabled = (state.inventory.gold|0) < 500;
+  }
+  
+  m.style.display = 'flex';
+  state._inputLocked = true;
+  setMobileControlsVisible(false);
+};
+
+// --- NEW: Weapon Swap / Inventory Limit Logic ---
+const MAX_WEAPON_CAT = 5;
+
+function getWeaponType(name) {
+  // Helper to resolve type from name string
+  if (name.includes('Key of Destiny')) return 'one';
+  // Use existing lookup
+  const st = weaponStatsFor(name);
+  return st ? st.type : 'hand';
+}
+
+function countWeaponsInCategory(targetType) {
+  let count = 0;
+  for (const [name, qty] of Object.entries(state.inventory.weapons || {})) {
+    if (getWeaponType(name) === targetType) count += (qty|0);
+  }
+  return count;
+}
+
+window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
+  // 1. Inject HTML if missing
+  if (!document.getElementById('swapModal')) {
+    const d = document.createElement('div');
+    d.id = 'swapModal'; d.className = 'modal'; d.style.display = 'none'; d.style.zIndex = '10002';
+    d.innerHTML = `
+      <div class="sheet" style="width:min(600px, 94vw)">
+        <div class="title" style="margin-bottom:10px; text-align:center; color:#f9d65c">Inventory Full</div>
+        <div id="swapMsg" style="text-align:center; margin-bottom:15px; opacity:0.9">
+           You can only carry ${MAX_WEAPON_CAT} weapons of this type.
+        </div>
+        
+        <div style="display:grid; grid-template-columns:1fr 1px 1fr; gap:10px; align-items:start;">
+           <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="font-weight:bold; text-align:center; font-size:12px; opacity:0.7">SCRAP ONE:</div>
+              <div id="swapList" style="display:flex; flex-direction:column; gap:6px;"></div>
+           </div>
+           
+           <div style="background:rgba(255,255,255,0.2); height:100%;"></div>
+
+           <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="font-weight:bold; text-align:center; font-size:12px; opacity:0.7">OR LEAVE NEW:</div>
+              <button class="btn" id="swapNewBtn" style="border:1px solid #facc15; padding:12px; text-align:left;"></button>
+           </div>
+        </div>
+      </div>`;
+    document.body.appendChild(d);
+  }
+
+  const m = document.getElementById('swapModal');
+  const list = document.getElementById('swapList');
+  const newBtn = document.getElementById('swapNewBtn');
+  const msg = document.getElementById('swapMsg');
+  
+  const wType = getWeaponType(newItemPayload.name);
+  const niceType = typeNice(wType);
+  
+  msg.textContent = `Your ${niceType} bag is full (${MAX_WEAPON_CAT}/${MAX_WEAPON_CAT}). Scrap an old one to take the new one?`;
+  list.innerHTML = '';
+
+  // 1. Helper to format stats
+  const fmt = (name, min, max) => {
+     // Apply floor effect logic for display
+     let dMin = min, dMax = max;
+     if (state.floorEffect === 'AntiMagic') { dMin = Math.ceil(dMin*1.5); dMax = Math.ceil(dMax*1.5); }
+     else if (state.floorEffect === 'ArcaneFlux') { dMin = Math.ceil(dMin*0.25); dMax = Math.ceil(dMax*0.25); }
+     return `<b>${name}</b><br><span style="font-size:12px; opacity:0.8">Dmg: ${dMin}-${dMax}</span>`;
+  };
+
+  // 2. Populate "Scrap" List (Current Inventory)
+  for (const [name, qty] of Object.entries(state.inventory.weapons || {})) {
+    if (getWeaponType(name) !== wType) continue; // Only show matching category
+    
+    const stats = weaponStatsFor(name) || { min:0, max:0 };
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.style.cssText = 'text-align:left; padding:8px; border:1px solid #ef4444; color:#fca5a5;';
+    const val = 10 + (state.floor * 2);
+    btn.innerHTML = `SCRAP (+${val}g): ${fmt(name, stats.min, stats.max)}`;
+    
+    // ACTION: Scrap Old -> Take New
+    btn.onclick = () => {
+       // Remove Old
+       state.inventory.weapons[name]--;
+       if (state.inventory.weapons[name] <= 0) delete state.inventory.weapons[name];
+       
+       // Add New
+       state.inventory.weapons[newItemPayload.name] = (state.inventory.weapons[newItemPayload.name]||0) + 1;
+       
+       // Clear Floor
+       delete state.pickups[pickupKey];
+       state.tiles[y][x] = 1;
+       
+       // --- NEW: Grant Scrap Value (Gold) ---
+       const scrapValue = 10 + (state.floor * 2); // 10g + 2 per floor
+       state.inventory.gold = (state.inventory.gold|0) + scrapValue;
+       spawnFloatText(`+${scrapValue}g`, state.player.x, state.player.y, '#facc15');
+       // -------------------------------------
+
+       log(`Scrapped ${name} for ${newItemPayload.name} (+${scrapValue}g).`);
+       SFX.weaponBreak(); // Crunch sound for scrapping
+       SFX.pickup();      // Pickup sound
+       
+       m.style.display = 'none';
+       state._inputLocked = false;
+       updateInvBody();
+       updateEquipUI();
+       draw();
+    };
+    list.appendChild(btn);
+  }
+
+  // 3. Populate "Leave" Button (New Item)
+  newBtn.innerHTML = `LEAVE: ${fmt(newItemPayload.name, newItemPayload.min, newItemPayload.max)}`;
+  newBtn.onclick = () => {
+     log(`You leave the ${newItemPayload.name} on the floor.`);
+     m.style.display = 'none';
+     state._inputLocked = false;
+  };
+
+  // Show
+  m.style.display = 'flex';
+  state._inputLocked = true;
+};
+
+
 </script>
 
 <!-- Help Modal -->
@@ -14408,7 +14783,46 @@ if (cursBtn) cursBtn.addEventListener('click', ()=>{
   hideDebug?.();
   log('[debug] Cursed Shortsword spawned below.');
 });
+document.getElementById('dbgSpawnGoldWell')?.addEventListener('click', ()=>{
+  const px = state.player.x, py = state.player.y + 1;
+  state.tiles[py][px] = 1; state.tiles[py+1][px] = 1; // Clear 2x2 area
+  state.tiles[py][px+1] = 1; state.tiles[py+1][px+1] = 1;
+  state.goldWell = { x: px, y: py, used: false };
+  draw?.(); hideDebug?.(); log('[debug] Gold Well spawned.');
+});
 
+// --- NEW: Cleric & Warp Debug Wiring ---
+document.getElementById('dbgSpawnCleric')?.addEventListener('click', ()=>{
+   state.cleric = { x: state.player.x, y: state.player.y + 1 };
+   // Force reveal the tile so you can see her immediately
+   state.seen.add(key(state.player.x, state.player.y+1)); 
+   draw?.(); 
+   log('[debug] Cleric spawned below.'); 
+   hideDebug?.();
+});
+
+document.getElementById('dbgSpawnWarp')?.addEventListener('click', ()=>{
+   // Force spawn on floor below player (overwrite whatever is there)
+   const px = state.player.x, py = state.player.y + 1;
+   
+   if (inBounds(px, py)) {
+       const kxy = key(px, py);
+       
+       // Force tile to be a pickup tile (5)
+       state.tiles[py][px] = 5; 
+       
+       // Ensure pickups object exists
+       state.pickups = state.pickups || {};
+       state.pickups[kxy] = { kind: 'warp', payload: 1 };
+       
+       draw?.(); 
+       log('[debug] Warp Stone spawned below.'); 
+       hideDebug?.();
+   } else {
+       log('[debug] Out of bounds.');
+   }
+});
+// ---------------------------------------
 const healBtn = document.getElementById('dbgSpawnHeal');
 if (healBtn) healBtn.addEventListener('click', ()=>{
   // ensure pickup dict exists
@@ -14525,10 +14939,14 @@ if (shrineBtn) shrineBtn.addEventListener('click', ()=>{
   // Set the tile to a Shrine (6)
   state.tiles[py][px] = 6;
 
-  draw?.();
+draw?.();
   log('[debug] Spawned a Shrine one tile below you.');
   hideDebug?.();
 });
+
+
+// ---------------------------------------
+
 // End of new shrine logic
 
   });
@@ -14574,7 +14992,8 @@ const CODEX_DEF = {
   ArcaneFlux:     { name:'Arcane Flux',     desc:'Magic is amplified, but Melee is weak.', seen:false },
   
 // Existing Interactable
-  Shrine: { name:'Mystical Shrine', desc:'A holy altar that offers a blessing... or a curse.', seen:false, triggered:0 }, // Add general tracker
+  Shrine: { name:'Mystical Shrine', desc:'A holy altar that offers a blessing... or a curse.', seen:false, triggered:0 }, 
+  Gold_Well: { name:'Golden Well', desc:'Toss 500g to wish for power.', seen:false, activated:0 }, // <--- ADDED
   
 // New Shrine Effect Trackers (Inferred from interact() function)
   Shrine_Mimic:   { name:'Shrine: Summoned Mimic',   desc:'Triggers a surprise Mimic encounter.', seen:false, activated:0 },
@@ -14592,6 +15011,7 @@ const CODEX_DEF = {
   Blacksmith_Repair: { name:'Blacksmith: Repairs Done',  desc:'Total times durability was restored.', seen:false, interactions:0 },  
   Jester_Spin:       { name:'Jester: Wheel Spins',       desc:'Total spins of the Wheel of Fate.', seen:false, interactions:0 },      
   Cartographer_Map:  { name:'Cartographer: Maps Bought', desc:'Total maps purchased.', seen:false, interactions:0 },  
+  Cleric_Bless:      { name:'Cleric: Blessings',         desc:'Total times purified or blessed by the Cleric.', seen:false, interactions:0 },
 
   // --- Weapon Effects ---
   Sharp:    { name:'Prefix: Sharp',    desc:'Refined edge. Increases Min and Max damage by 1.', seen:false },
@@ -14684,7 +15104,7 @@ function renderCodexUI(){
 { title: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] },
     // Added 'Cleric' to the list
     { title: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer','Cleric'] },
-    { title: 'Discoveries', keys: ['Shrine'] },
+    { title: 'Discoveries', keys: ['Shrine', 'Gold_Well'] },
     
     // Updated List:
     { title: 'Floor Effects', keys: [
@@ -14693,7 +15113,7 @@ function renderCodexUI(){
     ]},
     
     { title: 'Shrine Outcomes', keys: ['Shrine_Mimic','Shrine_Heal','Shrine_XP','Shrine_Teleport','Shrine_Blood','Shrine_Midas'] },
-    { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map'] },
+    { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map','Cleric_Bless'] },
     
     // 1. ADDED: Weapon Arts Category
     { title: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Pierce', 'Art_Backstab', 'Art_Flurry'] },
@@ -14724,7 +15144,9 @@ function renderCodexUI(){
            }
            // NEW STATS DISPLAY LOGIC
            else if (data.activated !== undefined) {
-             statHtml = `<div style="font-size:12px; color:#7df9ff; font-weight:700;">Activated: ${data.activated}</div>`;
+             // Custom label for Gold Well vs Shrines
+             const label = (k === 'Gold_Well') ? 'Donated' : 'Activated';
+             statHtml = `<div style="font-size:12px; color:#7df9ff; font-weight:700;">${label}: ${data.activated}</div>`;
            } 
            else if (data.interactions !== undefined) {
              statHtml = `<div style="font-size:12px; color:#f6d66a; font-weight:700;">Count: ${data.interactions}</div>`;
