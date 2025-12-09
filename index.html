@@ -4575,13 +4575,15 @@ const pool=[
     
     // --- NEW: Cursed Weapons (5% chance within affix roll) ---
     if (roll < 0.05) { // Ultra Rare
-      choice.name = 'Cursed ' + choice.name;
+      const cTypes = ['blood', 'greed', 'rust', 'frailty'];
+      const type = cTypes[Math.floor(Math.random() * cTypes.length)];
+      const niceType = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize
+
+      choice.name = 'Cursed ' + niceType + ' ' + choice.name; // e.g., "Cursed Blood Shortsword"
       choice.min += 4; 
       choice.max += 5; 
       choice.cursed = true;
-      
-      const cTypes = ['blood', 'greed', 'rust', 'frailty'];
-      choice.curseType = cTypes[Math.floor(Math.random() * cTypes.length)];
+      choice.curseType = type;
       
       // Unlock specific curse in Codex
       const key = 'Curse_' + choice.curseType.charAt(0).toUpperCase() + choice.curseType.slice(1);
@@ -9144,7 +9146,8 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
   } else if (roll < 0.80) {
     state.player.hp = state.player.hpMax;
     state.player.mp = state.player.mpMax;
-    log('Divine light restores your vitality!');
+    state.player.stamina = state.player.staminaMax; // <--- ADDED
+    log('Divine light restores your vitality and endurance!');
     updateBars();
     unlockCodex('Shrine_Heal', true);
     spawnParticles(state.player.x, state.player.y, '#fff', 8);
@@ -9470,8 +9473,31 @@ function openChest(x,y){
   );
   if (isStarterChest || Math.random() < weaponChance){
     const w = randomWeapon();
-    state.inventory.weapons[w.name] = (state.inventory.weapons[w.name] || 0) + 1;
-    lootMsg.push(`${w.name} (now x${state.inventory.weapons[w.name]})`);
+    
+    // --- NEW: Check Inventory Limit ---
+    // Ensure helper functions exist (defined at bottom of script)
+    const wType = (typeof getWeaponType === 'function') ? getWeaponType(w.name) : 'hand';
+    const curCount = (typeof countWeaponsInCategory === 'function') ? countWeaponsInCategory(wType) : 0;
+    const limit = (typeof MAX_WEAPON_CAT !== 'undefined') ? MAX_WEAPON_CAT : 5;
+
+    if (curCount >= limit) {
+       // Bag Full: Drop weapon on floor & trigger Swap
+       const k = key(x,y);
+       state.pickups[k] = { kind:'weapon', payload:w };
+       state.tiles[y][x] = 5; // Change tile from Floor(1) to Pickup(5)
+       
+       lootMsg.push(`${w.name} (Dropped - Bag Full)`);
+       
+       // Trigger the UI after a brief delay so the chest log usually finishes processing
+       setTimeout(() => {
+          if(typeof openWeaponSwapModal === 'function') openWeaponSwapModal(w, k, x, y);
+       }, 50);
+    } else {
+       // Normal Add
+       state.inventory.weapons[w.name] = (state.inventory.weapons[w.name] || 0) + 1;
+       lootMsg.push(`${w.name} (now x${state.inventory.weapons[w.name]})`);
+    }
+    // ----------------------------------
   }
 
   // --- Starter chest keeps your guaranteed pack ---
@@ -9668,7 +9694,12 @@ function equipWeaponByName(name){
   else if (name.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
   else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); isVamp=true; }
   else if (name.includes('Ancient ')) { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
-  else if (name.includes('Cursed '))  { baseName = baseName.replace('Cursed ', ''); } // <--- ADDED THIS
+  
+  // Strip Curse info to find base stats
+  if (name.includes('Cursed ')) {
+     baseName = baseName.replace('Cursed ', '');
+     baseName = baseName.replace('Blood ', '').replace('Greed ', '').replace('Rust ', '').replace('Frailty ', '');
+  }
 
 const stats = {
     'Shortsword': [3,5,'one'],
@@ -10672,7 +10703,10 @@ function weaponStatsFor(name){
   let bonMin=0, bonMax=0;
   
   // FIX: Strip Cursed prefix so the base type/stats lookup works
-  if (name.includes('Cursed '))      { baseName = baseName.replace('Cursed ', ''); }
+  if (name.includes('Cursed ')) {
+     baseName = baseName.replace('Cursed ', '');
+     baseName = baseName.replace('Blood ', '').replace('Greed ', '').replace('Rust ', '').replace('Frailty ', '');
+  }
 
   if (name.includes('Sharp '))       { baseName = baseName.replace('Sharp ', '');   bonMin+=1; bonMax+=1; }
   else if (name.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
@@ -12264,6 +12298,15 @@ function levelMpGain() {
   return Math.max(2, Math.round(raw));
 }
 
+// --- NEW: Stamina Scaling ---
+function levelStamGain() {
+  const L = state.player.level;
+  const F = state.floor;
+  // Base 3 + (Level/5) + (Floor/10). Multiplied by dangerFactor (boss floors give more).
+  const raw = 3 + 0.20 * L + 0.10 * F; 
+  return Math.max(3, Math.round(raw * dangerFactor()));
+}
+
 
 // ====== Level Up choice modal (HP / MP / Stamina) ======
 const lvlupModal = document.getElementById('lvlupModal');
@@ -12304,8 +12347,9 @@ if (btnHP){
 // --- NEW: Stamina Level Up Logic ---
 if (btnStam){
   btnStam.onclick = ()=>{
-    // Increase Max Stamina by 5
-    state.player.staminaMax = (state.player.staminaMax || 10) + 5;
+    // Increase Max Stamina (Scaled)
+    const inc = (typeof levelStamGain === 'function') ? levelStamGain() : 4;
+    state.player.staminaMax = (state.player.staminaMax || 10) + inc;
     
     // Full Refill (Reward for picking it)
     state.player.stamina = state.player.staminaMax;
@@ -12355,6 +12399,92 @@ state.globalWeaponFlatBonus = state.globalWeaponFlatBonus || 0;
 
 // pool of possible blessing/curse pairs
 const PICK2_POOL = [
+  // ===== Stamina Omens =====
+  {
+    id: 'second_wind',
+    label: '+10 Max Stamina / -5 Max MP',
+    apply(){
+      const p = state.player;
+      p.staminaMax += 10;
+      p.stamina = p.staminaMax;
+      p.mpMax = Math.max(0, p.mpMax - 5);
+      if (p.mp > p.mpMax) p.mp = p.mpMax;
+      updateBars?.();
+      log('[Omen] Lungs of iron... mind of fog.');
+    }
+  },
+  {
+    id: 'heavy_heart',
+    label: '+12 Max HP / -8 Max Stamina',
+    apply(){
+      const p = state.player;
+      p.hpMax += 12;
+      p.hp = p.hpMax;
+      p.staminaMax = Math.max(5, p.staminaMax - 8);
+      p.stamina = Math.min(p.stamina, p.staminaMax);
+      updateBars?.();
+      log('[Omen] A mountain of health... that cannot move.');
+    }
+  },
+  {
+    id: 'adrenaline_rush',
+    label: '+Full Stamina Restore +2 Bombs / -15% Max HP',
+    apply(){
+      state.player.stamina = state.player.staminaMax;
+      state.inventory.bombs = (state.inventory.bombs|0) + 2;
+      state.player.hpMax = Math.max(1, Math.floor(state.player.hpMax * 0.85));
+      if(state.player.hp > state.player.hpMax) state.player.hp = state.player.hpMax;
+      updateBars?.(); updateInvBody?.();
+      log('[Omen] Explosive energy... at a cost.');
+    }
+  },
+  // --- NEW CREATIVE OMENS ---
+  {
+    id: 'titan_grip',
+    label: '+15 ATK (all weapons) / -Max Stamina set to 5',
+    apply(){
+      state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + 15;
+      if (typeof recomputeWeapon === 'function') recomputeWeapon();
+      state.player.staminaMax = 5; 
+      state.player.stamina = Math.min(state.player.stamina, 5);
+      updateBars?.();
+      log('[Omen] You are a juggernaut... slow and deadly.');
+    }
+  },
+  {
+    id: 'rogues_gambit',
+    label: '+3 Warp Stones / -All Gold',
+    apply(){
+      state.inventory.warpStones = (state.inventory.warpStones|0) + 3;
+      state.inventory.gold = 0;
+      updateInvBody?.();
+      log('[Omen] You escape fate... but leave your fortune behind.');
+    }
+  },
+  {
+    id: 'glass_sprinter',
+    label: '+15 Max Stamina / -Max HP set to 10',
+    apply(){
+      state.player.staminaMax += 15;
+      state.player.stamina = state.player.staminaMax;
+      state.player.hpMax = 10;
+      state.player.hp = Math.min(state.player.hp, 10);
+      updateBars?.();
+      log('[Omen] You can run forever... if you survive.');
+    }
+  },
+  {
+    id: 'explorers_burden',
+    label: '+10 Lockpicks +10 Torches (Vision) / -5 Max Stamina',
+    apply(){
+      state.inventory.lockpicks += 10;
+      state.fovRadius = Math.min(10, (state.fovRadius||5) + 2);
+      state.player.staminaMax = Math.max(2, state.player.staminaMax - 5);
+      state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
+      updateBars?.(); updateInvBody?.();
+      log('[Omen] Prepared for everything... except the run.');
+    }
+  },
   // ===== originals =====
   {
     id: 'mp_up_hp_down',
@@ -13533,7 +13663,15 @@ const CLASSES = {
   // --- Endless Only Classes ---
   Mercenary: { name:'Mercenary', desc:'Starts with a Claymore. +8 HP / -8 MP.', req:'kills_two', val:10, msg:'Unlock: 10 Two-Handed kills.', endless:true },
   Monk:      { name:'Monk',      desc:'Starts with Knuckle Dusters. +10 MP / -5 HP.', req:'kills_hand', val:10, msg:'Unlock: 10 Unarmed kills.', endless:true },
-  Ranger:    { name:'Ranger',    desc:'Starts with a Shortsword & 20 Arrows. +5 MP / -2 HP.', req:'kills_bow', val:10, msg:'Unlock: 10 Bow kills.', endless:true }
+  Ranger:    { name:'Ranger',    desc:'Starts with a Shortsword & 20 Arrows. +5 MP / -2 HP.', req:'kills_bow', val:10, msg:'Unlock: 10 Bow kills.', endless:true },
+  
+  // --- NEW STAMINA CLASSES ---
+  Lancer:    { name:'Lancer',    desc:'Polearm Specialist. Starts with a Spear. +10 Stamina / -5 MP.', req:'kills_spear', val:10, msg:'Unlock: 10 Spear kills.', endless:true },
+  Soldier:   { name:'Soldier',   desc:'Defensive fighter. Starts with Shortsword & Shield. +5 HP / +5 Stamina / -10 MP.', req:'depth', val:5, msg:'Unlock: Reach Depth 5.', endless:true },
+// --- CREATIVE CLASSES ---
+  Spellblade:{ name:'Spellblade',desc:'Magic Knight. Starts with Shortsword & Frost Spell. Balanced stats.', req:'kills_magic', val:20, msg:'Unlock: 20 Magic kills.', endless:true },
+Grenadier: { name:'Grenadier', desc:'Demolitions. Starts with Shortsword & 5 Bombs. +10 Stamina.', req:'kills_one', val:20, msg:'Unlock: 20 One-Handed kills.', endless:true },
+  Legionary: { name:'Legionary', desc:'Iron Wall. Starts with Shortsword & Shield. +10 HP / -10 Stamina.', req:'kills_one', val:30, msg:'Unlock: 30 One-Handed kills.', endless:true }
 };
 
 // --- NEW: Soul Shop Definitions ---
@@ -13897,6 +14035,21 @@ function doRestart(className){
   } else if (className === 'Ranger') {
     state.player.mpMax += 5;  state.player.mp = state.player.mpMax;
     state.player.hpMax -= 2;  state.player.hp = state.player.hpMax;
+  } else if (className === 'Lancer') {
+    state.player.staminaMax += 10; state.player.stamina = state.player.staminaMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 5); state.player.mp = state.player.mpMax;
+  } else if (className === 'Soldier') {
+    state.player.hpMax += 5;       state.player.hp = state.player.hpMax;
+    state.player.staminaMax += 5;  state.player.stamina = state.player.staminaMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 10); state.player.mp = state.player.mpMax;
+  } else if (className === 'Spellblade') {
+    state.player.mpMax += 5; state.player.mp = state.player.mpMax;
+    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax;
+  } else if (className === 'Grenadier') {
+    state.player.staminaMax += 10; state.player.stamina = state.player.staminaMax;
+  } else if (className === 'Legionary') {
+    state.player.hpMax += 10; state.player.hp = state.player.hpMax;
+    state.player.staminaMax = Math.max(0, state.player.staminaMax - 5); state.player.stamina = state.player.staminaMax;
   }
 
   // --- Apply Soul Shop Upgrades (IF NOT TUTORIAL) ---
@@ -13969,6 +14122,31 @@ function doRestart(className){
     equipWeaponByName('Shortsword');
     state.inventory.arrows = 20;
     state.player.bow.loaded = 1;
+  } else if (className === 'Lancer') {
+    state.inventory.weapons['Spear'] = 1;
+    equipWeaponByName('Spear');
+  } else if (className === 'Soldier') {
+    state.inventory.weapons['Shortsword'] = 1;
+    equipWeaponByName('Shortsword');
+    // Starts with Shield equipped
+    state.inventory.shields = 1;
+    equipShield();
+  } else if (className === 'Spellblade') {
+    state.inventory.weapons['Shortsword'] = 1;
+    equipWeaponByName('Shortsword');
+    // Starts with Frost spell
+    state.spells.push({name:'Frost', cost:3, tier:1});
+    state.equippedSpell = state.spells[0];
+    if(typeof ensureSpellUpgradeSlot === 'function') ensureSpellUpgradeSlot('Frost');
+  } else if (className === 'Grenadier') {
+    state.inventory.weapons['Shortsword'] = 1;
+    equipWeaponByName('Shortsword');
+    state.inventory.bombs = 5; 
+  } else if (className === 'Legionary') {
+    state.inventory.weapons['Shortsword'] = 1; // Changed to Shortsword
+    equipWeaponByName('Shortsword');
+    state.inventory.shields = 1;
+    equipShield();
   }
 
   // Finalize
