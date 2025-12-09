@@ -11269,10 +11269,14 @@ unlockCodex('Jester_Spin', true); // <--- TRACK SPIN
 
     // Override CSS transition to match the 10.6s audio length
     wheelCanvas.style.transition = "transform 10.6s ease-out";
+    
+    // Force browser reflow to ensure the transition takes hold
+    wheelCanvas.getBoundingClientRect(); 
+    
     wheelCanvas.style.transform = `rotate(${finalDeg}deg)`;
 
-    // 2) After the spin finishes (10600ms = 10.6s), figure out which slice is under the TOP arrow
-    setTimeout(() => {
+    // 2) Wait for the VISUAL animation to end (Syncs perfectly)
+    const onSpinEnd = () => {
       wheelCanvas.classList.add('glow');
 
       const ctx = wheelCanvas.getContext('2d');
@@ -11316,12 +11320,14 @@ if (winningSlice % 2 === 1) {
   state.player.hp = Math.max(1, Math.floor(state.player.hpMax * 0.05));
   msg.textContent = "Ha ha ha, better luck next time!";
   playNpcDialogue(NPC_DIALOGUE_URLS.jester.lose);
-  log('[Jester] Landed on RED: HP dropped to 5%.');
-}
+      log('[Jester] Landed on RED: HP dropped to 5%.');
+    }
 
-updateBars?.();
+    updateBars?.();
+    }; // End of onSpinEnd function
 
-    }, 4200);
+    // Attach the listener
+    wheelCanvas.addEventListener('transitionend', onSpinEnd, { once: true });
   };
 
 
@@ -11570,7 +11576,11 @@ window.openJester = function openJester(){
 
   const wheel = document.getElementById('jesterWheel');
   wheel.classList.remove('glow');
+  
+  // Remove transition for instant reset
+  wheel.style.transition = 'none'; 
   wheel.style.transform = 'rotate(0deg)';
+  
   document.getElementById('jSpin').disabled = false;
 
   modal.style.display = 'flex';
