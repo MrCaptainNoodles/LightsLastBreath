@@ -9911,16 +9911,15 @@ function unequipShield(){
 
   const name = state.player.shieldName || 'Standard';
 
-  // If it's a specific named shield, put it back in specific inventory
-  if (name !== 'Standard') {
-    state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
-  } else {
-    // Otherwise, add to generic pile
+  // Return to correct inventory slot
+  if (name === 'Standard') {
     state.inventory.shields = (state.inventory.shields|0) + 1;
+  } else {
+    state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
   }
 
   state.player.shield = null;
-  state.player.shieldName = null; // Clear the name tracking
+  state.player.shieldName = null;
   
   log('Unequipped ' + name + '.');
   updateInvBody?.(); updateEquipUI?.(); draw?.();
@@ -11957,48 +11956,29 @@ function updateInvBody(){
 function renderShield(){
     sec.innerHTML = '';
     
-    // 1. Generic Shields (Legacy/Standard)
-    const haveGeneric = state.inventory.shields|0;
-    if (haveGeneric > 0 || (state.player.shield && state.player.shieldName === 'Standard')) {
-       const row = document.createElement('div');
-       row.className = 'row';
-       row.style.justifyContent = 'space-between';
-       row.style.marginBottom = '10px';
-       
-       const isEquipped = (state.player.shield && state.player.shieldName === 'Standard');
-       const dur = isEquipped ? ` (Dur ${state.player.shield.dur})` : '';
-       
-       const left = document.createElement('div');
-       left.textContent = `Standard Shield x${haveGeneric}${dur}`;
-       
-       const btn = document.createElement('button');
-       btn.className = 'btn';
-       btn.textContent = isEquipped ? 'Unequip' : 'Equip';
-       btn.onclick = () => { isEquipped ? unequipShield() : equipShield('Standard'); };
-       
-       row.append(left, btn);
-       sec.appendChild(row);
-    }
-
-    // 2. Named Shields (Buckler, Tower, etc.)
-    for (const [name, count] of Object.entries(state.inventory.weapons || {})) {
-        if (getWeaponType(name) !== 'shield') continue;
-        
+    // Helper to render a shield row
+    const renderRow = (name, count, isEquipped) => {
         const row = document.createElement('div');
         row.className = 'row';
         row.style.justifyContent = 'space-between';
         
-        const isEquipped = (state.player.shield && state.player.shieldName === name);
-        const dur = isEquipped ? ` (Dur ${state.player.shield.dur})` : '';
+        const dur = isEquipped && state.player.shield ? ` (Dur ${state.player.shield.dur})` : '';
         
-        // Calculate Block % for display
+        // Calculate Block %
         let blockChance = '20%';
         if (name.includes('Buckler')) blockChance = '15%';
         else if (name.includes('Tower')) blockChance = '35%';
         else if (name.includes('Ancient')) blockChance = '25%';
 
         const left = document.createElement('div');
-        left.innerHTML = `${name} x${count} <span style="opacity:0.7; font-size:12px;">(${blockChance} Block)${dur}</span>`;
+        const countTxt = isEquipped ? (count > 0 ? `x${count} (1 Equipped)` : `(Equipped)`) : `x${count}`;
+        
+        // Green text if equipped
+        const nameHtml = isEquipped 
+            ? `<span style="color:#4ade80; font-weight:bold;">${name}</span>` 
+            : name;
+
+        left.innerHTML = `${nameHtml} ${countTxt} <span style="opacity:0.7; font-size:12px;">(${blockChance} Block)${dur}</span>`;
         
         const btn = document.createElement('button');
         btn.className = 'btn';
@@ -12007,11 +11987,39 @@ function renderShield(){
         
         row.append(left, btn);
         sec.appendChild(row);
+    };
+
+    // 1. Render Currently Equipped Shield (if it exists)
+    const currentName = state.player.shieldName;
+    if (currentName) {
+        // If it's a generic "Standard", handle it
+        if (currentName === 'Standard') {
+            const count = state.inventory.shields|0;
+            renderRow('Standard Shield', count, true);
+        } 
+        // If it's a named shield (Tower, etc.)
+        else {
+            const count = state.inventory.weapons[currentName] || 0;
+            renderRow(currentName, count, true);
+        }
     }
 
-    // Empty State
-    if (sec.innerHTML === '') sec.innerHTML = '<div>(none)</div>';
+    // 2. Render Inventory Shields (Standard)
+    // Only if NOT equipped (otherwise handled above)
+    if (state.inventory.shields > 0 && currentName !== 'Standard') {
+        renderRow('Standard Shield', state.inventory.shields, false);
+    }
 
+    // 3. Render Inventory Shields (Named)
+    // Only if NOT equipped (otherwise handled above)
+    for (const [name, count] of Object.entries(state.inventory.weapons || {})) {
+        if (getWeaponType(name) !== 'shield') continue;
+        if (name === currentName) continue; // Already rendered as equipped
+        renderRow(name, count, false);
+    }
+
+    if (sec.innerHTML === '') sec.innerHTML = '<div>(none)</div>';
+    
     const tip = document.createElement('div');
     tip.style.opacity = 0.8;
     tip.style.marginTop = '15px';
@@ -14904,36 +14912,45 @@ function useStaff(w) {
 }
 
 function equipShield(variant = 'Standard'){
-  if (typeof variant !== 'string') variant = 'Standard'; // fallback
-  
-  if (state.player.shield && state.player.shieldName && state.player.shieldName !== 'Standard'){
-     const old = state.player.shieldName;
-     state.inventory.weapons[old] = (state.inventory.weapons[old]||0)+1;
+  if (typeof variant !== 'string') variant = 'Standard';
+
+  // 1. Put away current shield (Swap Logic)
+  if (state.player.shield) {
+     const oldName = state.player.shieldName || 'Standard';
+     if (oldName === 'Standard') {
+         state.inventory.shields = (state.inventory.shields|0) + 1;
+     } else {
+         state.inventory.weapons[oldName] = (state.inventory.weapons[oldName]||0) + 1;
+     }
   }
 
-// Assign durability based on shield type
-  let maxDur = 20; // Standard / Kite
-  if (variant.includes('Buckler')) maxDur = 15;
-  else if (variant.includes('Tower')) maxDur = 35;
-  else if (variant.includes('Ancient')) maxDur = 25;
+  // 2. Take new shield from inventory
+  if (variant === 'Standard') {
+      if ((state.inventory.shields|0) <= 0) { log("No Standard Shields left."); return; }
+      state.inventory.shields--;
+  } else {
+      if (!state.inventory.weapons[variant]) { log(`No ${variant} left.`); return; }
+      state.inventory.weapons[variant]--;
+      // Clean up zero entries
+      if (state.inventory.weapons[variant] <= 0) delete state.inventory.weapons[variant];
+  }
+
+  // 3. Set Stats
+  let maxDur = 20; 
+  let chance = 0.20;
+
+  if (variant.includes('Buckler'))      { maxDur = 15; chance = 0.15; }
+  else if (variant.includes('Tower'))   { maxDur = 35; chance = 0.35; }
+  else if (variant.includes('Ancient')) { maxDur = 25; chance = 0.25; }
+  else if (variant.includes('Kite'))    { maxDur = 20; chance = 0.20; }
 
   state.player.shield = { name: variant, dur: maxDur };
   state.player.shieldName = variant;
+  state.player.blockChance = chance;
   
-  if (variant.includes('Buckler')) state.player.blockChance = 0.15;
-  else if (variant.includes('Tower')) state.player.blockChance = 0.35;
-  else if (variant.includes('Ancient')) state.player.blockChance = 0.25;
-  else state.player.blockChance = 0.20; 
-
-  if (variant !== 'Standard' && state.inventory.weapons[variant]) {
-      state.inventory.weapons[variant]--;
-      if(state.inventory.weapons[variant]<=0) delete state.inventory.weapons[variant];
-  } else if (variant === 'Standard') {
-      state.inventory.shields = Math.max(0, (state.inventory.shields|0) - 1);
-  }
-  
-  log(`You equip the ${variant}.`);
-  updateEquipUI(); updateInvBody();
+  log(`Equipped ${variant}.`);
+  updateEquipUI(); 
+  updateInvBody();
 }
 
 function openGoldenWellChoice(){
