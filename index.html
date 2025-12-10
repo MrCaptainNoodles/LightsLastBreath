@@ -5098,6 +5098,9 @@ function awardKill(type,amount){
 }
 
 
+  // Consolidate Staff -> Magic
+  if (type === 'staff') type = 'magic';
+
   ensureSkill(type);
   const s=state.skills[type];
   s.xp+=amount;
@@ -10743,9 +10746,8 @@ let dmg = rand(min, max);
 // --- NEW: Staff Elemental Boost ---
 const wName = state.player.weapon ? state.player.weapon.name : '';
 if (wName.includes('Fire') && spell.name === 'Ember') { dmg+=3; log('Fire Staff boost!'); }
-else if (wName.includes('Fire') && spell.name === 'Spark') { dmg+=2; log('Fire Staff boost!'); }
+else if (wName.includes('Light') && spell.name === 'Spark') { dmg+=3; log('Lightning Staff boost!'); }
 else if (wName.includes('Ice') && spell.name === 'Frost') { dmg+=3; log('Ice Staff boost!'); }
-else if (wName.includes('Light') && spell.name === 'Thunder') { dmg+=3; log('Lightning Staff boost!'); }
 else if (wName.includes('Wind') && spell.name === 'Gust') { dmg+=3; log('Wind Staff boost!'); }
 else if (wName.includes('Earth') && spell.name === 'Pebble') { dmg+=3; log('Earth Staff boost!'); }
 // ----------------------------------
@@ -14772,9 +14774,20 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
   msg.textContent = `Your ${niceType} bag is full (${MAX_WEAPON_CAT}/${MAX_WEAPON_CAT}). Scrap an old one to take the new one?`;
   list.innerHTML = '';
 
-  // 1. Helper to format stats
+  // 1. Helper to format stats (Shield-aware)
   const fmt = (name, min, max) => {
-     // Apply floor effect logic for display
+     // Check if it's a shield based on name
+     const type = getWeaponType(name);
+     
+     if (type === 'shield') {
+        let chance = '20%';
+        if (name.includes('Buckler')) chance = '15%';
+        else if (name.includes('Tower')) chance = '35%';
+        else if (name.includes('Ancient')) chance = '25%';
+        return `<b>${name}</b><br><span style="font-size:12px; opacity:0.8">Block: ${chance}</span>`;
+     }
+
+     // Normal Weapon Logic
      let dMin = min, dMax = max;
      if (state.floorEffect === 'AntiMagic') { dMin = Math.ceil(dMin*1.5); dMax = Math.ceil(dMax*1.5); }
      else if (state.floorEffect === 'ArcaneFlux') { dMin = Math.ceil(dMin*0.25); dMax = Math.ceil(dMax*0.25); }
@@ -14805,17 +14818,24 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
        delete state.pickups[pickupKey];
        state.tiles[y][x] = 1;
        
-       // --- NEW: Grant Weapon Skill XP ---
-       // Award XP to the weapon category (e.g., One-Handed)
-       // Base 10 XP + 2 per floor
+// --- NEW: Grant Weapon Skill XP (Shields->Survivability, Staffs->Magic) ---
        const xpAmt = 10 + (state.floor * 2);
        
-       ensureSkill(wType);
-       const s = state.skills[wType];
-       s.shown = true; // <--- ADD THIS: Force the UI to show this skill
+       // Detect special cases
+       const isShield = (wType === 'shield');
+       const isStaff  = (wType === 'staff');
+
+       // Redirect XP: Shield->Survivability, Staff->Magic, Others->WeaponType
+       let targetSkill = wType;
+       if (isShield) targetSkill = 'survivability';
+       if (isStaff)  targetSkill = 'magic';
+       
+       ensureSkill(targetSkill);
+       const s = state.skills[targetSkill];
+       s.shown = true; 
        s.xp += xpAmt;
        
-       // Handle Level Up immediately
+       // Handle Level Up
        let leveled = false;
        while(s.xp >= s.next){ 
            s.xp -= s.next; 
@@ -14825,9 +14845,13 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
        }
        
        if(leveled) {
-           log(`${typeNice(wType)} advanced to ${s.lvl}!`);
-           renderSkills(); // Update UI
-           recomputeWeapon(); // Apply new damage bonus
+           // Nice name for log
+           const skillName = (isShield ? "Survivability" : (isStaff ? "Magic" : typeNice(wType)));
+           log(`${skillName} advanced to ${s.lvl}!`);
+           
+           renderSkills(); 
+           // Only recompute weapon damage if it wasn't a shield
+           if (!isShield && typeof recomputeWeapon === 'function') recomputeWeapon();
        }
 
        spawnFloatText(`+${xpAmt} XP`, state.player.x, state.player.y, '#a78bfa');
@@ -14870,17 +14894,40 @@ function checkMiniBossReward(e) {
 }
 
 function useStaff(w) {
-    const cost = 2; 
+    // 1. Determine Match Synergy
+    const s = state.equippedSpell;
+    let isMatch = false;
+    let spellStats = null;
+    
+    // Check elements if we have a spell equipped
+    if (s) {
+       const wn = w.name; 
+       const sn = s.name;
+       if (wn.includes('Fire') && sn === 'Ember') isMatch = true;
+       else if (wn.includes('Light') && sn === 'Spark') isMatch = true;
+       else if (wn.includes('Ice') && sn === 'Frost') isMatch = true;
+       else if (wn.includes('Wind') && sn === 'Gust') isMatch = true;
+       else if (wn.includes('Earth') && sn === 'Pebble') isMatch = true;
+       
+       if (isMatch) spellStats = getSpellStats(sn);
+    }
+
+    // 2. Calculate Costs & Stats based on match
+    // If match: use Spell Cost. If no match: use Default Staff Cost (2).
+    const cost = isMatch ? (spellStats.cost|0) : 2;
+    
     if (state.player.mp < cost) {
         log("Out of mana! You bash with the staff.");
         const t = getFacingEnemy(); 
         if(t){
            t.hp -= 1; spawnFloatText("1", t.x, t.y, '#fff');
-           if(t.hp<=0) { state.enemies=state.enemies.filter(x=>x!==t); state.run.kills++; awardKill('staff', t.xp); SFX.kill(); }
+           // FIX: Award 'magic' XP for bashing too
+           if(t.hp<=0) { state.enemies=state.enemies.filter(x=>x!==t); state.run.kills++; awardKill('magic', t.xp); SFX.kill(); }
         } else log("You swing at the air.");
         enemyStep(); draw(); return;
     }
 
+    // 3. Determine Visuals
     let color='#fff', el='Magic';
     if(w.name.includes('Fire')){ color='#ef4444'; el='Fire'; }
     else if(w.name.includes('Ice')){ color='#06b6d4'; el='Ice'; }
@@ -14888,22 +14935,47 @@ function useStaff(w) {
     else if(w.name.includes('Wind')){ color='#a3a3a3'; el='Wind'; }
     else if(w.name.includes('Earth')){ color='#78350f'; el='Earth'; }
 
-    state.player.mp -= cost; updateBars();
-    const t = findFirstLinedTarget(state.player.x, state.player.y, 4);
-    const tx = t ? t.x : (state.player.x + (state.player.facing==='right'?4 : state.player.facing==='left'?-4 : 0));
-    const ty = t ? t.y : (state.player.y + (state.player.facing==='down'?4 : state.player.facing==='up'?-4 : 0));
+    // 4. Pay Mana
+    state.player.mp -= cost; 
+    updateBars();
+
+    // 5. Fire Projectile
+    const range = isMatch ? spellStats.range : 4;
+    const t = findFirstLinedTarget(state.player.x, state.player.y, range);
+    
+    const dirs = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+    const [dx,dy] = dirs[state.player.facing||'down'];
+    
+    // Projectile destination (target or max range)
+    const tx = t ? t.x : (state.player.x + dx*range);
+    const ty = t ? t.y : (state.player.y + dy*range);
 
     spawnProjectileEffect({
         kind:'magic', element:el, color:color, fromX:state.player.x, fromY:state.player.y, toX:tx, toY:ty,
         onDone:()=>{
             if(t){
-                const bonus = Math.floor((state.skills.magic?.lvl||1)/2);
-                const dmg = rand(w.min, w.max) + bonus;
+                let dmg = 0;
+                
+                if (isMatch) {
+                    // Synergy: Use Spell Damage + Staff Bonus (+3)
+                    dmg = rand(spellStats.min, spellStats.max) + 3;
+                    spawnFloatText("SYNERGY!", state.player.x, state.player.y, color); 
+                } else {
+                    // Basic Attack: Weak Staff Damage + Skill Bonus
+                    const skillBonus = Math.floor((state.skills.magic?.lvl||1)/2);
+                    dmg = rand(w.min, w.max) + skillBonus;
+                }
+
                 t.hp = Math.max(0, t.hp - dmg);
                 spawnFloatText(dmg, t.x, t.y, color);
                 checkMiniBossReward(t); 
+                
                 if(t.hp<=0) {
-                    state.enemies=state.enemies.filter(x=>x!==t); state.run.kills++; awardKill('magic', t.xp); SFX.kill();
+                    state.enemies=state.enemies.filter(x=>x!==t); 
+                    state.run.kills++; 
+                    // FIX: Always award Magic XP
+                    awardKill('magic', t.xp); 
+                    SFX.kill();
                 }
             }
             enemyStep(); draw();
