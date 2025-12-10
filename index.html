@@ -7228,16 +7228,37 @@ function updateEquipUI(){
   const nameTxt = (showDur ? `${w.name} (Dur ${w.dur}/${w.durMax})` : w.name) + artStatus;
   document.getElementById('equipName').textContent = nameTxt;
 
-  // --- NEW: Calculate True Weapon Damage ---
+  // --- NEW: Calculate True Weapon Damage (Split by Type) ---
   let effMin = w.min, effMax = w.max;
-  if (state.floorEffect === 'AntiMagic') {
-    effMin = Math.ceil(effMin * 1.5);
-    effMax = Math.ceil(effMax * 1.5);
-  } else if (state.floorEffect === 'ArcaneFlux') {
-    effMin = Math.max(1, Math.ceil(effMin * 0.25));
-    effMax = Math.max(1, Math.ceil(effMax * 0.25));
+  let dispText = `ATK: ${effMin}–${effMax}`;
+
+  // 1. Staff Logic (Magic)
+  if (w.type === 'staff') {
+      if (state.floorEffect === 'ArcaneFlux') {
+          // Staffs get BOOSTED by Arcane Flux (Magic Floor)
+          effMin = Math.ceil(effMin * 1.5);
+          effMax = Math.ceil(effMax * 1.5);
+          dispText = `ATK: ${effMin}–${effMax}`;
+      } else if (state.floorEffect === 'AntiMagic') {
+          // Staffs are SILENCED by Anti-Magic
+          dispText = `ATK: SILENCED`;
+      }
+  } 
+  // 2. Melee Logic (Physical)
+  else {
+      if (state.floorEffect === 'AntiMagic') {
+          // Melee gets BOOSTED by Anti-Magic
+          effMin = Math.ceil(effMin * 1.5);
+          effMax = Math.ceil(effMax * 1.5);
+      } else if (state.floorEffect === 'ArcaneFlux') {
+          // Melee gets NERFED by Arcane Flux
+          effMin = Math.max(1, Math.ceil(effMin * 0.25));
+          effMax = Math.max(1, Math.ceil(effMax * 0.25));
+      }
+      dispText = `ATK: ${effMin}–${effMax}`;
   }
-  document.getElementById('equipAtk').textContent = `ATK: ${effMin}–${effMax}`;
+  
+  document.getElementById('equipAtk').textContent = dispText;
   // ----------------------------------------
 
   const es = state.equippedSpell;
