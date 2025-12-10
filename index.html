@@ -783,8 +783,9 @@ input[type=range].custom-slider::-webkit-slider-thumb {
 
         <p><strong>Special Thanks:</strong> To all my friends who've play tested so far.</p>
         
-      </div>
-    </div>
+      </div> </div>   </div>     </div>       
+
+
 
 <!-- ====== SETTINGS (full-screen overlay) ====== -->
 <div id="settingsOverlay" class="fullOverlay" style="display:none;" aria-label="Settings">
@@ -2975,8 +2976,18 @@ if (title){
   // -- Actions --
   document.getElementById('btnTutorial')?.addEventListener('click', startTutorial);
   document.getElementById('btnClassic') ?.addEventListener('click', startClassic);
-  document.getElementById('btnSettings')?.addEventListener('click', ()=>openModal('#settingsOverlay'));
-  document.getElementById('btnCredits') ?.addEventListener('click', ()=>openModal('#creditsOverlay'));
+  // Fix: Force z-index higher than Main Menu (9999) so they are clickable
+  document.getElementById('btnSettings')?.addEventListener('click', ()=>{
+    const m = document.querySelector('#settingsOverlay');
+    if(m) m.style.zIndex = '10001'; 
+    openModal('#settingsOverlay');
+  });
+  
+  document.getElementById('btnCredits') ?.addEventListener('click', ()=>{
+    const m = document.querySelector('#creditsOverlay');
+    if(m) m.style.zIndex = '10001';
+    openModal('#creditsOverlay');
+  });
   
 // Leaderboard button in stats menu
   document.getElementById('btnShowLeaderboard')?.addEventListener('click', () => {
