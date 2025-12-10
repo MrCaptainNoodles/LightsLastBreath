@@ -4158,15 +4158,21 @@ if (
           if (dist(ex, ey, state.player.x, state.player.y) > 5 && !enemyAt(ex, ey) &&
               !isMerchantTile(ex,ey) && !isBlacksmithTile(ex,ey)) {
               
+              // Pick a random visual from existing sprites
+              const sprites = ['Rat', 'Bat', 'Spider', 'Goblin', 'Skeleton', 'Mage', 'Slime'];
+              const randomSprite = sprites[Math.floor(Math.random() * sprites.length)];
+
               const miniBoss = {
-                  type: 'Warlord', 
+                  type: randomSprite,     // Random visual base
+                  displayName: 'Warlord', // Custom Name override
                   x: ex, y: ey,
                   hp: 45 + (state.floor * 4), 
                   hpMax: 45 + (state.floor * 4),
                   atk: [8 + Math.floor(state.floor/3), 12 + Math.floor(state.floor/2)],
                   xp: 100, 
-                  miniBoss: true, // Flag for rewards
-                  size: 1
+                  miniBoss: true,         // Triggers Omen on death
+                  size: 1,
+                  tint: 'hue-rotate(-45deg) saturate(2)' // Reddish tint
               };
               state.enemies.push(miniBoss);
               log("A Warlord guards this floor...");
@@ -4673,7 +4679,7 @@ const pool=[
     {name:'Shortsword',min:3,max:5,type:'one'},
     {name:'Claymore',min:5,max:9,type:'two'},
     {name:'Spear',min:4,max:7,type:'spear'},
-    {name:'Axe',min:4,max:8,type:'axe'},
+    {name:'Axe',        min:4,max:8,type:'axe'},
     {name:'Knuckle Duster',min:3,max:5,type:'hand'},
     {name:'Key of Destiny',min:5,max:7,type:'one'},
     // New Melee
@@ -4687,17 +4693,13 @@ const pool=[
     {name:'Lightning Staff',min:2,max:4,type:'staff'},
     {name:'Wind Staff',min:2,max:4,type:'staff'},
     {name:'Earth Staff',min:2,max:4,type:'staff'},
-    // Shields
-    {name:'Buckler',min:1,max:2,type:'shield'},
-    {name:'Kite Shield',min:2,max:3,type:'shield'},
-    {name:'Tower Shield',min:3,max:4,type:'shield'},
-    {name:'Ancient Shield',min:2,max:4,type:'shield'}
+  // SHIELDS REMOVED FROM WEAPON POOL. They now spawn only via the 'shield' pickup kind.
   ];
   let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
 
   // --- NEW: Affix System (25% chance) ---
-  // MODIFIED: Exclude Key of Destiny from getting random affixes
-  if (choice.name !== 'Key of Destiny' && Math.random() < 0.25) {
+  // MODIFIED: Exclude Key of Destiny AND Shields from getting random affixes
+  if (choice.name !== 'Key of Destiny' && choice.type !== 'shield' && Math.random() < 0.25) {
     const roll = Math.random();
     
     // --- NEW: Cursed Weapons (5% chance within affix roll) ---
@@ -6862,7 +6864,18 @@ for (const e of state.enemies){
   }
 
   if (s === 1){
-    if (e.x === gx && e.y === gy) drawEnemyPixel(ctx, e, px, py, tile); 
+    if (e.x === gx && e.y === gy) {
+        drawEnemyPixel(ctx, e, px, py, tile); 
+        
+        // --- NEW: Warlord Label ---
+        if (e.miniBoss) {
+            ctx.fillStyle = '#ef4444';
+            ctx.font = 'bold 6px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("WARLORD", px + tile/2, py + tile - 2);
+        }
+        // --------------------------
+    }
   } else {
     if (gx === e.x && gy === e.y) bossesToDraw.push({ enemy: e, px, py }); // keep the whole enemy
   }
@@ -6917,31 +6930,45 @@ if (state.cleric) {
   const cx = (state.cleric.x - ox) * tile;
   const cy = (state.cleric.y - oy) * tile;
   if (state.seen.has(key(state.cleric.x, state.cleric.y))) {
-     // High Priestess Sprite
+     // High Priestess Sprite (Complex)
      const { R } = gridN(ctx, cx, cy, tile, 12);
-     const robe = '#f8fafc', gold = '#fbbf24', skin = '#ffe4c4';
-     const hoodShadow = '#94a3b8';
+     // Palette: White/Blue/Gold/Silver for high detail
+     const robeWhite = '#f8fafc';
+     const robeBlue = '#94a3b8';
+     const face = '#ffe4c4';
+     const gold = '#fbbf24';
+     const silver = '#d1d5db';
+     const shadow = '#0b141d';
+
+     // Hood and Head (Lots of layers)
+     R(3, 1, 6, 3, robeBlue);   // Hood base
+     R(4, 2, 4, 2, face);       // Face peeking
+     R(3, 2, 6, 1, shadow);     // Inner hood shadow
+     R(4, 3, 1, 1, shadow); R(7, 3, 1, 1, shadow); // Eyes
+
+     // Body and White Robe
+     R(2, 4, 8, 8, robeWhite);  // Main white robe base
+     R(3, 5, 6, 6, robeBlue);   // Inner blue layer for depth
+
+     // Vestment and Trim (Gold/Silver)
+     R(4, 4, 4, 1, gold);       // Top gold trim
+     R(5, 5, 2, 6, silver);     // Vertical silver vestment
+     R(4, 7, 4, 1, silver);     // Horizontal silver trim
      
-     // Robe Base
-     R(3,4, 6,8, robe); 
+     // Heavy Shadows (gives 3D effect)
+     R(2, 10, 1, 2, shadow); R(9, 10, 1, 2, shadow); // Feet/Bottom corners
+
+     // Staff (Silver Scepter with Gold Finial)
+     R(10, 1, 1, 11, silver);   // Silver staff shaft
+     R(10, 0, 1, 2, gold);      // Gold cap
      
-     // Gold Trim (Vertical Vestment)
-     R(4,4, 1,8, gold); R(7,4, 1,8, gold);
-     
-     // Head/Hood
-     R(3,1, 6,3, robe); // Hood shape
-     R(4,2, 4,2, skin); // Face
-     R(4,1, 4,1, hoodShadow); // Inner hood shadow
-     
-     // Staff
-     R(9,1, 1,11, '#d4d4d8'); // Silver staff
-     R(8,1, 3,1, gold);       // Top cross
-     R(9,2, 1,2, gold);       // Top head
-     
-     // Magic Aura
-     const tick = Math.floor(Date.now() / 300);
-     if (tick % 2 === 0) R(2,2, 1,1, '#fff'); // Sparkle left
-     else R(10,5, 1,1, '#fff'); // Sparkle right
+     // Magic Aura (Subtle, Pulsing)
+     ctx.save();
+     const tick = Math.floor(Date.now() / 200) % 2;
+     ctx.globalAlpha = 0.5;
+     if (tick === 0) R(1, 5, 1, 1, '#6ec5ff'); // Blue aura left
+     else R(1, 6, 1, 1, '#6ec5ff'); 
+     ctx.restore();
   }
 }
 // ----------------------------
@@ -7093,7 +7120,13 @@ function updateBars(){
   document.getElementById('hpText').textContent = state.player.hp + '/' + state.player.hpMax;
   document.getElementById('mpText').textContent = state.player.mp + '/' + state.player.mpMax;
   document.getElementById('hpFill').style.width = clamp((state.player.hp/state.player.hpMax)*100,0,100)+'%';
-  document.getElementById('mpFill').style.width = clamp((state.player.mp/state.player.mpMax)*100,0,100)+'%';
+  
+  // FIX: Handle division by zero/zero max MP (e.g., Paladin at start)
+  let mpFillPct = 0;
+  if (state.player.mpMax > 0) {
+    mpFillPct = clamp((state.player.mp / state.player.mpMax) * 100, 0, 100);
+  }
+  document.getElementById('mpFill').style.width = mpFillPct + '%';
   
   // --- NEW: Update Stamina Bar ---
   const stm = state.player.stamina || 0;
@@ -7207,8 +7240,14 @@ if (es){
   // Fix: Use the shield's own name property, defaulting to constant if missing
   const sName = sh ? (sh.name || SHIELD_NAME) : 'No Shield';
   
+  // Calculate correct max durability for display
+  let sMax = 20;
+  if (sName.includes('Buckler')) sMax = 15;
+  else if (sName.includes('Tower')) sMax = 35;
+  else if (sName.includes('Ancient')) sMax = 25;
+
   const shText = sh
-    ? `${sName} (Dur ${sh.dur}/${SHIELD_DUR})`
+    ? `${sName} (Dur ${sh.dur}/${sMax})`
     : 'No Shield';
   document.getElementById('equipShield').textContent = shText;
 }
@@ -7769,7 +7808,13 @@ function triggerGameOver(){
   
   state.run.ended = true;
   stopRunTimerFreeze(); 
-  if (typeof openScoreEntry === 'function') openScoreEntry();
+  // FIX: Instead of just calling openScoreEntry, we must hide the Game Over modal 
+  // and trigger the score flow, which is tied to the scoreModal being opened.
+  if (typeof openScoreEntry === 'function') {
+      // Hide the initial Game Over screen so the Score Entry can appear
+      m.style.display = 'none'; 
+      openScoreEntry(); 
+  }
 }
 
 
@@ -7969,15 +8014,25 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
              spawnFloatText(act.name.toUpperCase(), e.x, e.y, '#a78bfa');
              log(`The Shadow echoes your ${act.name}!`);
              
+             // Calculate trajectory so it stops at walls (max range 10)
+             const dx = Math.sign(state.player.x - e.x);
+             const dy = Math.sign(state.player.y - e.y);
+             const endPos = getProjectileEnd(e.x, e.y, dx, dy, 10);
+
              spawnProjectileEffect({
                 kind: 'magic', element: 'Shadow', color: '#a78bfa',
-                fromX: e.x, fromY: e.y, toX: state.player.x, toY: state.player.y,
+                fromX: e.x, fromY: e.y, toX: endPos.x, toY: endPos.y,
                 onDone: () => {
-                   const dmg = rand(3, 6);
-                   state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
-                   flashDamage();
-                   spawnFloatText(dmg, state.player.x, state.player.y, '#a78bfa');
-                   updateBars();
+                   // Only damage if it actually hit the player
+                   if (endPos.x === state.player.x && endPos.y === state.player.y) {
+                       const dmg = rand(3, 6);
+                       state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+                       flashDamage();
+                       spawnFloatText(dmg, state.player.x, state.player.y, '#a78bfa');
+                       updateBars();
+                   } else {
+                       spawnFloatText("Blocked", e.x, e.y, '#9ca3af');
+                   }
                 }
              });
              didMimic = true;
@@ -8819,55 +8874,52 @@ function tryMove(dx,dy){
       }
   }
 
+  // Set facing based on final direction (dx, dy)
+  if (dx>0) state.player.facing='right';
+  else if (dx<0) state.player.facing='left';
+  else if (dy>0) state.player.facing='down';
+  else if (dy<0) state.player.facing='up';
+
+  // --- NEW: Glacial Freeze (Slide) for non-Sprint ---
+  if (state.floorEffect === 'GlacialFreeze') {
+    // Current target is (nx, ny). We check one more tile ahead.
+    const slideX = nx + dx;
+    const slideY = ny + dy;
+    
+    // Check if the NEXT tile is walkable (1, 4, 5) AND not blocked by NPC/Enemy
+    const tNext = state.tiles[slideY]?.[slideX];
+    const validTile = (tNext === 1 || tNext === 4 || tNext === 5);
+    
+    if (tNext !== 4 && inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
+        !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
+        !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY)) {
+        
+        // Before sliding to (slideX, slideY), check the intermediate tile (nx, ny) for pickup
+        const kIntermediate = key(nx, ny);
+        if (state.pickups[kIntermediate]) {
+            // Temporarily update player position to collect the item
+            state.player.x = nx; state.player.y = ny; 
+            collectIfPickup(); // Pickup item
+            log('You grab an item as you slide!');
+        }
+
+        // Apply the slide: the player's new position is the slide destination
+        state.player.x = slideX;
+        state.player.y = slideY;
+        log('You slide on the ice!');
+        
+        // Skip the normal move assignment that follows
+        SFX.step();
+        collectIfPickup(); // Check for item at final slide destination
+        enemyStep(); draw();
+        return; // End of turn after slide
+    }
+  }
+  // -----------------------------------------------------
+
   state.player.x = nx; 
   state.player.y = ny;
   SFX.step();
-
-// --- NEW: Glacial Freeze (Slide) ---
-  if (state.floorEffect === 'GlacialFreeze') {
-    // 1. ADDED: Stair Traction. If we just stepped onto Stairs (4), do not slide.
-    if (t !== 4) {
-        // --- FIX: Check for Hallway/Intersection at the FIRST step (nx, ny) ---
-        // If the tile we just stepped on (nx, ny) allows movement perpendicular to our slide,
-        // we should STOP there to allow the player to turn.
-        const perp = (dx !== 0) ? [[0,1], [0,-1]] : [[1,0], [-1,0]];
-        let isIntersection = false;
-        for (const [px, py] of perp) {
-           const tx = nx + px, ty = ny + py;
-           // If a perpendicular neighbor is walkable, it's an intersection/hallway
-           if (state.tiles[ty]?.[tx] === 1 || state.tiles[ty]?.[tx] === 4 || state.tiles[ty]?.[tx] === 5) {
-              isIntersection = true;
-           }
-        }
-        // ----------------------------------------------------------------------
-
-        const slideX = nx + dx;
-        const slideY = ny + dy;
-        // Check if the NEXT tile is also walkable (Floor/Stairs/Pickup) and empty
-        const tNext = state.tiles[slideY]?.[slideX];
-        const validTile = (tNext === 1 || tNext === 4 || tNext === 5);
-        
-        // NPC/Enemy check for the slide tile
-        if (!isIntersection && inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
-            !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
-            !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY)) {
-            
-            // Check the intermediate tile (nx, ny) for pickup BEFORE sliding past it
-            const kIntermediate = key(nx, ny);
-            if (state.pickups[kIntermediate]) {
-                // Temporarily place player on intermediate to collect
-                state.player.x = nx; state.player.y = ny; 
-                collectIfPickup(); // Pickup item
-                log('You grab an item as you slide!');
-            }
-
-            state.player.x = slideX;
-            state.player.y = slideY;
-            log('You slide on the ice!');
-        }
-    }
-  }
-  // ----------------------------------
 
   // (leave the rest of your function as-is)
 
@@ -9815,8 +9867,9 @@ function equipWeaponByName(name){
   
   if (name.includes('Sharp '))       { baseName = baseName.replace('Sharp ', '');   bonMin+=1; bonMax+=1; }
   else if (name.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
-  else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); isVamp=true; }
-  else if (name.includes('Ancient ')) { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
+  else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); }
+  // Fix: Check that it isn't the specific item "Ancient Shield" before stripping
+  else if (name.includes('Ancient ') && name !== 'Ancient Shield') { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
   
   // Strip Curse info to find base stats
   if (name.includes('Cursed ')) {
@@ -10271,115 +10324,25 @@ handleSuccessfulHitDurabilityTick();
 
 
   if (target.hp<=0){
-        // Depth 50 two-phase hook (inserted)
-    if (state.floor === 50 && target.boss && target.type === 'Clone' && !(state.flags && state.flags.depth50Phase2)) {
-      // Fade out, delete clone during black, heal player, spawn Mad King, swap BGM
-      runDepth50Phase2(target);
-      return;
+    handleEnemyDeath(target, state.player.weapon.type);
+    
+    // Tutorial overrides (Keep these for tutorial flow)
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 6 && target.type === 'Rat' && !target.tutorialDummy){
+        state._tutStep6Started = true;
+        state.tutorialStep = 6;
+        hideBanner();
+        showBanner("You’re poisoned. Press 3 to use an antidote, then press 1 to drink a potion.", 999999);
     }
-    if (state.floor === 50 && target.boss && target.type === 'Mad King' && !(state.flags && state.flags.depth50Done)) {
-      // Final line, fade, stairs, cleanup
-      runDepth50Outro(target);
-      return;
+    if (state.gameMode === 'tutorial' && state._tutStep6Started && !state._tutArtTargetSpawned) {
+        state._tutArtTargetSpawned = true;
+        state.enemies.push({ x:18, y:15, type:'Rat', hp:1, atk:[1,2], xp:3, stunTicks:9999, tutorialDummy:true });
+        state.enemies.push({ x:19, y:15, type:'Rat', hp:1, atk:[1,2], xp:3, stunTicks:9999, tutorialDummy:true });
     }
-
-  // Skeletons reassemble once, weaker
-  if (target.type==='Skeleton' && !target._revived){
-    target._revived = true;
-    target.hp = Math.max(2,  Math.floor( (6) * 0.6 )); // simple weaker return
-    target.atk[0] = Math.max(0, target.atk[0]-1);
-    target.atk[1] = Math.max(target.atk[0], target.atk[1]-1);
-    log('The Skeleton pulls itself back together—weaker, but still moving!');
-    enemyStep(); draw();
+    
+    enemyStep();
+    draw();
     return;
   }
-
-  // Boss dies → stairs
-  if(target.boss){
-    state.tiles[target.y][target.x]=4;
-    SFX.bossDown();
-    log('A stairway appears where the boss fell!');
-
-    // Pick 1 of 2: boss reward
-    if (typeof offerPick2Choice === 'function'){
-      offerPick2Choice('boss');
-    }
-  }
-
-  // Goblin drops anything it stole — supports boss multi-steal
-if (target.stolenItems && target.stolenItems.length){
-  for (const it of target.stolenItems){
-    dropStolenNear(target.x, target.y, it);  // won't overwrite stairs
-  }
-  log('The stolen items scatter onto the floor!');
-} else if (target.stolen){
-  dropStolenNear(target.x, target.y, target.stolen); // won't overwrite stairs
-  log('The stolen item drops to the floor!');
-}
-
-
- // Award gold directly (no drop) for non-boss (50% chance)
-if (!target.boss && Math.random() < GOLD_DROP_CHANCE){
-  const g = goldFor(target);
-  state.inventory.gold = (state.inventory.gold|0) + g;
-  log(`You gain ${g} gold.`);
-  if (typeof updateInvBody === 'function') updateInvBody();
-}
-
-
-
-// --- NEW: Volatile Aether (Death Timer) ---
-  if (state.floorEffect === 'VolatileAether') {
-    if (!state.explosions) state.explosions = [];
-    state.explosions.push({ x: target.x, y: target.y, timer: 3 }); // Explodes in 3 turns
-    spawnFloatText("3...", target.x, target.y, '#f97316');
-  }
-  // ------------------------------------------
-
-// Remove enemy, award XP
-  state.enemies.splice(ti,1);
-  SFX.kill();                 // ← enemy down
-  unlockCodex(target.displayName || target.type, true);
-  log(`${target.type} falls.`);
-  state.run.kills++; 
-  awardKill(state.player.weapon.type, Math.max(1, target.xp|0));
-
-  // === Tutorial Step 6: teach antidote (3) then potion (1) ===
-  if (state.gameMode === 'tutorial' &&
-      state._tutGotWeapon &&
-      state._tutMeleeHit &&
-      !state._tutStep6Started &&
-      target.type === 'Rat' &&
-      !target.tutorialDummy){
-    state._tutStep6Started = true;
-    state._tutStep6UsedAntidote = false;
-    state._tutStep6UsedPotion = false;
-
-    state.tutorialStep = 6;
-
-    hideBanner();
-    showBanner("You’re poisoned. Press 3 to use an antidote, then press 1 to drink a potion.", 999999);
-  }
-  
-  // --- NEW: Tutorial Step 6.5 (Weapon Arts) ---
-  if (state.gameMode === 'tutorial' && state._tutStep6Started && !state._tutArtTargetSpawned) {
-    state._tutArtTargetSpawned = true;
-    
-    // Spawn 2 rats horizontally adjacent
-    // ADDED: stunTicks:9999 here as well
-    state.enemies.push({
-        x:18, y:15, type:'Rat', hp:1, atk:[1,2], xp:3, 
-        stunTicks:9999, tutorialDummy:true
-    });
-    state.enemies.push({
-        x:19, y:15, type:'Rat', hp:1, atk:[1,2], xp:3, 
-        stunTicks:9999, tutorialDummy:true
-    });
-    
-    // The banner will be updated by the potion logic when you drink it next.
-  }
-  // ---------------------------------------------
-}
 
 
   enemyStep();
@@ -10449,42 +10412,42 @@ function useWeaponArt(){
     return;
   }
 
-  // --- NEW: Stamina Check ---
-  const COST = 4;
-  if (state.player.stamina < COST) {
-    spawnFloatText("Need Stamina", state.player.x, state.player.y, '#9ca3af');
-    log(`Not enough Stamina for Weapon Art (${state.player.stamina}/${COST}).`);
-    return;
-  }
-  
-  // Deduct Stamina
-  state.player.stamina -= COST;
-  updateBars();
-  // --------------------------
-
   const w = state.player.weapon;
   const t = w.type;
+
+  // --- NEW: Stamina Check (Melee Only) ---
+  // Staffs use Mana (handled in their specific block), so they skip this cost.
+  if (t !== 'staff') {
+      const STAMINA_COST = 4;
+      if (state.player.stamina < STAMINA_COST) {
+        spawnFloatText("Need Stamina", state.player.x, state.player.y, '#9ca3af');
+        log(`Not enough Stamina for Weapon Art (${state.player.stamina}/${STAMINA_COST}).`);
+        return;
+      }
+      state.player.stamina -= STAMINA_COST;
+      updateBars();
+  }
+  // ---------------------------------------
+
   let acted = false;
 
- // 1. CLEAVE (Two-Handed / Axe): Hit all adjacent enemies (including diagonals)
-  if (t === 'two' || t === 'axe') {
+  // 1. CLEAVE (Two-Handed Only): Hit all adjacent enemies
+  if (t === 'two') {
     SFX.swingFor(t);
     let hitCount = 0;
-    const hitList = new Set(); // Prevent hitting the same 2x2 boss multiple times
+    const hitList = new Set(); 
 
     // Check 3x3 grid around player
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue; // skip self
+        if (dx === 0 && dy === 0) continue; 
         
         const tx = state.player.x + dx;
         const ty = state.player.y + dy;
         const e = enemyAt(tx, ty);
         
         if (e && !hitList.has(e)) {
-          hitList.add(e); // Mark enemy as hit for this swing
-          
-          // 120% Damage
+          hitList.add(e);
           const dmg = Math.floor(rand(w.min, w.max) * 1.2);
           e.hp -= dmg;
           spawnFloatText(dmg+"!", e.x, e.y, '#ffae00');
@@ -10494,15 +10457,12 @@ function useWeaponArt(){
              state.run.kills++;
              awardKill(t, e.xp);
              SFX.kill();
-             if (e.boss) spawnBossStairs(); // Ensure stairs spawn
-             
-             // --- NEW: Trigger Volatile Aether ---
+             if (e.boss) spawnBossStairs();
              if (state.floorEffect === 'VolatileAether') {
                 if (!state.explosions) state.explosions = [];
                 state.explosions.push({ x: e.x, y: e.y, timer: 3 }); 
                 spawnFloatText("3...", e.x, e.y, '#f97316');
              }
-             // ------------------------------------
           } else {
              flashEnemy(e, 'red');
           }
@@ -10511,12 +10471,89 @@ function useWeaponArt(){
       }
     }
 
-    if(hitCount > 0) { // <--- FIXED TYPO (was 'hit')
+    if(hitCount > 0) {
       log(`You Cleave around you, hitting ${hitCount} foes!`);
       acted = true;
       state.player.artCooldown = 15; 
     } else {
       log("No enemies to Cleave.");
+    }
+  }
+
+  // 1.5 HURL (Axe / Hafted): Throw weapon 5 tiles
+  else if (t === 'axe') {
+    const range = 5; // Fixed range
+    const dirs = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+    const [dx,dy] = dirs[state.player.facing || 'down'];
+    
+    // Target must be EXACTLY 5 tiles away
+    const tx = state.player.x + (dx * range);
+    const ty = state.player.y + (dy * range);
+    
+    const e = enemyAt(tx, ty);
+    
+    if (e) {
+        // Calculate Massive Damage (3x Base)
+        const dmg = rand(w.min, w.max) * 3;
+        e.hp -= dmg;
+        
+        // Visuals
+        SFX.swingFor('axe');
+        spawnFloatText(dmg + "!!", e.x, e.y, '#ff0000');
+        spawnParticles(e.x, e.y, '#ef4444', 8);
+        flashEnemy(e, 'red');
+        
+        log(`You HURL your ${w.name} at the ${e.type}!`);
+        
+        // Handle Kill
+        if(e.hp <= 0) { 
+            state.enemies=state.enemies.filter(x=>x!==e); 
+            state.run.kills++; 
+            awardKill(t, e.xp); 
+            SFX.kill(); 
+            if(e.boss) spawnBossStairs();
+        }
+
+        // DROP LOGIC
+        // Drop 1 tile in front of enemy (from player's perspective)
+        const dropX = tx - dx;
+        const dropY = ty - dy;
+        
+        if (inBounds(dropX, dropY) && state.tiles[dropY][dropX] === 1) {
+            const k = key(dropX, dropY);
+            // Create Pickup from current weapon data
+            state.pickups[k] = { kind: 'weapon', payload: { ...w } };
+            state.tiles[dropY][dropX] = 5; // Pickup tile
+            
+            // Remove from Inventory Count
+            if (state.inventory.weapons[w.name]) {
+                state.inventory.weapons[w.name]--;
+                if (state.inventory.weapons[w.name] <= 0) delete state.inventory.weapons[w.name];
+            }
+            
+            // Unequip (Switch to Fists)
+            state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
+            recomputeWeapon();
+            updateInvBody(); // Update inventory UI counts
+            log(`Your weapon drops to the floor.`);
+        } else {
+            log(`Your weapon shattered against the wall!`);
+            state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
+            recomputeWeapon();
+        }
+
+        acted = true;
+        state.player.artCooldown = 0; // No cooldown because you lost the weapon
+        
+        // Projectile Effect (Visual only)
+        spawnProjectileEffect({
+            kind: 'arrow', color: '#a3a3a3', // Metallic projectile
+            fromX: state.player.x, fromY: state.player.y, 
+            toX: tx, toY: ty
+        });
+
+    } else {
+        log("No enemy exactly 5 spaces away.");
     }
   }
   
@@ -10639,7 +10676,9 @@ function useWeaponArt(){
             
             e.hp -= dmg;
             spawnFloatText(dmg, e.x, e.y, '#a78bfa');
-            spawnParticles(e.x, e.y, '#a78bfa', 8);
+            // Bomb-style effects: Fire + Smoke
+            spawnParticles(e.x, e.y, '#f97316', 6); 
+            spawnParticles(e.x, e.y, '#4b5563', 4);
             
             if(e.hp <= 0) e._dead = true; 
             hitCount++;
@@ -10659,6 +10698,7 @@ function useWeaponArt(){
     else log("You release the energy, but no one is there.");
     
     acted = true;
+    unlockCodex('Art_Overload', true);
     state.player.artCooldown = 20; 
   }
 
@@ -10666,10 +10706,12 @@ function useWeaponArt(){
   if(acted) {
     // 1. Determine the Name of the Art based on the weapon type 't'
     let artName = '';
-    if (t === 'two' || t === 'axe') artName = 'Cleave';
+    if (t === 'two')                artName = 'Cleave';
+    else if (t === 'axe')           artName = 'Hurl'; // <--- NEW
     else if (t === 'spear')         artName = 'Pierce';
     else if (t === 'one')           artName = 'Backstab';
     else if (t === 'hand')          artName = 'Flurry';
+    else if (t === 'staff')         artName = 'Overload';
 
     // 2. Record the action so the Shadow can copy it
     state.lastPlayerAction = { type: 'art', name: artName }; 
@@ -12649,6 +12691,11 @@ if (btnHP){
     state.player.hp = clamp(before + gain, 0, state.player.hpMax);
 
     updateBars();
+    // Check if an Omen was waiting for us to level up
+    if (state._pendingOmen) {
+        delete state._pendingOmen;
+        window.offerPick2Choice('start'); 
+    }
     lvlupModal.style.display='none';
     state._inputLocked = false;
 
@@ -12670,6 +12717,11 @@ if (btnStam){
     state.player.stamina = state.player.staminaMax;
 
     updateBars();
+    // Check if an Omen was waiting for us to level up
+    if (state._pendingOmen) {
+        delete state._pendingOmen;
+        window.offerPick2Choice('start'); 
+    }
     lvlupModal.style.display='none';
     state._inputLocked = false;
 
@@ -12688,6 +12740,11 @@ if (btnMP){
     state.player.mp = clamp(before + gain, 0, state.player.mpMax);
 
     updateBars();
+    // Check if an Omen was waiting for us to level up
+    if (state._pendingOmen) {
+        delete state._pendingOmen;
+        window.offerPick2Choice('start'); 
+    }
     lvlupModal.style.display='none';
     state._inputLocked = false;
 
@@ -12786,18 +12843,6 @@ const PICK2_POOL = [
       state.player.hp = Math.min(state.player.hp, 10);
       updateBars?.();
       log('[Omen] You can run forever... if you survive.');
-    }
-  },
-  {
-    id: 'explorers_burden',
-    label: '+10 Lockpicks +10 Torches (Vision) / -5 Max Stamina',
-    apply(){
-      state.inventory.lockpicks += 10;
-      state.fovRadius = Math.min(10, (state.fovRadius||5) + 2);
-      state.player.staminaMax = Math.max(2, state.player.staminaMax - 5);
-      state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
-      updateBars?.(); updateInvBody?.();
-      log('[Omen] Prepared for everything... except the run.');
     }
   },
   // ===== originals =====
@@ -13436,6 +13481,9 @@ function choosePick2(idx){
   
   // Pass 'true' to increment the "Picked" count
   unlockCodex(cfg.id, true); 
+
+  // FIX: Force update the equipped weapon display immediately
+  if (typeof updateEquipUI === 'function') updateEquipUI(); 
 
   hidePick2Modal();
 }
@@ -14384,7 +14432,10 @@ function doRestart(className){
   } else if (className === 'Paladin') {
     state.player.hpMax += 25; state.player.hp = state.player.hpMax;
     state.player.staminaMax += 10; state.player.stamina = state.player.staminaMax;
-    state.player.mpMax = Math.max(0, state.player.mpMax - 10); state.player.mp = state.player.mpMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 10); 
+    state.player.mp = state.player.mpMax;
+    // FIX: If MP max dropped to 0, reset current MP to 0 (important for Paladin)
+    if (state.player.mpMax <= 0) state.player.mp = 0;
   } else if (className === 'Legionary') {
     state.player.hpMax += 10; state.player.hp = state.player.hpMax;
     state.player.staminaMax = Math.max(0, state.player.staminaMax - 5); state.player.stamina = state.player.staminaMax;
@@ -14683,7 +14734,13 @@ if (playAgain) playAgain.addEventListener('click', ()=>{
 document.addEventListener('click', (ev)=>{
   if(ev.target && ev.target.id==='btnRestart'){ 
     document.getElementById('gameOverModal').style.display = 'none';
-    goMenu(); 
+    // FIX: Go to score entry instead of menu to save run data
+    if (typeof openScoreEntry === 'function') {
+       openScoreEntry(); 
+    } else {
+       // Fallback
+       goMenu();
+    }
   }
 });
 
@@ -14960,7 +15017,86 @@ function getProjectileEnd(x, y, dx, dy, range) {
   }
   return { x: cx, y: cy };
 }
+
+function handleEnemyDeath(e, source) {
+  // 1. Depth 50 Transitions (Classic/Endless) - Stop death if cutscene starts
+  if (state.floor === 50 && e.boss) {
+      if (e.type === 'Clone' && !state.flags.depth50Phase2) {
+          runDepth50Phase2(e); return;
+      }
+      if (e.type === 'Mad King' && !state.flags.depth50Done) {
+          runDepth50Outro(e); return;
+      }
+  }
+
+  // 2. Skeleton Revive (One time only)
+  // Warlords (miniBoss) should NOT revive to prevent annoyance
+  if (e.type === 'Skeleton' && !e._revived && !e.miniBoss) { 
+      e._revived = true;
+      e.hp = Math.max(2, Math.floor((e.hpMax || 7) * 0.6));
+      if(e.atk) { e.atk[0] = Math.max(0, e.atk[0]-1); }
+      log('The Skeleton pulls itself back together!');
+      return; 
+  }
+
+  // 3. Volatile Aether (Explosions)
+  if (state.floorEffect === 'VolatileAether') {
+      if (!state.explosions) state.explosions = [];
+      state.explosions.push({ x: e.x, y: e.y, timer: 3 });
+      spawnFloatText("3...", e.x, e.y, '#f97316');
+  }
+
+  // 4. Boss Logic (Stairs + Omen)
+  if (e.boss) {
+      spawnBossStairs(); // Checks internally if already spawned
+      if (typeof offerPick2Choice === 'function') offerPick2Choice('boss');
+  }
+
+  // 5. Mini-Boss Logic (Warlord Omen)
+  if (e.miniBoss && state.gameMode === 'endless') {
+      log("The Warlord falls! A dark power calls to you...");
+      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+      
+      // If the player leveled up on this kill, the Level Up modal is open.
+      // We defer the Omen choice until the player closes the Level Up menu.
+      const hasLeveled = (state.player.xp - e.xp) <= 0; // Check if XP crossed threshold
+      
+      if (hasLeveled) {
+          // Store Omen as pending
+          state._pendingOmen = true;
+          log("Omen deferred until Level Up is chosen.");
+      } else {
+          // Open Omen normally
+          setTimeout(() => { triggerOmenChoice(); }, 800);
+      }
+  }
+
+  // 6. Loot Drops (Stolen items, Gold)
+  if (e.stolenItems || e.stolen) {
+      if (e.stolenItems) e.stolenItems.forEach(it => dropStolenNear(e.x, e.y, it));
+      else dropStolenNear(e.x, e.y, e.stolen);
+      log('Stolen items scatter on the floor!');
+  }
+  
+  // GOLD DROP LOGIC REMOVED per user request. Gold must now be picked up from the floor.
+
+  // 7. Cleanup & Stats
+  state.enemies = state.enemies.filter(x => x !== e);
+  state.run.kills++;
+  awardKill(source, Math.max(1, e.xp|0));
+  SFX.kill();
+  unlockCodex(e.displayName || e.type, true);
+  log(`${e.displayName || e.type} falls.`);
+}
+
 function useStaff(w) {
+    // --- FIX: Anti-Magic Field Block ---
+    if (state.floorEffect === 'AntiMagic') {
+        log('A field of silence prevents the staff from firing!');
+        return;
+    }
+    // -----------------------------------
+
     // 1. Determine Match Synergy
     const s = state.equippedSpell;
     let isMatch = false;
@@ -14980,7 +15116,6 @@ function useStaff(w) {
     }
 
     // 2. Calculate Costs & Stats based on match
-    // If match: use Spell Cost. If no match: use Default Staff Cost (2).
     const cost = isMatch ? (spellStats.cost|0) : 2;
     
     if (state.player.mp < cost) {
@@ -14988,7 +15123,10 @@ function useStaff(w) {
         const t = getFacingEnemy(); 
         if(t){
            t.hp -= 1; spawnFloatText("1", t.x, t.y, '#fff');
-           // FIX: Award 'magic' XP for bashing too
+           
+           // Bashing still uses durability logic if you want, but usually it's just a fallback.
+           // We will leave durability for the main projectile attack for now.
+           
            if(t.hp<=0) { state.enemies=state.enemies.filter(x=>x!==t); state.run.kills++; awardKill('magic', t.xp); SFX.kill(); }
         } else log("You swing at the air.");
         enemyStep(); draw(); return;
@@ -15013,14 +15151,12 @@ function useStaff(w) {
     const dirs = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
     const [dx,dy] = dirs[state.player.facing||'down'];
     
-    // FIX: Calculate actual end point so we don't shoot through doors
+    // Calculate actual end point so we don't shoot through doors
     const endPos = getProjectileEnd(state.player.x, state.player.y, dx, dy, range);
-    
-    // If target exists, aim at it. Otherwise aim at the wall/air.
     const tx = t ? t.x : endPos.x;
     const ty = t ? t.y : endPos.y;
 
-    // Safety: If the calculated end point is literally the player's tile (facing a wall), stop.
+    // Safety: Wall Block
     if (tx === state.player.x && ty === state.player.y) {
        log("Blocked.");
        state.player.mp += cost; // Refund mana
@@ -15044,25 +15180,31 @@ function useStaff(w) {
                     dmg = rand(w.min, w.max) + skillBonus;
                 }
 
+                // --- FIX: Arcane Flux Boost ---
+                if (state.floorEffect === 'ArcaneFlux') {
+                    dmg = Math.ceil(dmg * 1.5);
+                }
+                // ------------------------------
+
                 t.hp = Math.max(0, t.hp - dmg);
                 spawnFloatText(dmg, t.x, t.y, color);
                 checkMiniBossReward(t); 
                 
-                // --- FIX: Vampiric Staff Logic ---
+                // Vampiric Logic
                 if (w.vampiric && dmg > 0) {
                    const heal = Math.max(1, Math.floor(dmg * 0.25));
                    state.player.hp = Math.min(state.player.hp + heal, state.player.hpMax);
                    spawnFloatText("+" + heal, state.player.x, state.player.y, '#0f0');
                    updateBars();
                 }
-                // ---------------------------------
+
+                // --- FIX: Apply Durability Loss ---
+                handleSuccessfulHitDurabilityTick();
+                // ----------------------------------
 
                 if(t.hp<=0) {
-                    state.enemies=state.enemies.filter(x=>x!==t); 
-                    state.run.kills++; 
-                    // FIX: Always award Magic XP
-                    awardKill('magic', t.xp); 
-                    SFX.kill();
+                    // Use new central handler
+                    handleEnemyDeath(t, 'magic');
                 }
             }
             enemyStep(); draw();
@@ -15861,9 +16003,11 @@ Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Ma
 
   // --- NEW: Weapon Arts ---
   Art_Cleave:   { name:'Art: Cleave',   desc:'(Axe/2H) A circular swing that hits all adjacent foes.', seen:false, activated:0 },
+  Art_Hurl:     { name:'Art: Hurl',     desc:'(Axe) Throws weapon 5 tiles for 3x damage. Must be retrieved.', seen:false, activated:0 }, // <--- ADD THIS
   Art_Pierce:   { name:'Art: Pierce',   desc:'(Spear) Strikes two tiles in a straight line.', seen:false, activated:0 },
   Art_Backstab: { name:'Art: Backstab', desc:'(Sword) Teleports behind a foe for a critical strike.', seen:false, activated:0 },
   Art_Flurry:   { name:'Art: Flurry',   desc:'(Fists) Unleashes three rapid strikes.', seen:false, activated:0 },
+  Art_Overload: { name:'Art: Overload', desc:'(Staff) Unleashes a massive wave of raw magic.', seen:false, activated:0 },
 };
 if (typeof PICK2_POOL !== 'undefined') {
   PICK2_POOL.forEach(p => {
@@ -15950,7 +16094,7 @@ function renderCodexUI(){
     { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map','Cleric_Bless'] },
     
     // 1. ADDED: Weapon Arts Category
-    { title: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Pierce', 'Art_Backstab', 'Art_Flurry'] },
+    { title: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Hurl','Art_Pierce', 'Art_Backstab', 'Art_Flurry', 'Art_Overload'] },
 
     { title: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
     { title: 'Active Curses', keys: ['Curse_Blood', 'Curse_Greed', 'Curse_Rust', 'Curse_Frailty'] },
