@@ -760,12 +760,31 @@ input[type=range].custom-slider::-webkit-slider-thumb {
       <div class="creditsTitle">Credits</div>
       <div class="creditsBody">
         <p><strong>Game Design &amp; Code:</strong> Captain Noodles</p>
-        <p><strong>Special Thanks:</strong> To All my friends who've play tested so far.</p>
+        
+        <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 15px 0;">
+
+        <div style="font-size:20px; font-weight:800; margin-bottom:8px; color:#f9d65c;">Voice Cast</div>
+        <p><strong>Merchant:</strong> [Name Here]</p>
+        <p><strong>Blacksmith:</strong> [Name Here]</p>
+        <p><strong>Jester:</strong> Jolly</p>
+        <p><strong>Cartographer:</strong> DJ Jam</p>
+        <p><strong>Cleric:</strong> [Name Here]</p>
+        <p><strong>The Mad King:</strong> [Name Here]</p>
+        <p><strong>Shadow:</strong> [Name Here]</p>
+
+        <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 15px 0;">
+
+        <div style="font-size:20px; font-weight:800; margin-bottom:8px; color:#f9d65c;">Concept Contributors</div>
+        <p><strong>[Friend Name]:</strong> Idea for the [Class Name]</p>
+        <p><strong>[Friend Name]:</strong> Idea for the [Weapon/Item]</p>
+        <p><strong>[Friend Name]:</strong> Suggestions for [Feature]</p>
+
+        <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 15px 0;">
+
+        <p><strong>Special Thanks:</strong> To all my friends who've play tested so far.</p>
         
       </div>
     </div>
-  </div>
-</div>
 
 <!-- ====== SETTINGS (full-screen overlay) ====== -->
 <div id="settingsOverlay" class="fullOverlay" style="display:none;" aria-label="Settings">
@@ -6035,7 +6054,10 @@ if (kind === 'key'){ // big horizontal key
 
 
 // inside drawPickupPixel(ctx, item, px, py, tile) ...
-if (kind === 'shield'){ // round wood shield using full 12×12 grid
+// Catch generic shields OR weapons that are actually shields
+const isShieldWeapon = (kind === 'weapon' && (item.payload?.type === 'shield' || (item.payload?.name && getWeaponType(item.payload.name) === 'shield')));
+
+if (kind === 'shield' || isShieldWeapon){ // round wood shield using full 12×12 grid
   const rim = '#bd9245', wood = '#8a5a2e', edge = '#0b141d';
   const boss = '#c7ced9', hl = '#eef3ff';
 
