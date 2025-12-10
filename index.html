@@ -760,7 +760,7 @@ input[type=range].custom-slider::-webkit-slider-thumb {
       <div class="creditsTitle">Credits</div>
       <div class="creditsBody">
         <p><strong>Game Design &amp; Code:</strong> Captain Noodles</p>
-        
+        <p><strong>Music:</strong> J.D. Quanvie</p>
         <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 15px 0;">
 
         <div style="font-size:20px; font-weight:800; margin-bottom:8px; color:#f9d65c;">Voice Cast</div>
@@ -775,9 +775,10 @@ input[type=range].custom-slider::-webkit-slider-thumb {
         <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 15px 0;">
 
         <div style="font-size:20px; font-weight:800; margin-bottom:8px; color:#f9d65c;">Concept Contributors</div>
-        <p><strong>[Friend Name]:</strong> Idea for the [Class Name]</p>
-        <p><strong>[Friend Name]:</strong> Idea for the [Weapon/Item]</p>
-        <p><strong>[Friend Name]:</strong> Suggestions for [Feature]</p>
+        <p><strong>Mike Estelle:</strong> Suggestion for the shields & individual sprites for the differnt weapon types</p>
+        <p><strong>Jeff McDonald:</strong> Suggestion for the duplicate spell scrolls increasing magic XP</p>
+        <p><strong>J.D. Quanvie:</strong> Suggestion for the hotkey system & stats recovered from descending the floors. </p>
+        <p><strong>Andrew Martini:</strong> Suggestion for M for monkey. </p>
 
         <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 15px 0;">
 
@@ -2689,14 +2690,30 @@ function playTitleBgm(){
   ensureBgmNodes();
   setBgmUrl(TITLE_BGM_URL);     // load title track
   attachBgmNodeIfNeeded();      // connect to WebAudio
-  if (bgmAudio){ bgmAudio.muted = false; bgmAudio.play()?.catch(()=>{}); }
+  if (bgmAudio){ 
+    // FIX: Manually apply volume to the raw element.
+    // This handles the "Suspended" state (refresh) where WebAudio sliders aren't active yet.
+    // Formula: Master * Music * Base(0.35)
+    const safeVol = (_volMaster * _volMusic * 0.35);
+    bgmAudio.volume = Math.max(0, Math.min(1, safeVol));
+    
+    bgmAudio.muted = false; 
+    bgmAudio.play()?.catch(()=>{}); 
+  }
 }
 
 function playMenuBgm(){
   ensureBgmNodes();
   setBgmUrl(MENU_BGM_URL);      // load menu track
   attachBgmNodeIfNeeded();
-  if (bgmAudio){ bgmAudio.muted = false; bgmAudio.play()?.catch(()=>{}); }
+  if (bgmAudio){ 
+    // FIX: Manually apply volume to the raw element to prevent blasting on refresh/suspend.
+    const safeVol = (_volMaster * _volMusic * 0.35);
+    bgmAudio.volume = Math.max(0, Math.min(1, safeVol));
+
+    bgmAudio.muted = false; 
+    bgmAudio.play()?.catch(()=>{}); 
+  }
 }
 
 function playGameBgm(url){
@@ -2978,6 +2995,24 @@ if (title){
   document.getElementById('btnClassic') ?.addEventListener('click', startClassic);
   // Fix: Force z-index higher than Main Menu (9999) so they are clickable
   document.getElementById('btnSettings')?.addEventListener('click', ()=>{
+    // FIX: Wake up audio engine and wire up the music so sliders work immediately
+    try {
+      if (typeof initAudio === 'function') initAudio();
+      
+      const doWire = () => {
+        // Connect the "naked" audio element to the volume controls
+        if (typeof attachBgmNodeIfNeeded === 'function') attachBgmNodeIfNeeded();
+        // Force the current slider values to apply instantly
+        if (typeof applyGroupVolumes === 'function') applyGroupVolumes();
+      };
+
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().then(doWire).catch(()=>{});
+      } else {
+        doWire();
+      }
+    } catch(e) { console.warn(e); }
+
     const m = document.querySelector('#settingsOverlay');
     if(m) m.style.zIndex = '10001'; 
     openModal('#settingsOverlay');
@@ -14644,6 +14679,14 @@ document.addEventListener('DOMContentLoaded', ()=>{   // <-- ensure elements exi
     const ent= document.getElementById('scoreEntry');
     const lst= document.getElementById('hiscoreList');
     const playAgain = document.getElementById('btnPlayAgain');
+    // NEW: Grab the header menu button
+    const headerMenu = document.getElementById('btnScoreMenu');
+
+    // NEW: Wire header menu button to go back safely
+    if (headerMenu) headerMenu.addEventListener('click', () => {
+      document.getElementById('scoreModal').style.display = 'none';
+      if (typeof goMenu === 'function') goMenu();
+    });
 
     if (btnSave) btnSave.addEventListener('click', ()=>{
       // If entry is visible, allow save regardless of run.ended being set.
@@ -15356,9 +15399,11 @@ function getFacingEnemy(){
 <!-- Game Over Modal -->
 <div class="modal" id="gameOverModal">
   <div class="sheet">
-    <div class="row"><div class="title">Game Over</div></div>
-    <p style="margin:6px 0 12px 0">You have fallen. Tap Restart to try again.</p>
-    <div class="row" style="justify-content:flex-end; gap:8px">
+    <div class="title" style="text-align:center; font-weight:800; font-size:20px; margin-bottom:10px;">
+        Game Over
+    </div>
+    <p style="margin:6px 0 12px 0; text-align:center;">You have fallen. Tap Restart to try again.</p>
+    <div class="row" style="justify-content:center; gap:8px; margin-top:12px;">
       <button class="btn" id="btnRestart">Restart</button>
     </div>
   </div>
@@ -15401,7 +15446,7 @@ function getFacingEnemy(){
 <div class="modal" id="scoreModal" style="display:none">
   <div class="sheet">
     <div class="row"><div class="title">New High Score</div>
-      <button class="btn" data-close="#scoreModal">Close</button>
+      <button class="btn" id="btnScoreMenu">Menu</button>
     </div>
 
     <div id="scoreEntry" style="margin:8px 0 12px">
@@ -15415,10 +15460,8 @@ function getFacingEnemy(){
     <div id="hiscoreList" style="display:none">
       <div style="font-weight:800;margin-bottom:6px">Top 10 Runs</div>
       <div id="hiscoreTable" style="display:grid; grid-template-columns:140px 1fr 1fr 1fr 1fr; gap:8px 18px"></div>
-      <div class="row" style="justify-content:flex-end; gap:8px; margin-top:12px">
-        <button class="btn" id="btnPlayAgain">Play Again</button>
+      
       </div>
-    </div>
   </div>
 </div>
 
