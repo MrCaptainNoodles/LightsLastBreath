@@ -8917,37 +8917,39 @@ function tryMove(dx,dy){
 
   // --- NEW: Glacial Freeze (Slide) for non-Sprint ---
   if (state.floorEffect === 'GlacialFreeze') {
-    // Current target is (nx, ny). We check one more tile ahead.
-    const slideX = nx + dx;
-    const slideY = ny + dy;
-    
-    // Check if the NEXT tile is walkable (1, 4, 5) AND not blocked by NPC/Enemy
-    const tNext = state.tiles[slideY]?.[slideX];
-    const validTile = (tNext === 1 || tNext === 4 || tNext === 5);
-    
-    if (tNext !== 4 && inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
-        !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
-        !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY)) {
-        
-        // Before sliding to (slideX, slideY), check the intermediate tile (nx, ny) for pickup
-        const kIntermediate = key(nx, ny);
-        if (state.pickups[kIntermediate]) {
-            // Temporarily update player position to collect the item
-            state.player.x = nx; state.player.y = ny; 
-            collectIfPickup(); // Pickup item
-            log('You grab an item as you slide!');
-        }
+    // 1. CRITICAL: If the tile we just stepped onto (nx, ny) is STAIRS, STOP!
+    if (state.tiles[ny][nx] !== 4) {
 
-        // Apply the slide: the player's new position is the slide destination
-        state.player.x = slideX;
-        state.player.y = slideY;
-        log('You slide on the ice!');
+        // Current target is (nx, ny). We check one more tile ahead.
+        const slideX = nx + dx;
+        const slideY = ny + dy;
         
-        // Skip the normal move assignment that follows
-        SFX.step();
-        collectIfPickup(); // Check for item at final slide destination
-        enemyStep(); draw();
-        return; // End of turn after slide
+        // Check if the NEXT tile is walkable (1, 4, 5) AND not blocked by NPC/Enemy
+        const tNext = state.tiles[slideY]?.[slideX];
+        const validTile = (tNext === 1 || tNext === 4 || tNext === 5);
+        
+        if (inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
+            !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
+            !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY) &&
+            !isClericTile(slideX,slideY)) { // Added Cleric safety
+            
+            // Before sliding to (slideX, slideY), check the intermediate tile (nx, ny) for pickup
+            const kIntermediate = key(nx, ny);
+            if (state.pickups[kIntermediate]) {
+                state.player.x = nx; state.player.y = ny; 
+                collectIfPickup(); 
+                log('You grab an item as you slide!');
+            }
+
+            state.player.x = slideX;
+            state.player.y = slideY;
+            log('You slide on the ice!');
+            
+            SFX.step();
+            collectIfPickup(); 
+            enemyStep(); draw();
+            return; 
+        }
     }
   }
   // -----------------------------------------------------
@@ -13757,55 +13759,67 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
 // SPRINT CHECK: Holding Shift?
     if (e.shiftKey) {
       if (state.player.stamina >= 3) {
-         // Attempt to move 2 tiles
          const x1 = state.player.x + dx;
-         // ... (rest of existing sprint logic inside this block) ...
          const y1 = state.player.y + dy;
-         const x2 = x1 + dx;
-         const y2 = y1 + dy;
          
-         if (isPassableForPlayer(x1,y1) && isPassableForPlayer(x2,y2)) {
-            state.player.stamina -= 3;
-            
-            // --- NEW: Glacial Slide (Extra Step) ---
-            if (state.floorEffect === 'GlacialFreeze') {
-               const x3 = x2 + dx, y3 = y2 + dy;
-               if (isPassableForPlayer(x3, y3)) {
-                  // Extend movement to 3rd tile without extra stamina cost
-                  x2 = x3; y2 = y3; // Update target
-                  spawnFloatText("Slide!", state.player.x, state.player.y, '#6ec5ff');
-               }
-            }
-            // ---------------------------------------
+         // 1. Check first tile
+         if (isPassableForPlayer(x1,y1)) {
+             let finalX = x1, finalY = y1;
+             let stopNow = (state.tiles[y1][x1] === 4); // STOP if x1 is stairs
 
-            // --- TUTORIAL: Step 2 -> 3 (Sprint) ---
-            if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
-               state.tutorialStep = 3;
-               hideBanner();
-               showBanner("Step 3: Break the Crate! Walk up to it and press SPACE. Be careful this consumes stamina", 999999);
-            }
+             // 2. If x1 is NOT stairs, try moving to x2
+             if (!stopNow) {
+                 const x2 = x1 + dx, y2 = y1 + dy;
+                 if (isPassableForPlayer(x2,y2)) {
+                     finalX = x2; finalY = y2;
+                     stopNow = (state.tiles[y2][x2] === 4); // STOP if x2 is stairs
+                     
+                     // 3. Glacial Freeze: If x2 is valid & NOT stairs, try x3 (Slide)
+                     if (!stopNow && state.floorEffect === 'GlacialFreeze') {
+                         const x3 = x2 + dx, y3 = y2 + dy;
+                         if (isPassableForPlayer(x3, y3)) {
+                             finalX = x3; finalY = y3;
+                             // Removed duplicate spawnFloatText here
+                         }
+                     }
+                 }
+             }
 
-            updateBars(); // Update UI immediately
-            
-            // Prevent stamina regen this turn
-            state._skipStaminaRegen = true; 
+             // If we calculated a valid sprint target (at least 2 steps, OR 1 step onto stairs)
+             const dist = Math.abs(finalX - state.player.x) + Math.abs(finalY - state.player.y);
+             if (dist >= 2 || (dist === 1 && stopNow)) {
+                 state.player.stamina -= 3;
+                 
+                 // --- TUTORIAL: Step 2 -> 3 (Sprint) ---
+                 if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
+                    state.tutorialStep = 3;
+                    hideBanner();
+                    showBanner("Step 3: Break the Crate! Walk up to it and press SPACE. Be careful this consumes stamina", 999999);
+                 }
 
-            spawnFloatText("Sprint", state.player.x, state.player.y, '#4ade80');
-            // ... (facing/move logic) ...
-            if (dx>0) state.player.facing='right'; else if (dx<0) state.player.facing='left';
-            else if (dy>0) state.player.facing='down'; else if (dy<0) state.player.facing='up';
-            
-            state.player.x = x2; state.player.y = y2;
-            SFX.step(); 
-            collectIfPickup();
-            enemyStep(); 
-            draw();
-            return; 
+                 updateBars();
+                 state._skipStaminaRegen = true; 
+                 
+                 // FIX: Show "Slide!" if we moved 3 tiles, otherwise "Sprint"
+                 if (dist >= 3) {
+                    spawnFloatText("Slide!", state.player.x, state.player.y, '#6ec5ff');
+                 } else {
+                    spawnFloatText("Sprint", state.player.x, state.player.y, '#4ade80');
+                 }
+                 
+                 if (dx>0) state.player.facing='right'; else if (dx<0) state.player.facing='left';
+                 else if (dy>0) state.player.facing='down'; else if (dy<0) state.player.facing='up';
+                 
+                 state.player.x = finalX; state.player.y = finalY;
+                 SFX.step(); 
+                 collectIfPickup();
+                 enemyStep(); 
+                 draw();
+                 return; // Handled
+             }
          }
       } else {
-         // --- NEW: Not enough Stamina feedback ---
          spawnFloatText("No Stamina", state.player.x, state.player.y, '#9ca3af');
-         // We let the code fall through to tryMove() below so you still walk
       }
     }
   
