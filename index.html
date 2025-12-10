@@ -1211,6 +1211,7 @@ input[type=range].custom-slider::-webkit-slider-thumb {
   <button class="btn" id="dbgUnlockEndless">Unlock Endless</button>
 <button class="btn" id="dbgGiveBomb">Give 5 Bombs</button>
   <button class="btn" id="dbgGiveWarp">Give 1 Warp Stone</button>
+  <button class="btn" id="dbgGiveGold">Give 500 Gold</button>
  <button class="btn" id="dbgGiveKeyBlade">Give Key of Destiny</button>
   <button class="btn" id="dbgUnlockClasses">Unlock All Classes</button>
   <button class="btn" id="dbgSpawnKey">Spawn Key Below</button>
@@ -4099,9 +4100,38 @@ if (
 
 
   // keep cap in sync
-state.enemyCap = state.enemies.length;
+// --- NEW: Mini-Boss Spawn (Floors 5, 15, 25... in Endless) ---
+  if (state.gameMode === 'endless' && state.floor % 5 === 0 && state.floor % 10 !== 0) {
+      // Try 50 times to find a valid room center
+      for(let i=0; i<50; i++) {
+          const r = state.rooms[rand(0, state.rooms.length-1)];
+          const ex = Math.floor(r.x + r.w/2);
+          const ey = Math.floor(r.y + r.h/2);
+          
+          // Don't spawn on top of player, existing enemy, or NPCs
+          if (dist(ex, ey, state.player.x, state.player.y) > 5 && !enemyAt(ex, ey) &&
+              !isMerchantTile(ex,ey) && !isBlacksmithTile(ex,ey)) {
+              
+              const miniBoss = {
+                  type: 'Warlord', 
+                  x: ex, y: ey,
+                  hp: 45 + (state.floor * 4), 
+                  hpMax: 45 + (state.floor * 4),
+                  atk: [8 + Math.floor(state.floor/3), 12 + Math.floor(state.floor/2)],
+                  xp: 100, 
+                  miniBoss: true, // Flag for rewards
+                  size: 1
+              };
+              state.enemies.push(miniBoss);
+              log("A Warlord guards this floor...");
+              break; 
+          }
+      }
+  }
 
-// --- NEW: Scenery / Props Generation ---
+  state.enemyCap = state.enemies.length;
+
+  // --- NEW: Scenery / Props Generation ---
 // Add 8-15 random flavor objects (passable) per floor
 // --- NEW: Scenery / Props Generation ---
 let propCount = rand(8, 15);
@@ -4592,8 +4622,24 @@ const pool=[
     {name:'Claymore',min:5,max:9,type:'two'},
     {name:'Spear',min:4,max:7,type:'spear'},
     {name:'Axe',min:4,max:8,type:'axe'},
-    {name:'Knuckle Duster',min:3,max:5,type:'hand'}, // Buffed
-    {name:'Key of Destiny',min:5,max:7,type:'one'} // <--- NEW
+    {name:'Knuckle Duster',min:3,max:5,type:'hand'},
+    {name:'Key of Destiny',min:5,max:7,type:'one'},
+    // New Melee
+    {name:'Warhammer',min:6,max:10,type:'two'},
+    {name:'Battleaxe',min:5,max:10,type:'axe'},
+    {name:'Halberd',min:5,max:9,type:'spear'},
+    {name:'Claws',min:4,max:6,type:'hand'},
+    // Staffs
+    {name:'Fire Staff',min:2,max:4,type:'staff'},
+    {name:'Ice Staff',min:2,max:4,type:'staff'},
+    {name:'Lightning Staff',min:2,max:4,type:'staff'},
+    {name:'Wind Staff',min:2,max:4,type:'staff'},
+    {name:'Earth Staff',min:2,max:4,type:'staff'},
+    // Shields
+    {name:'Buckler',min:1,max:2,type:'shield'},
+    {name:'Kite Shield',min:2,max:3,type:'shield'},
+    {name:'Tower Shield',min:3,max:4,type:'shield'},
+    {name:'Ancient Shield',min:2,max:4,type:'shield'}
   ];
   let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
 
@@ -4608,9 +4654,15 @@ const pool=[
       const type = cTypes[Math.floor(Math.random() * cTypes.length)];
       const niceType = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize
 
-      choice.name = 'Cursed ' + niceType + ' ' + choice.name; // e.g., "Cursed Blood Shortsword"
-      choice.min += 4; 
-      choice.max += 5; 
+      choice.name = 'Cursed ' + niceType + ' ' + choice.name; 
+      
+      // Scale bonus based on weapon type
+      let bonus = 4; // Standard
+      if (choice.type === 'two' || choice.type === 'axe') bonus = 6; // Heavy
+      if (choice.type === 'staff' || choice.type === 'hand' || choice.type === 'shield') bonus = 3; // Light
+
+      choice.min += bonus; 
+      choice.max += (bonus + 1); 
       choice.cursed = true;
       choice.curseType = type;
       
@@ -4819,7 +4871,15 @@ function damageAfterDR(raw){
 
   let usedShield = false;
   const sh = state.player?.shield;
-  if (sh && sh.dur > 0){ dr += SHIELD_DR; usedShield = true; }
+  if (sh && sh.dur > 0){ 
+      // Use specific block chance (Buckler 15%, Tower 35%, etc)
+      const chance = state.player.blockChance || 0.20; 
+      if (Math.random() < chance) {
+          dr += SHIELD_DR; 
+          usedShield = true;
+          log(`Blocked with ${state.player.shieldName}!`);
+      }
+  }
 
   // Cleric Blessing: +20% Damage Reduction
   if (state.player.blessTicks > 0) { dr += 0.20; }
@@ -4939,7 +4999,11 @@ function recomputeWeapon(){
   const w = state.player.weapon;
   if (!w || !w.base) return;
 
-  const flat = state.globalWeaponFlatBonus || 0;
+  // --- FIX: Staffs do not benefit from generic physical ATK omens ---
+  let flat = state.globalWeaponFlatBonus || 0;
+  if (w.type === 'staff') flat = 0; 
+  // ----------------------------------------------------------------
+
   const bonus = skillDamageBonus(w.type) + flat;
 
   w.min = w.base.min + bonus;
@@ -5795,7 +5859,13 @@ if (t.includes('heartless')) { drawHeartlessPixel(ctx, x, y, sizePx); ctx.restor
     ctx.restore();
     return;
   }
-
+if (t === 'warlord') {
+      ctx.fillStyle = '#ef4444'; 
+      ctx.font = 'bold ' + (sizePx) + 'px monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline='middle';
+      ctx.fillText('W', x + sizePx/2, y + sizePx/2);
+      ctx.restore(); return;
+  }
   // fallback blocky monster
   const s = Math.max(1, Math.floor(sizePx/6)), px=x, py=y;
   const R=(cx,cy,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(px+cx*s,py+cy*s,w*s,h*s);};
@@ -7076,10 +7146,13 @@ if (es){
   document.getElementById('equipBow').textContent = `Bow (${loaded}/${total})`;
 
   const sh = state.player.shield;
-const shText = sh
-  ? `${SHIELD_NAME} (Dur ${sh.dur}/${SHIELD_DUR})`
-  : 'No Shield';
-document.getElementById('equipShield').textContent = shText;
+  // Fix: Use the shield's own name property, defaulting to constant if missing
+  const sName = sh ? (sh.name || SHIELD_NAME) : 'No Shield';
+  
+  const shText = sh
+    ? `${sName} (Dur ${sh.dur}/${SHIELD_DUR})`
+    : 'No Shield';
+  document.getElementById('equipShield').textContent = shText;
 }
 
 
@@ -9615,9 +9688,16 @@ function openChest(x,y){
 
 
 function equipWeaponByName(name){
+  // --- NEW: Redirect Shields to off-hand ---
+  const st = weaponStatsFor(name);
+  if (st && st.type === 'shield') {
+      equipShield(name);
+      return;
+  }
+  // ----------------------------------------
+
   // No-op if already equipped
   if (state.player.weapon?.name === name) return;
-
   // --- FIX: Prevent swapping IF current weapon is Cursed ---
   if (state.player.weapon?.cursed) {
     log("The cursed weapon binds to your hand. You cannot switch.");
@@ -9686,16 +9766,16 @@ function equipWeaponByName(name){
      baseName = baseName.replace('Blood ', '').replace('Greed ', '').replace('Rust ', '').replace('Frailty ', '');
   }
 
-const stats = {
-    'Shortsword': [3,5,'one'],
-    'Claymore':   [5,9,'two'],
-    'Spear':      [4,7,'spear'],
-    'Axe':        [4,8,'axe'],
-    'Knuckle Duster': [2,4,'hand'],
-    'Key of Destiny': [5,7,'one']   // <--- NEW
-  }[baseName];
+// --- FIX: Use global stats lookup instead of hardcoded list ---
+  const template = weaponStatsFor(baseName); 
+  
+  // Format it as [min, max, type] to match old logic, or null
+  const stats = template ? [template.min, template.max, template.type] : null;
 
-  if(!stats) return;
+  if(!stats) {
+      console.warn("Could not find stats for:", baseName); 
+      return; 
+  }
 
   // NEW: if this weapon can't use a shield, auto-unequip it
 if (state.player.shield && !isShieldAllowedFor(stats[2])){
@@ -9771,10 +9851,23 @@ function equipShield(){
   updateInvBody?.(); updateEquipUI?.(); draw?.();
 }
 function unequipShield(){
-  const sh = state.player.shield; if (!sh) return;
+  const sh = state.player.shield; 
+  if (!sh) return;
+
+  const name = state.player.shieldName || 'Standard';
+
+  // If it's a specific named shield, put it back in specific inventory
+  if (name !== 'Standard') {
+    state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+  } else {
+    // Otherwise, add to generic pile
+    state.inventory.shields = (state.inventory.shields|0) + 1;
+  }
+
   state.player.shield = null;
-  state.inventory.shields = (state.inventory.shields|0) + 1;
-  log('Unequipped shield.');
+  state.player.shieldName = null; // Clear the name tracking
+  
+  log('Unequipped ' + name + '.');
   updateInvBody?.(); updateEquipUI?.(); draw?.();
 }
 
@@ -9943,6 +10036,13 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
 function attack(){
     if (state.gameOver) return;
     if (state._inputLocked || state._descending) return;
+
+    // --- NEW: Staff Magic Shot ---
+    if (state.player.weapon && state.player.weapon.type === 'staff') {
+        useStaff(state.player.weapon); // Calls helper at bottom of file
+        return;
+    }
+    // -----------------------------
 
     // New: Stamina Cost for Normal Attack
     if (state.player.stamina < 1) { 
@@ -10570,9 +10670,19 @@ state.lastPlayerAction = { type: 'spell', name: spell.name };
 
   
 
-// upgraded damage pulled from scaling table (+dmg affects min & max)
+// upgraded damage pulled from scaling table
 const { min, max } = getSpellStats(spell.name);
 let dmg = rand(min, max);
+
+// --- NEW: Staff Elemental Boost ---
+const wName = state.player.weapon ? state.player.weapon.name : '';
+if (wName.includes('Fire') && spell.name === 'Ember') { dmg+=3; log('Fire Staff boost!'); }
+else if (wName.includes('Fire') && spell.name === 'Spark') { dmg+=2; log('Fire Staff boost!'); }
+else if (wName.includes('Ice') && spell.name === 'Frost') { dmg+=3; log('Ice Staff boost!'); }
+else if (wName.includes('Light') && spell.name === 'Thunder') { dmg+=3; log('Lightning Staff boost!'); }
+else if (wName.includes('Wind') && spell.name === 'Gust') { dmg+=3; log('Wind Staff boost!'); }
+else if (wName.includes('Earth') && spell.name === 'Pebble') { dmg+=3; log('Earth Staff boost!'); }
+// ----------------------------------
 
 // --- NEW: Arcane Flux Boost ---
 if (state.floorEffect === 'ArcaneFlux') {
@@ -10698,14 +10808,33 @@ function weaponStatsFor(name){
   else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); }
   else if (name.includes('Ancient ')) { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
 
-  const stats = {
+const stats = {
     'Shortsword': [3,5,'one'],
     'Claymore':   [5,9,'two'],
     'Spear':      [4,7,'spear'],
     'Axe':        [4,8,'axe'],
     'Knuckle Duster': [3,5,'hand'],
-    'Key of Destiny': [5,7,'one'] // <--- ADDED THIS
-  }[baseName]; // ← same as your equipWeaponByName mapping
+    'Key of Destiny': [5,7,'one'],
+    
+    // --- NEW MELEE ---
+    'Warhammer':      [6,10,'two'],
+    'Battleaxe':      [5,10,'axe'],
+    'Halberd':        [5,9,'spear'],
+    'Claws':          [4,6,'hand'],
+
+    // --- NEW STAFFS ---
+    'Fire Staff':     [2,4,'staff'], 
+    'Ice Staff':      [2,4,'staff'], 
+    'Lightning Staff':[2,4,'staff'],
+    'Wind Staff':     [2,4,'staff'], 
+    'Earth Staff':    [2,4,'staff'],
+
+    // --- NEW SHIELDS ---
+    'Buckler':        [1,2,'shield'], 
+    'Kite Shield':    [2,3,'shield'], 
+    'Tower Shield':   [3,4,'shield'], 
+    'Ancient Shield': [2,4,'shield']
+  }[baseName];
   
   return stats ? { name, min:stats[0]+bonMin, max:stats[1]+bonMax, type:stats[2] } : null;
 }
@@ -11758,47 +11887,70 @@ function updateInvBody(){
 
 
   // ---- Shield tab ----
-  function renderShield(){
+function renderShield(){
     sec.innerHTML = '';
-    const row  = document.createElement('div');
-    row.className = 'row';
-    row.style.justifyContent = 'space-between';
+    
+    // 1. Generic Shields (Legacy/Standard)
+    const haveGeneric = state.inventory.shields|0;
+    if (haveGeneric > 0 || (state.player.shield && state.player.shieldName === 'Standard')) {
+       const row = document.createElement('div');
+       row.className = 'row';
+       row.style.justifyContent = 'space-between';
+       row.style.marginBottom = '10px';
+       
+       const isEquipped = (state.player.shield && state.player.shieldName === 'Standard');
+       const dur = isEquipped ? ` (Dur ${state.player.shield.dur})` : '';
+       
+       const left = document.createElement('div');
+       left.textContent = `Standard Shield x${haveGeneric}${dur}`;
+       
+       const btn = document.createElement('button');
+       btn.className = 'btn';
+       btn.textContent = isEquipped ? 'Unequip' : 'Equip';
+       btn.onclick = () => { isEquipped ? unequipShield() : equipShield('Standard'); };
+       
+       row.append(left, btn);
+       sec.appendChild(row);
+    }
 
-    const sh   = state.player.shield;
-const have = state.inventory.shields|0;
+    // 2. Named Shields (Buckler, Tower, etc.)
+    for (const [name, count] of Object.entries(state.inventory.weapons || {})) {
+        if (getWeaponType(name) !== 'shield') continue;
+        
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.justifyContent = 'space-between';
+        
+        const isEquipped = (state.player.shield && state.player.shieldName === name);
+        const dur = isEquipped ? ` (Dur ${state.player.shield.dur})` : '';
+        
+        // Calculate Block % for display
+        let blockChance = '20%';
+        if (name.includes('Buckler')) blockChance = '15%';
+        else if (name.includes('Tower')) blockChance = '35%';
+        else if (name.includes('Ancient')) blockChance = '25%';
 
-// NEW: show (none) if nothing equipped and none in backpack
-if (!sh && have <= 0){
-  const sec = document.querySelector('#invSection');
-  sec.innerHTML = '<div>(none)</div>';
-  return;
-}
+        const left = document.createElement('div');
+        left.innerHTML = `${name} x${count} <span style="opacity:0.7; font-size:12px;">(${blockChance} Block)${dur}</span>`;
+        
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = isEquipped ? 'Unequip' : 'Equip';
+        btn.onclick = () => { isEquipped ? unequipShield() : equipShield(name); };
+        
+        row.append(left, btn);
+        sec.appendChild(row);
+    }
 
-
-    const left = document.createElement('div');
-    const dur  = sh ? ` — Dur ${sh.dur}/${SHIELD_DUR}` : '';
-    left.textContent = sh
-      ? `${SHIELD_NAME} (equipped${dur}, ${Math.round(SHIELD_DR*100)}% DR)`
-      : `${SHIELD_NAME} x${have} — ${Math.round(SHIELD_DR*100)}% DR`;
-
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    const equipped = !!sh;
-    btn.textContent = equipped ? 'Unequip' : 'Equip';
-    btn.disabled = !equipped && (have <= 0 || !isShieldAllowed());
-    btn.onclick = () => {
-      if (equipped) unequipShield();
-      else         equipShield();
-      updateInvBody();
-    };
-
-    row.append(left, btn);
-    sec.appendChild(row);
+    // Empty State
+    if (sec.innerHTML === '') sec.innerHTML = '<div>(none)</div>';
 
     const tip = document.createElement('div');
     tip.style.opacity = 0.8;
-    tip.style.marginTop = '8px';
-    tip.textContent = 'Shield can be used with one-handers or bare hands.';
+    tip.style.marginTop = '15px';
+    tip.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+    tip.style.paddingTop = '5px';
+    tip.textContent = 'Shields block damage based on their Block Chance.';
     sec.appendChild(tip);
   }
 
@@ -11832,6 +11984,11 @@ if (!sh && have <= 0){
     for (const [name,count] of entries) {
       // --- NEW: Header Logic ---
       const wType = getType(name); 
+      
+      // --- FIX: Hide Shields from Weapon Tab ---
+      if (wType === 'shield') continue;
+      // ---------------------------------------
+
       const skillLabel = typeNice(wType); // e.g. "One-Handed"
 
       if (skillLabel !== lastSkill) {
@@ -12338,6 +12495,12 @@ const btnStam    = document.getElementById('btnStam'); // <--- NEW
 
 function openLevelUpModal(){
   if (!lvlupModal) return;
+  
+  // --- FIX: Reset the title so it doesn't say "Golden Well" ---
+  const t = lvlupModal.querySelector('.title');
+  if(t) t.innerText = "Level Up!";
+  // ------------------------------------------------------------
+
   lvlupModal.style.display = 'flex';
   state._inputLocked = true;
 
@@ -13680,20 +13843,19 @@ const CLASSES = {
   Adventurer: { name:'Adventurer', desc:'Just a basic adventurer.', unlock:true },
   Rogue:      { name:'Rogue',      desc:'Starts with a Shortsword. + 5 Lockpicks. +5 MP / -3 HP.', req:'locks', val:5, msg:'Unlock: Pick 5 locks.' },
   Barbarian:  { name:'Barbarian',  desc:'Starts with a Axe. +10 HP / -5 MP.', req:'kills_axe', val:10, msg:'Unlock: 10 Axe kills.' },
-  Wizard:     { name:'Wizard',     desc:'Starts with the Spark Spell. +20 MP / -5 HP.', req:'kills_magic', val:10, msg:'Unlock: 10 Magic kills.' },
+  Wizard:    { name:'Wizard',    desc:'Starts with Fire Staff & Spark. +10 MP / -5 HP.', req:'kills_magic', val:10, msg:'Unlock: 10 Magic kills.' },
   
   // --- Endless Only Classes ---
   Mercenary: { name:'Mercenary', desc:'Starts with a Claymore. +8 HP / -8 MP.', req:'kills_two', val:10, msg:'Unlock: 10 Two-Handed kills.', endless:true },
-  Monk:      { name:'Monk',      desc:'Starts with Knuckle Dusters. +10 MP / -5 HP.', req:'kills_hand', val:10, msg:'Unlock: 10 Unarmed kills.', endless:true },
+  Monk:      { name:'Monk',      desc:'Starts with Knuckle Dusters. +10 MP / -5 HP.', req:'kills_hand', val:10, msg:'Unlock: 10 Hand to Hand kills.', endless:true },
   Ranger:    { name:'Ranger',    desc:'Starts with a Shortsword & 20 Arrows. +5 MP / -2 HP.', req:'kills_bow', val:10, msg:'Unlock: 10 Bow kills.', endless:true },
   
-  // --- NEW STAMINA CLASSES ---
-  Lancer:    { name:'Lancer',    desc:'Polearm Specialist. Starts with a Spear. +10 Stamina / -5 MP.', req:'kills_spear', val:10, msg:'Unlock: 10 Spear kills.', endless:true },
-  Soldier:   { name:'Soldier',   desc:'Defensive fighter. Starts with Shortsword & Shield. +5 HP / +5 Stamina / -10 MP.', req:'depth', val:5, msg:'Unlock: Reach Depth 5.', endless:true },
-// --- CREATIVE CLASSES ---
-  Spellblade:{ name:'Spellblade',desc:'Magic Knight. Starts with Shortsword & Frost Spell. Balanced stats.', req:'kills_magic', val:20, msg:'Unlock: 20 Magic kills.', endless:true },
-Grenadier: { name:'Grenadier', desc:'Demolitions. Starts with Shortsword & 5 Bombs. +10 Stamina.', req:'kills_one', val:20, msg:'Unlock: 20 One-Handed kills.', endless:true },
-  Legionary: { name:'Legionary', desc:'Iron Wall. Starts with Shortsword & Shield. +10 HP / -10 Stamina.', req:'kills_one', val:30, msg:'Unlock: 30 One-Handed kills.', endless:true }
+  // Endless Classes
+  Lancer:    { name:'Lancer',    desc:'Polearm Specialist. Starts with Halberd. +10 Stamina / -5 MP.', req:'kills_spear', val:10, msg:'Unlock: 10 Polearm kills.', endless:true },
+  Soldier:   { name:'Soldier',   desc:'Standard Infantry. Starts with Shortsword & Kite Shield. Balanced stats.', req:'depth', val:5, msg:'Unlock: Reach Depth 5.', endless:true },
+  Spellblade:{ name:'Spellblade',desc:'Magic Knight. Starts with Shortsword & Ice Staff. Balanced stats.', req:'kills_magic', val:20, msg:'Unlock: 20 Magic kills.', endless:true },
+  Legionary: { name:'Legionary', desc:'Iron Wall. Starts with Shortsword & Tower Shield. +15 HP / -10 Stamina.', req:'kills_one', val:30, msg:'Unlock: 30 One-Handed kills.', endless:true },
+  Paladin:   { name:'Paladin',   desc:'Holy Crusader. Starts with Warhammer. +25 HP / +10 Stamina / -10 MP.', req:'depth', val:25, msg:'Unlock: Reach Depth 25.', endless:true },
 };
 
 // --- NEW: Soul Shop Definitions ---
@@ -13954,18 +14116,40 @@ function doRestart(className){
       const m = document.getElementById('classSelectModal');
       const b = document.getElementById('classSelectBody');
       b.innerHTML = '';
-      
-      // 1. Show Unlocked Classes
+      // --- NEW: Grid Layout Styles (4 Columns Fixed) ---
+      b.style.display = 'grid';
+      b.style.gridTemplateColumns = 'repeat(4, 1fr)'; 
+      b.style.gap = '10px';
+      b.style.padding = '10px';
       
       // 1. Show Unlocked Classes
       unlocked.forEach(k => {
         const c = CLASSES[k];
         const btn = document.createElement('button');
         btn.className = 'btn';
-        btn.style.textAlign = 'left';
-        // Add a star for Endless exclusives to make them stand out
-        const badge = c.endless ? ' <span style="color:#a78bfa; font-size:11px; vertical-align:middle;">(Endless)</span>' : '';
-        btn.innerHTML = `<span style="font-weight:800; color:#f9d65c">${c.name}${badge}</span><br><span style="font-size:13px; opacity:0.8">${c.desc}</span>`;
+        btn.style.textAlign = 'center';
+        
+        // Force Square Shape & Center Content
+        btn.style.aspectRatio = '1 / 1'; 
+        btn.style.display = 'flex';
+        btn.style.flexDirection = 'column';
+        btn.style.justifyContent = 'center';
+        btn.style.alignItems = 'center';
+        btn.style.padding = '4px';
+        btn.style.minHeight = '0'; // Reset min-height so aspect-ratio rules
+        
+        const badge = c.endless ? '<div style="color:#a78bfa; font-size:9px; margin-bottom:2px;">(Endless)</div>' : '';
+        
+        // Name is bold, Description is small (visible inside the square)
+        btn.innerHTML = `
+            ${badge}
+            <div style="font-weight:800; font-size:13px; color:#f9d65c; line-height:1.1; margin-bottom:4px;">${c.name}</div>
+            <div style="font-size:10px; opacity:0.8; line-height:1.1; overflow:hidden;">${c.desc}</div>
+        `;
+        
+        // Also add full description as tooltip just in case it cuts off
+        btn.title = c.desc; 
+        
         btn.onclick = () => {
           m.style.display = 'none';
           doRestart(k); 
@@ -14067,8 +14251,10 @@ function doRestart(className){
   } else if (className === 'Spellblade') {
     state.player.mpMax += 5; state.player.mp = state.player.mpMax;
     state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax;
-  } else if (className === 'Grenadier') {
+  } else if (className === 'Paladin') {
+    state.player.hpMax += 25; state.player.hp = state.player.hpMax;
     state.player.staminaMax += 10; state.player.stamina = state.player.staminaMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 10); state.player.mp = state.player.mpMax;
   } else if (className === 'Legionary') {
     state.player.hpMax += 10; state.player.hp = state.player.hpMax;
     state.player.staminaMax = Math.max(0, state.player.staminaMax - 5); state.player.stamina = state.player.staminaMax;
@@ -14123,10 +14309,8 @@ function doRestart(className){
     state.inventory.weapons['Axe'] = 1;
     equipWeaponByName('Axe');
   } else if (className === 'Wizard') {
-    state.spells.push({name:'Spark', cost:2, tier:1});
-    state.equippedSpell = state.spells[0];
-    if(typeof ensureSpellUpgradeSlot === 'function') ensureSpellUpgradeSlot('Spark');
-  } 
+    state.inventory.weapons['Fire Staff'] = 1; equipWeaponByName('Fire Staff');
+state.spells.push({name:'Ember', cost:3, tier:1}); state.equippedSpell = state.spells[0];  }
 // -- New Classes --
   else if (className === 'Mercenary') {
     // Claymore: High damage, cleave ability
@@ -14145,30 +14329,19 @@ function doRestart(className){
     state.inventory.arrows = 20;
     state.player.bow.loaded = 1;
   } else if (className === 'Lancer') {
-    state.inventory.weapons['Spear'] = 1;
-    equipWeaponByName('Spear');
+    state.inventory.weapons['Halberd'] = 1; equipWeaponByName('Halberd');
   } else if (className === 'Soldier') {
-    state.inventory.weapons['Shortsword'] = 1;
-    equipWeaponByName('Shortsword');
-    // Starts with Shield equipped
-    state.inventory.shields = 1;
-    equipShield();
+    state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
+    state.inventory.weapons['Kite Shield'] = 1; equipShield('Kite Shield');
   } else if (className === 'Spellblade') {
-    state.inventory.weapons['Shortsword'] = 1;
-    equipWeaponByName('Shortsword');
-    // Starts with Frost spell
-    state.spells.push({name:'Frost', cost:3, tier:1});
-    state.equippedSpell = state.spells[0];
-    if(typeof ensureSpellUpgradeSlot === 'function') ensureSpellUpgradeSlot('Frost');
-  } else if (className === 'Grenadier') {
-    state.inventory.weapons['Shortsword'] = 1;
-    equipWeaponByName('Shortsword');
-    state.inventory.bombs = 5; 
+    state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
+    state.inventory.weapons['Ice Staff'] = 1; // Backup
+    state.spells.push({name:'Frost', cost:3, tier:1}); state.equippedSpell = state.spells[0];
   } else if (className === 'Legionary') {
-    state.inventory.weapons['Shortsword'] = 1; // Changed to Shortsword
-    equipWeaponByName('Shortsword');
-    state.inventory.shields = 1;
-    equipShield();
+    state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
+    state.inventory.weapons['Tower Shield'] = 1; equipShield('Tower Shield');
+  } else if (className === 'Paladin') {
+    state.inventory.weapons['Warhammer'] = 1; equipWeaponByName('Warhammer');
   }
 
   // Finalize
@@ -14384,9 +14557,8 @@ document.addEventListener('click', (ev)=>{
   }
 });
 
-// --- Gold Well Modal Logic ---
 window.openGoldWell = function(){
-  // 1. Inject HTML if missing
+  // 1. Inject HTML if missing (Restores the Popup)
   if (!document.getElementById('goldWellModal')) {
     const d = document.createElement('div');
     d.id = 'goldWellModal'; d.className = 'modal'; d.style.display = 'none';
@@ -14407,7 +14579,8 @@ window.openGoldWell = function(){
     
     // Wire buttons
     d.querySelector('#gwClose').onclick = () => {
-       d.style.display = 'none'; state._inputLocked = false;
+       d.style.display = 'none'; 
+       state._inputLocked = false;
        if (!state._pauseOpen) setMobileControlsVisible(true);
     };
     
@@ -14416,31 +14589,33 @@ window.openGoldWell = function(){
        if (!w || w.used) { document.getElementById('gwMsg').textContent = "The well is empty."; return; }
        if ((state.inventory.gold|0) < 500) { document.getElementById('gwMsg').textContent = "Not enough gold."; return; }
        
+       // Pay Logic
        state.inventory.gold -= 500;
        w.used = true;
-       unlockCodex('Gold_Well', true); // Increment count ONLY when gold is tossed
-       
-       // Roll Reward
-       const roll = Math.random();
-       let msg = "";
-       if (roll < 0.33) {
-          state.player.hpMax += 1; state.player.hp += 1; msg = "Vitality surges! (+1 Max HP)";
-       } else if (roll < 0.66) {
-          state.player.mpMax += 1; state.player.mp += 1; msg = "Mind expands! (+1 Max MP)";
-       } else {
-          state.player.staminaMax += 1; state.player.stamina += 1; msg = "Endurance grows! (+1 Max STM)";
-       }
+       unlockCodex('Gold_Well', true);
        
        SFX.levelUp();
        spawnParticles(state.player.x, state.player.y, '#facc15', 12);
-       log(msg);
        updateBars(); updateInvBody();
        
-       d.style.display = 'none'; state._inputLocked = false;
-       if (!state._pauseOpen) setMobileControlsVisible(true);
+       // Close the Confirmation Modal
+       d.style.display = 'none';
+       
+       // Open the Choice Modal (Helper)
+       // We keep input locked here because the Choice modal takes over immediately
+       if (typeof openGoldenWellChoice === 'function') {
+           openGoldenWellChoice();
+       } else {
+           // Fallback safety
+           state.player.hpMax += 5; state.player.hp = state.player.hpMax;
+           log("Vitality surges! (+5 Max HP)");
+           state._inputLocked = false;
+           if (!state._pauseOpen) setMobileControlsVisible(true);
+       }
     };
   }
   
+  // Logic to Open the Confirmation Modal
   const m = document.getElementById('goldWellModal');
   const w = state.goldWell;
   const msg = document.getElementById('gwMsg');
@@ -14448,8 +14623,7 @@ window.openGoldWell = function(){
   const g = document.getElementById('gwGold');
   
   if (g) g.textContent = state.inventory.gold|0;
-  
-  unlockCodex('Gold_Well'); // Mark as seen, but DO NOT increment here
+  unlockCodex('Gold_Well'); 
   
   if (w.used) {
      msg.textContent = "The waters are still. The magic is gone.";
@@ -14610,6 +14784,157 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
   state._inputLocked = true;
 };
 
+// --- NEW HELPER FUNCTIONS ---
+
+function checkMiniBossReward(e) {
+    if (e.miniBoss && state.gameMode === 'endless') {
+        log("The Warlord falls! A dark power calls to you...");
+        spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+        setTimeout(() => { triggerOmenChoice(); }, 800);
+    }
+}
+
+function useStaff(w) {
+    const cost = 2; 
+    if (state.player.mp < cost) {
+        log("Out of mana! You bash with the staff.");
+        const t = getFacingEnemy(); 
+        if(t){
+           t.hp -= 1; spawnFloatText("1", t.x, t.y, '#fff');
+           if(t.hp<=0) { state.enemies=state.enemies.filter(x=>x!==t); state.run.kills++; awardKill('staff', t.xp); SFX.kill(); }
+        } else log("You swing at the air.");
+        enemyStep(); draw(); return;
+    }
+
+    let color='#fff', el='Magic';
+    if(w.name.includes('Fire')){ color='#ef4444'; el='Fire'; }
+    else if(w.name.includes('Ice')){ color='#06b6d4'; el='Ice'; }
+    else if(w.name.includes('Light')){ color='#eab308'; el='Lightning'; }
+    else if(w.name.includes('Wind')){ color='#a3a3a3'; el='Wind'; }
+    else if(w.name.includes('Earth')){ color='#78350f'; el='Earth'; }
+
+    state.player.mp -= cost; updateBars();
+    const t = findFirstLinedTarget(state.player.x, state.player.y, 4);
+    const tx = t ? t.x : (state.player.x + (state.player.facing==='right'?4 : state.player.facing==='left'?-4 : 0));
+    const ty = t ? t.y : (state.player.y + (state.player.facing==='down'?4 : state.player.facing==='up'?-4 : 0));
+
+    spawnProjectileEffect({
+        kind:'magic', element:el, color:color, fromX:state.player.x, fromY:state.player.y, toX:tx, toY:ty,
+        onDone:()=>{
+            if(t){
+                const bonus = Math.floor((state.skills.magic?.lvl||1)/2);
+                const dmg = rand(w.min, w.max) + bonus;
+                t.hp = Math.max(0, t.hp - dmg);
+                spawnFloatText(dmg, t.x, t.y, color);
+                checkMiniBossReward(t); 
+                if(t.hp<=0) {
+                    state.enemies=state.enemies.filter(x=>x!==t); state.run.kills++; awardKill('magic', t.xp); SFX.kill();
+                }
+            }
+            enemyStep(); draw();
+        }
+    });
+}
+
+function equipShield(variant = 'Standard'){
+  if (typeof variant !== 'string') variant = 'Standard'; // fallback
+  
+  if (state.player.shield && state.player.shieldName && state.player.shieldName !== 'Standard'){
+     const old = state.player.shieldName;
+     state.inventory.weapons[old] = (state.inventory.weapons[old]||0)+1;
+  }
+
+  state.player.shield = { name: variant, dur: 20 };
+  state.player.shieldName = variant;
+  
+  if (variant.includes('Buckler')) state.player.blockChance = 0.15;
+  else if (variant.includes('Tower')) state.player.blockChance = 0.35;
+  else if (variant.includes('Ancient')) state.player.blockChance = 0.25;
+  else state.player.blockChance = 0.20; 
+
+  if (variant !== 'Standard' && state.inventory.weapons[variant]) {
+      state.inventory.weapons[variant]--;
+      if(state.inventory.weapons[variant]<=0) delete state.inventory.weapons[variant];
+  } else if (variant === 'Standard') {
+      state.inventory.shields = Math.max(0, (state.inventory.shields|0) - 1);
+  }
+  
+  log(`You equip the ${variant}.`);
+  updateEquipUI(); updateInvBody();
+}
+
+function openGoldenWellChoice(){
+    const m = document.getElementById('lvlupModal');
+    if(!m) return;
+    
+    const t = m.querySelector('.title');
+    if(t) t.innerText = "Golden Well: Choose a Blessing";
+    
+    // Clone buttons to strip old listeners
+    const bH = document.getElementById('btnHP'), bM = document.getElementById('btnMP'), bS = document.getElementById('btnStam');
+    const nH = bH.cloneNode(true), nM = bM.cloneNode(true), nS = bS.cloneNode(true);
+    bH.replaceWith(nH); bM.replaceWith(nM); bS.replaceWith(nS);
+
+    // --- FIX: Use Game Scaling Helpers + Full Heal ---
+    nH.onclick = () => { 
+        // Use standard level-up formula (scales with floor/level)
+        const inc = (typeof levelHpGain === 'function') ? levelHpGain() : 5;
+        state.player.hpMax += inc; 
+        state.player.hp = state.player.hpMax; // Full Heal
+        log(`The well grants vitality! +${inc} Max HP (Healed)`); 
+        closeWell(); 
+    };
+    
+    nM.onclick = () => { 
+        const inc = (typeof levelMpGain === 'function') ? levelMpGain() : 3;
+        state.player.mpMax += inc; 
+        state.player.mp = state.player.mpMax; // Full Mana
+        log(`The well grants wisdom! +${inc} Max MP (Restored)`); 
+        closeWell(); 
+    };
+    
+    nS.onclick = () => { 
+        const inc = (typeof levelStamGain === 'function') ? levelStamGain() : 3;
+        state.player.staminaMax += inc; 
+        state.player.stamina = state.player.staminaMax; // Full Stamina
+        log(`The well grants endurance! +${inc} Max Stamina (Restored)`); 
+        closeWell(); 
+    };
+
+    m.style.display = 'flex';
+    state._inputLocked = true;
+    
+    function closeWell(){ 
+        m.style.display='none'; 
+        state._inputLocked=false; 
+        updateBars(); 
+        if(t) t.innerText = "Level Up!"; // Reset title for next time
+    }
+}
+
+function triggerOmenChoice() {
+    if (typeof PICK2_POOL === 'undefined' || PICK2_POOL.length < 2) return;
+    const o1 = PICK2_POOL[Math.floor(Math.random() * PICK2_POOL.length)];
+    let o2 = PICK2_POOL[Math.floor(Math.random() * PICK2_POOL.length)];
+    while (o1.id === o2.id) { o2 = PICK2_POOL[Math.floor(Math.random() * PICK2_POOL.length)]; }
+
+    const m = document.getElementById('pick2Modal'); 
+    if (!m) return;
+    m.querySelector('#pick2Title').innerText = "Choose an Omen";
+    m.querySelector('#descPick1').innerText = o1.label;
+    m.querySelector('#descPick2').innerText = o2.label;
+    
+    document.getElementById('btnPick2A').onclick = () => { o1.apply(); log(`Accepted: ${o1.id}`); m.style.display='none'; state._inputLocked=false; };
+    document.getElementById('btnPick2B').onclick = () => { o2.apply(); log(`Accepted: ${o2.id}`); m.style.display='none'; state._inputLocked=false; };
+    
+    state._inputLocked = true; m.style.display = 'flex';
+}
+
+function getFacingEnemy(){
+    const dirs = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+    const [dx,dy] = dirs[state.player.facing||'down'];
+    return enemyAt(state.player.x+dx, state.player.y+dy);
+}
 
 </script>
 
@@ -14948,6 +15273,15 @@ if (bombBtn) bombBtn.addEventListener('click', ()=>{
   log('[debug] Added 5 Bombs.');
 });
 
+// --- NEW: Gold Debug ---
+const goldBtn = document.getElementById('dbgGiveGold');
+if (goldBtn) goldBtn.addEventListener('click', ()=>{
+  state.inventory.gold = (state.inventory.gold|0) + 500;
+  if(typeof updateInvBody === 'function') updateInvBody();
+  if(typeof hideDebug === 'function') hideDebug();
+  log('[debug] Added 500 Gold.');
+});
+
 // --- NEW: Warp Debug ---
 const warpBtn = document.getElementById('dbgGiveWarp');
 if (warpBtn) warpBtn.addEventListener('click', ()=>{
@@ -14972,20 +15306,11 @@ if (keyBtn) keyBtn.addEventListener('click', ()=>{
 const clsBtn = document.getElementById('dbgUnlockClasses');
 if (clsBtn) clsBtn.addEventListener('click', ()=>{
   const m = loadMeta();
-  // Classic Classes
-  m.unlocked_Rogue = true;
-  m.unlocked_Barbarian = true;
-  m.unlocked_Wizard = true;
-  // Endless Classes
-  m.unlocked_Mercenary = true;
-  m.unlocked_Monk = true;
-  m.unlocked_Ranger = true;
-  // --- NEW CLASSES ---
-  m.unlocked_Lancer = true;
-  m.unlocked_Soldier = true;
-  m.unlocked_Spellblade = true;
-  m.unlocked_Grenadier = true;
-  m.unlocked_Legionary = true;
+  
+  // Dynamic Loop: Unlocks EVERYTHING defined in the CLASSES object
+  Object.keys(CLASSES).forEach(key => {
+    m['unlocked_' + key] = true;
+  });
   
   saveMeta(m);
   hideDebug?.();
