@@ -3085,8 +3085,21 @@ const DURABILITY = {
   Claymore:   15,
   Spear:      18,
   Axe:        17,
-  'Knuckle Duster': 24,     // ← added comma
-  'Key of Destiny': 30      // <--- NEW: High durability
+  'Knuckle Duster': 24,
+  'Key of Destiny': 30,
+
+  // --- NEW WEAPONS ---
+  'Warhammer': 15,
+  'Battleaxe': 17,
+  'Halberd':   18,
+  'Claws':     24,
+
+  // Staffs
+  'Fire Staff':      25,
+  'Ice Staff':       25,
+  'Lightning Staff': 25,
+  'Wind Staff':      25,
+  'Earth Staff':     25
 };
 function defaultDurabilityFor(name){
   return Number.isFinite(DURABILITY[name]) ? DURABILITY[name] : null; // fists/null => no durability
@@ -4043,6 +4056,9 @@ if (sounds.length > 0) {
     // NEW: never place chests on top of NPC tiles
 if (isMerchantTile(x,y) || isBlacksmithTile(x,y) || isJesterTile(x,y) || isCartographerTile(x,y)) continue;
 
+    // Block Golden Well (2x2)
+    if (state.goldWell && x >= state.goldWell.x && x <= state.goldWell.x+1 && y >= state.goldWell.y && y <= state.goldWell.y+1) continue;
+
 
     if(x===state.player.x && y===state.player.y) continue;
     if(state.tiles[y][x]!==1) continue;
@@ -4233,6 +4249,9 @@ state.respawnEvery = 50 + Math.floor(state.floor/2); // tweak pacing here
 
     // NEW: never place floor loot on NPC tiles
 if (isMerchantTile(x,y) || isBlacksmithTile(x,y) || isJesterTile(x,y) || isCartographerTile(x,y)) continue;
+
+    // Block Golden Well (2x2)
+    if (state.goldWell && x >= state.goldWell.x && x <= state.goldWell.x+1 && y >= state.goldWell.y && y <= state.goldWell.y+1) continue;
 
 
     if(state.tiles[y][x]!==1) continue;
@@ -4474,6 +4493,9 @@ if (typeof isBlacksmithTile === 'function' && isBlacksmithTile(spot.x, spot.y)) 
 if (typeof isJesterTile === 'function' && isJesterTile(spot.x, spot.y)) continue;
 if (typeof isCartographerTile === 'function' && isCartographerTile(spot.x, spot.y)) continue;
 if (typeof isClericTile === 'function' && isClericTile(spot.x, spot.y)) continue; // --- NEW ---
+
+    // Block Golden Well (2x2)
+    if (state.goldWell && spot.x >= state.goldWell.x && spot.x <= state.goldWell.x+1 && spot.y >= state.goldWell.y && spot.y <= state.goldWell.y+1) continue;
     
          // already something here
 
@@ -10070,49 +10092,61 @@ function attack(){
     if (state.gameOver) return;
     if (state._inputLocked || state._descending) return;
 
-    // --- NEW: Staff Magic Shot ---
-    if (state.player.weapon && state.player.weapon.type === 'staff') {
-        useStaff(state.player.weapon); // Calls helper at bottom of file
+    // 1. Identify Neighbors & Targets FIRST
+    const nbs = neighbors4(state.player.x,state.player.y);
+    let target=null, ti=-1;
+    for(let i=0;i<state.enemies.length;i++){
+      const e=state.enemies[i]; const s=e.size||1;
+      if(nbs.some(nb=> nb.x>=e.x && nb.x<e.x+s && nb.y>=e.y && nb.y<e.y+s)){ target=e; ti=i; break; }
+    }
+
+    // 2. Identify Props (if no enemy target)
+    let propPos = null;
+    if (!target) {
+      for(const nb of nbs){
+        if(inBounds(nb.x, nb.y) && state.tiles[nb.y][nb.x] === 8){
+          propPos = nb; break;
+        }
+      }
+    }
+
+    // --- STAFF LOGIC REORDERED ---
+    const isStaff = state.player.weapon && state.player.weapon.type === 'staff';
+    
+    // Use Staff Magic IF: We have an enemy OR (We have no enemy AND no prop to smash)
+    // If we HAVE a prop and NO enemy, this skips, allowing us to smash the prop below.
+    if (isStaff && (target || !propPos)) {
+        useStaff(state.player.weapon); 
         return;
     }
     // -----------------------------
 
-    // New: Stamina Cost for Normal Attack
+    // New: Stamina Cost for Normal Attack (Melee / Smash)
     if (state.player.stamina < 1) { 
-       // Auto-Rest: Pass the turn to regenerate Stamina
        spawnFloatText("Resting...", state.player.x, state.player.y, '#9ca3af'); 
        log("You are out of breath and take a moment to recover.");
-       enemyStep(); // Triggers natural regeneration
+       enemyStep(); 
        draw();
        return; 
     }
     state.player.stamina--; 
-    state._skipStaminaRegen = true; // <--- ADD THIS
+    state._skipStaminaRegen = true; 
     updateBars();
 
-    // Tutorial Step 5: require weapon pickup before teaching melee
+    // Tutorial Step 5 check
     if (state.gameMode === 'tutorial' && state._tutBowShot && !state._tutGotWeapon){
       showBanner("Tutorial: Step onto the Shortsword to pick it up first.", 2200);
       return;
     }
 
-  const nbs = neighbors4(state.player.x,state.player.y);
-
-  let target=null, ti=-1;
-  for(let i=0;i<state.enemies.length;i++){
-    const e=state.enemies[i]; const s=e.size||1;
-    if(nbs.some(nb=> nb.x>=e.x && nb.x<e.x+s && nb.y>=e.y && nb.y<e.y+s)){ target=e; ti=i; break; }
-  }
-  if(!target){ 
-    // --- NEW: Check for Smashable Props if no enemy ---
-    for(const nb of nbs){
-      if(inBounds(nb.x, nb.y) && state.tiles[nb.y][nb.x] === 8){
-        handlePropSmash(nb.x, nb.y);
+    // Execute Melee / Smash
+    if(!target){ 
+      if(propPos){
+        handlePropSmash(propPos.x, propPos.y);
         return; 
       }
+      log('No enemy adjacent.'); return; 
     }
-    log('No enemy adjacent.'); return; 
-  }
   const w = state.player.weapon;
 if (!rollHitFor(w.type)){
   spawnFloatText("Miss", target.x, target.y, '#9ca3af'); // <--- ADDED
@@ -14877,7 +14911,13 @@ function equipShield(variant = 'Standard'){
      state.inventory.weapons[old] = (state.inventory.weapons[old]||0)+1;
   }
 
-  state.player.shield = { name: variant, dur: 20 };
+// Assign durability based on shield type
+  let maxDur = 20; // Standard / Kite
+  if (variant.includes('Buckler')) maxDur = 15;
+  else if (variant.includes('Tower')) maxDur = 35;
+  else if (variant.includes('Ancient')) maxDur = 25;
+
+  state.player.shield = { name: variant, dur: maxDur };
   state.player.shieldName = variant;
   
   if (variant.includes('Buckler')) state.player.blockChance = 0.15;
