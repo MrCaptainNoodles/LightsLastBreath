@@ -10914,61 +10914,9 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 9) {
 
 
 if (target.hp <= 0){
-        // Depth 50 two-phase hook (inserted)
-    if (state.floor === 50 && target.boss && target.type === 'Clone' && !(state.flags && state.flags.depth50Phase2)) {
-      runDepth50Phase2(target);
-      return;
-    }
-    if (state.floor === 50 && target.boss && target.type === 'Mad King' && !(state.flags && state.flags.depth50Done)) {
-      runDepth50Outro(target);
-      return;
-    }
-
-  // Skeletons reassemble once, weaker
-  if (target.type==='Skeleton' && !target._revived){
-    target._revived = true;
-    target.hp = Math.max(2, Math.floor(6 * 0.6));
-    target.atk[0] = Math.max(0, target.atk[0]-1);
-    target.atk[1] = Math.max(target.atk[0], target.atk[1]-1);
-    log('The Skeleton pulls itself back together—weaker, but still moving!');
-    enemyStep(); draw();
-    return;
-  }
-
-  // Boss dies → stairs
-  if (target.boss){
-    state.tiles[target.y][target.x] = 4;
-    if (SFX.bossDown) SFX.bossDown();
-    log('A stairway appears where the boss fell!');
-
-    // Pick 1 of 2: boss reward
-    if (typeof offerPick2Choice === 'function'){
-      offerPick2Choice('boss');
-    }
-  }
-
-  // Goblin drops anything it stole
-  if (target.stolen){
-    dropStolenAt(target.x, target.y, target.stolen);
-    log('The stolen item drops to the floor!');
-  }
-
- // Award gold directly (no drop) — 50% chance
-if (!target.boss && Math.random() < GOLD_DROP_CHANCE){
-  const g = goldFor(target);
-  state.inventory.gold = (state.inventory.gold|0) + g;
-  log(`You gain ${g} gold.`);
-  if (typeof updateInvBody === 'function') updateInvBody();
-}
-
-
-  // Remove enemy, award XP
-  state.enemies = state.enemies.filter(x => x !== target);
-  if (SFX.kill) SFX.kill();
-  unlockCodex(target.displayName || target.type, true);
-  log(`${target.type} falls.`);
-  state.run.kills++;
-  awardKill('magic', Math.max(1, target.xp|0));
+    // Use the central handler to ensure consistent "Silent Gold" logic,
+    // plus correct handling of Explosions, Omens, and Boss Phases.
+    handleEnemyDeath(target, 'magic');
 }
 
 // After hit / kill logic, let a projectile travel if the enemy
@@ -15135,7 +15083,13 @@ function handleEnemyDeath(e, source) {
       log('Stolen items scatter on the floor!');
   }
   
-  // GOLD DROP LOGIC REMOVED per user request. Gold must now be picked up from the floor.
+  // FIX: Restore Auto-Gold (50% chance), but NO floating text
+  if (!e.boss && !e.miniBoss && Math.random() < 0.5) { 
+      const g = goldFor(e);
+      state.inventory.gold = (state.inventory.gold|0) + g;
+      // Note: spawnFloatText removed to keep UI clean
+      if (typeof updateInvBody === 'function') updateInvBody(); // Refresh UI if open
+  }
 
   // 7. Cleanup & Stats
   state.enemies = state.enemies.filter(x => x !== e);
