@@ -2854,7 +2854,14 @@ function goMenu(e){
   if (b) b._queue = []; // Empty the queue so nothing else pops up
   hideBanner();         // Hide the current text immediately
 
-  unlockAudioAndLoops();
+  // FIX: Stop all NPC audio loops immediately
+  if (typeof stopMerchantAudio === 'function') stopMerchantAudio();
+  if (typeof stopBlacksmithAudio === 'function') stopBlacksmithAudio();
+  if (typeof stopJesterAudio === 'function') stopJesterAudio();
+  if (typeof stopCartographerAudio === 'function') stopCartographerAudio();
+  if (typeof stopClericAudio === 'function') stopClericAudio();
+
+  // unlockAudioAndLoops(); // <--- REMOVED: This was restarting them!
 
   // NEW: when we go back to the main menu, play the menu BGM
   if (typeof playMenuBgm === 'function') {
@@ -9503,11 +9510,10 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
     unlockCodex('Shrine_Heal', true);
     spawnParticles(state.player.x, state.player.y, '#fff', 8);
 
-  // 5. XP Boost (20%)
-  } else {
+  // 5. XP Boost (~16%)
+  } else if (roll < 0.84) {
     const xp = 50 + (state.floor * 5);
     log(`Ancient knowledge flows into you. (+${xp} XP)`);
-    // Manual XP add to bypass skill requirements
     state.player.xp += xp; 
     while(state.player.xp >= state.player.next){
        state.player.xp -= state.player.next;
@@ -9518,6 +9524,23 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
     unlockCodex('Shrine_XP', true);
     updateBars();
     spawnParticles(state.player.x, state.player.y, '#60a5fa', 8);
+
+  // 6. TELEPORT (~16%)
+  } else {
+    // Find a random safe spot far away
+    const spot = findFreeFloorTile(8); // Min 8 tiles away
+    if (spot) {
+      state.player.x = spot.x;
+      state.player.y = spot.y;
+      state.player.rx = spot.x; state.player.ry = spot.y; // Snap visuals
+      
+      log("The shrine warps space around you!");
+      spawnFloatText("WARP", state.player.x, state.player.y, '#00ffff');
+      SFX.spell(); 
+      unlockCodex('Shrine_Teleport', true);
+    } else {
+      log("The shrine flickers... nothing happens.");
+    }
   }
   
   did = true;
@@ -11361,15 +11384,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     // 2. Sell Weapons (All of them)
     // Price = 50% of Buy Price (approx)
-    const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10 };
+    const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10, 
+                       'Warhammer':30, 'Battleaxe':25, 'Halberd':28, 'Claws':15, 
+                       'Fire Staff':20, 'Ice Staff':20, 'Lightning Staff':20, 'Wind Staff':20, 'Earth Staff':20 };
     
     for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
       if (count > 0) {
         hasItems = true;
-        // Estimate price: Default 10g if unknown
+        // Estimate price: Default 15g if unknown
         let baseP = W_PRICES[wName] || 15;
-        if (wName.includes('Shield')) baseP = 12; // Shield fallback
         
+        // Dynamic Pricing for Fancy Items
+        if (wName.includes('Shield')) baseP = 12; 
+        if (wName.includes('Ancient')) baseP += 10;
+        if (wName.includes('Cursed')) baseP += 5; // Risk pay
+        if (wName.includes('Key of Destiny')) baseP = 50; 
+
         addSellItem(`${wName} x${count}`, baseP, () => {
            // Logic to handle selling equipped items safely
            const equipped = state.player.weapon?.name === wName;
