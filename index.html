@@ -1698,10 +1698,11 @@ cleric: {
     purify:   ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cleric_purify.mp3'], 
     leave:    ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_cleric_leave.mp3'],
   },
-  // --- NEW: Boss Voices ---
   shadow: {
-    intro:  ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_shadow_intro.mp3'],
-    defeat: ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_shadow_defeat.mp3']
+    // Split into specific story beats for sync
+    intro1: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_shadow_intro.mp3',
+    intro2: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_shadow_intro2.mp3', // Placeholder: Swap this for the "Submit" line file
+    defeat: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_shadow_defeat.mp3'
   },
   madking: {
     intro:  ['https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/npc_madking_intro.mp3'],
@@ -1760,6 +1761,40 @@ function playNpcDialogue(input){
     el.play().catch(()=>{});
     _currentNpcAudio = el; // <--- FIX: Track the currently playing audio
   }catch{}
+}
+
+// Helper: Show banner and wait specifically for the audio file to finish
+async function saySynced(text, url) {
+  showBanner(text, 999999); // Show indefinitely
+  
+  await new Promise(resolve => {
+    if (!url) { setTimeout(resolve, 2000); return; } // Fallback if no URL
+    
+    try {
+      const a = new Audio();
+      a.crossOrigin = 'anonymous';
+      a.src = url;
+      
+      // Attempt to route through volume sliders
+      if (typeof audioCtx !== 'undefined' && audioCtx && interactGain) {
+         try {
+           const src = audioCtx.createMediaElementSource(a);
+           src.connect(interactGain);
+         } catch(e){}
+      }
+      
+      a.onended = resolve;
+      a.onerror = () => { console.warn("Audio failed", url); resolve(); }; // Safety skip
+      
+      // If play fails (e.g. browser block), resolve immediately so game doesn't softlock
+      a.play().catch(resolve); 
+    } catch (e) {
+      resolve();
+    }
+  });
+
+  hideBanner(); // Hide immediately when audio ends
+  await sleep(250); // Tiny pause between lines for pacing
 }
 
 // ---- Merchant config ----
@@ -2882,8 +2917,7 @@ async function startTutorial(e){
     {x:9, y:18, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true},
     {x:10, y:18, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true},
     {x:11, y:18, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true},
-    // Step 6: 1 Melee Rat at Y=22
-    {x:10, y:22, type:'Rat', hp:2, atk:[1,2], xp:0, tutorialDummy:false}, // Active rat
+    // REMOVED: Step 6 rat (now spawns dynamically in useWeaponArt)
     // Step 8: 1 Stationary Rat at Y=30 (Bow Target)
     {x:10, y:30, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true}
   ];
@@ -6654,6 +6688,28 @@ function drawSpikePixel(ctx, x, y, tile) {
 
 
 
+// Helper: Line of Sight (Blocks vision through Walls/Closed Doors)
+function checkLOS(x0, y0, x1, y1) {
+  let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  let sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1;
+  let err = dx - dy;
+
+  while (true) {
+    if (x0 === x1 && y0 === y1) return true; // Reached target
+    
+    // Check if current tile blocks vision (Wall=0, Door=2)
+    // We start check AFTER the first step so we don't block ourselves
+    const t = state.tiles[y0][x0];
+    if (t === 0 || t === 2) {
+       // If we hit a wall/door, we can't see PAST it.
+       return false; 
+    }
+
+    let e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
+}
 
 function draw(){
   setupCanvas();
@@ -6695,7 +6751,8 @@ function draw(){
       if(!inBounds(gx,gy)) continue;
 
       const d = Math.abs(gx-state.player.x)+Math.abs(gy-state.player.y);
-      const vis = d<=rad;
+      // FIX: Vision requires distance AND clear line of sight
+      const vis = d<=rad && checkLOS(state.player.x, state.player.y, gx, gy);
       const kxy = key(gx,gy);
       if (vis) state.seen.add(kxy);
       const seen = state.seen.has(kxy);
@@ -6899,7 +6956,8 @@ for (const e of state.enemies){
   }
 
   if (s === 1){
-    if (e.x === gx && e.y === gy) {
+    // FIX: Only draw enemy if tile is currently visible (vis)
+    if (e.x === gx && e.y === gy && vis) {
         drawEnemyPixel(ctx, e, px, py, tile); 
         
         // --- NEW: Warlord Label ---
@@ -8562,10 +8620,12 @@ async function runDepth50Intro(){
     const clone = makeCloneBoss(sh.x, sh.y);
     state.enemies.push(clone); draw();
 
-    // Player advances this line
-    playNpcDialogue(NPC_DIALOGUE_URLS.shadow.intro); // <--- VOICE ADDED
-    await say('So you’ve finally made it. This is where your journey ends.');
-    await say('Submit to the darkness!');  // click to dismiss
+    // FIX: Synced Audio/Text Sequence
+    // Line 1: "So you've finally made it..."
+    await saySynced('So you’ve finally made it. This is where your journey ends.', NPC_DIALOGUE_URLS.shadow.intro1);
+    
+    // Line 2: "Submit to the darkness!"
+    await saySynced('Submit to darkness!', NPC_DIALOGUE_URLS.shadow.intro2);
 
     // Cut to black, remove shadow, start boss music, fade back
     await fadeToBlack(360);
@@ -8606,8 +8666,9 @@ state.enemies.push(remnant);
     draw?.();
     await fadeFromBlack(360);
 
-    playNpcDialogue(NPC_DIALOGUE_URLS.shadow.defeat); // <--- VOICE: Shadow dying
-    await say('No! This cannot be!');
+    // FIX: Synced Defeat Line
+    // Line 3: "No! This cannot be!"
+    await saySynced('No! This cannot be!', NPC_DIALOGUE_URLS.shadow.defeat);
 
     // Remove remnant → triple flash → hooded appears
     state.enemies = state.enemies.filter(e => e !== remnant); draw();
@@ -8732,9 +8793,9 @@ function collectIfPickup(){
       log(`Picked up ${it.payload.name} (now x${state.inventory.weapons[it.payload.name]}).`);
 
       // --- TUTORIAL Step 4 (Pickup -> Equip) ---
-      if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && it.payload.name === 'Axe'){
+      if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && it.payload.name === 'Warhammer'){
         hideBanner();
-        showBanner("Axe acquired! Press I and go to weapons to equip it.", 999999);
+        showBanner("Warhammer acquired! Press I and go to weapons to equip it.", 999999);
       }
       // -----------------------------------------
 
@@ -9139,37 +9200,60 @@ delete state.player.tempVisionRange;
 // reset “every other step” counter when entering a new floor
 state._miasmaSteps = 0;
 
-// --- APPLY ENDLESS MODE FLOOR EFFECT ---
+// --- APPLY FLOOR EFFECTS ---
 const isEndless = state.gameMode !== 'classic';
-const nextFloor = state.floor + 1; // Calculating for the floor we are ABOUT to enter
-let newBgColor = 'rgba(0,0,0,0)'; // DEFAULT: no tint (play area only)
+const nextFloor = state.floor + 1; 
+let newBgColor = 'rgba(0,0,0,0)'; 
 
-// Only apply effects if it's NOT a boss floor (multiples of 10)
-if (isEndless && (nextFloor % 10 !== 0)) { 
-    const roll = Math.random();
+// Only apply effects if it's NOT a boss floor
+if (nextFloor % 10 !== 0) {
     
-    if (roll < 0.12) { 
-        state.floorEffect = 'MiasmaChamber';
-        newBgColor = 'rgba(34,197,94,0.18)'; 
-    } else if (roll < 0.24) { 
-        state.floorEffect = 'ShadowLabyrinth';
-        state.player.tempVisionRange = 2;
-    } else if (roll < 0.36) { 
-        state.floorEffect = 'Bloodhunt';
-        newBgColor = 'rgba(190,24,93,0.14)';
-    } else if (roll < 0.48) {
-        state.floorEffect = 'GlacialFreeze';
-        newBgColor = 'rgba(165, 243, 252, 0.15)'; // Cyan/Ice
-    } else if (roll < 0.60) {
-        state.floorEffect = 'VolatileAether';
-        newBgColor = 'rgba(234, 88, 12, 0.15)';   // Orange/Explosive
-        state.explosions = []; // Init explosion list
-    } else if (roll < 0.72) {
-        state.floorEffect = 'AntiMagic';
-        newBgColor = 'rgba(100, 100, 100, 0.25)'; // Grey/Dull
-    } else if (roll < 0.84) {
-        state.floorEffect = 'ArcaneFlux';
-        newBgColor = 'rgba(147, 51, 234, 0.15)';  // Purple/Magic
+    // 1. CLASSIC MODE (Random Chance for 4 Effects)
+    if (!isEndless) {
+       const roll = Math.random();
+       // ~80% Chance of an effect (0.20 each for 4 types)
+       if (roll < 0.20) {
+           state.floorEffect = 'MiasmaChamber';
+           newBgColor = 'rgba(34,197,94,0.18)'; 
+       } else if (roll < 0.40) {
+           state.floorEffect = 'Bloodhunt';
+           newBgColor = 'rgba(190,24,93,0.14)';
+       } else if (roll < 0.60) {
+           state.floorEffect = 'AntiMagic';
+           newBgColor = 'rgba(100, 100, 100, 0.25)';
+       } else if (roll < 0.80) { // <--- ADDED ARCANE FLUX
+           state.floorEffect = 'ArcaneFlux';
+           newBgColor = 'rgba(147, 51, 234, 0.15)'; 
+       }
+       // 0.80 - 1.00 = Normal Floor
+    }
+    
+    // 2. ENDLESS MODE (Full Random Pool)
+    else {
+        const roll = Math.random();
+        if (roll < 0.12) { 
+            state.floorEffect = 'MiasmaChamber';
+            newBgColor = 'rgba(34,197,94,0.18)'; 
+        } else if (roll < 0.24) { 
+            state.floorEffect = 'ShadowLabyrinth';
+            state.player.tempVisionRange = 2;
+        } else if (roll < 0.36) { 
+            state.floorEffect = 'Bloodhunt';
+            newBgColor = 'rgba(190,24,93,0.14)';
+        } else if (roll < 0.48) {
+            state.floorEffect = 'GlacialFreeze';
+            newBgColor = 'rgba(165, 243, 252, 0.15)'; 
+        } else if (roll < 0.60) {
+            state.floorEffect = 'VolatileAether';
+            newBgColor = 'rgba(234, 88, 12, 0.15)';   
+            state.explosions = []; 
+        } else if (roll < 0.72) {
+            state.floorEffect = 'AntiMagic';
+            newBgColor = 'rgba(100, 100, 100, 0.25)'; 
+        } else if (roll < 0.84) {
+            state.floorEffect = 'ArcaneFlux';
+            newBgColor = 'rgba(147, 51, 234, 0.15)';  
+        }
     }
 }
 
@@ -9516,17 +9600,17 @@ function handlePropSmash(x, y) {
     SFX.weaponBreak();
     spawnParticles(x, y, '#8b5a2b', 5);
 
-    // 1. Spawn Axe on floor (where crate was)
+    // 1. Spawn Warhammer (Two-Handed) on floor
     state.pickups[k] = {
       kind: 'weapon',
-      payload: {name:'Axe', type:'axe', min:3, max:5, base:{min:3,max:5}, durMax:15, dur:15}
+      payload: {name:'Warhammer', type:'two', min:6, max:10, base:{min:6,max:10}, durMax:15, dur:15}
     };
     state.tiles[y][x] = 5; // Pickup tile
 
     // 2. Force Step 4 (Pickup phase)
     state.tutorialStep = 4;
     hideBanner();
-    showBanner("Step 4: Walk over the Axe to pick it up.", 999999);
+    showBanner("Step 4: Walk over the Warhammer to pick it up.", 999999);
     
     draw();
     return;
@@ -9909,8 +9993,8 @@ function equipWeaponByName(name){
   return;
 }
 
-// --- TUTORIAL Step 4 -> 5 (Equip Axe) ---
-    if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && name === 'Axe') {
+// --- TUTORIAL Step 4 -> 5 (Equip Warhammer) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && name === 'Warhammer') {
       state.tutorialStep = 5;
       state.player.stamina = 10; // refill stamina for Art
       hideBanner();
@@ -10779,12 +10863,14 @@ function useWeaponArt(){
 
     // --- TUTORIAL Step 5 -> 6 (Weapon Art) ---
     if (state.gameMode === 'tutorial' && state.tutorialStep === 5) {
-      // Check if we killed the dummies
       const liveDummies = state.enemies.filter(e => e.tutorialDummy && e.y === 18).length;
-      if (liveDummies === 0 || acted) { // acted means Art fired successfully
+      if (liveDummies === 0 || acted) { 
          state.tutorialStep = 6;
-         // Ensure dummies are dead if they survived somehow
          state.enemies = state.enemies.filter(e => !(e.tutorialDummy && e.y === 18));
+         
+         // FIX: Spawn the Step 6 Rat NOW
+         state.enemies.push({x:10, y:22, type:'Rat', hp:2, atk:[1,2], xp:0, tutorialDummy:false});
+         
          hideBanner();
          showBanner("Step 6: Melee. Attack the next rat with SPACE. Beware poison!", 999999);
       }
@@ -10925,12 +11011,13 @@ target.hp -= dmg;
 if (state.gameMode === 'tutorial' && state.tutorialStep === 9) {
   state.tutorialStep = 10;
   state.player.mp = 0; // Drain MP so they need tonic
-  // Spawn Tonic
-  state.pickups['10,36'] = {kind:'tonic', payload:1};
-  state.tiles[36][10]=5;
+  
+  // FIX: Spawn Tonic at 10,37 (one tile below player at 10,36)
+  state.pickups['10,37'] = {kind:'tonic', payload:1};
+  state.tiles[37][10]=5;
   
   hideBanner();
-  showBanner("Step 10: Low Mana! Mana recharges slowly. Pickup and use the Tonic (2) for instant recharge.", 999999);
+  showBanner("Step 10: Low Mana! Pickup and use the Tonic (2) for instant recharge.", 999999);
 }
 
 
@@ -12336,7 +12423,7 @@ left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${
 function useBomb(){
   if ((state.inventory.bombs|0) > 0) {
     state.inventory.bombs--;
-    SFX.descend(); 
+    SFX.weaponBreak(); // FIX: Explosion sound instead of stairs
     
     // --- FIX: Throw 3 tiles in facing direction ---
     const range = 3;
