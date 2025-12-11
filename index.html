@@ -2854,14 +2854,7 @@ function goMenu(e){
   if (b) b._queue = []; // Empty the queue so nothing else pops up
   hideBanner();         // Hide the current text immediately
 
-  // FIX: Stop all NPC audio loops immediately
-  if (typeof stopMerchantAudio === 'function') stopMerchantAudio();
-  if (typeof stopBlacksmithAudio === 'function') stopBlacksmithAudio();
-  if (typeof stopJesterAudio === 'function') stopJesterAudio();
-  if (typeof stopCartographerAudio === 'function') stopCartographerAudio();
-  if (typeof stopClericAudio === 'function') stopClericAudio();
-
-  // unlockAudioAndLoops(); // <--- REMOVED: This was restarting them!
+  unlockAudioAndLoops();
 
   // NEW: when we go back to the main menu, play the menu BGM
   if (typeof playMenuBgm === 'function') {
@@ -3208,7 +3201,7 @@ function drawEmoji(ctx, glyph, x, y, w, h){
 const state = {
   floor:1,
   size: {w:84,h:84}, // Increased from 64x64 to 84x84
-  tiles: [],        // 0 wall, 1 floor, 2 door, 3 chest, 4 stairs, 5 pickup
+  tiles: [],          // 0 wall, 1 floor, 2 door, 3 chest, 4 stairs, 5 pickup
   rooms: [],
   corridor: new Set(),
   seen:new Set(),
@@ -11384,22 +11377,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     // 2. Sell Weapons (All of them)
     // Price = 50% of Buy Price (approx)
-    const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10, 
-                       'Warhammer':30, 'Battleaxe':25, 'Halberd':28, 'Claws':15, 
-                       'Fire Staff':20, 'Ice Staff':20, 'Lightning Staff':20, 'Wind Staff':20, 'Earth Staff':20 };
+    const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10 };
     
     for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
       if (count > 0) {
         hasItems = true;
-        // Estimate price: Default 15g if unknown
+        // Estimate price: Default 10g if unknown
         let baseP = W_PRICES[wName] || 15;
+        if (wName.includes('Shield')) baseP = 12; // Shield fallback
         
-        // Dynamic Pricing for Fancy Items
-        if (wName.includes('Shield')) baseP = 12; 
-        if (wName.includes('Ancient')) baseP += 10;
-        if (wName.includes('Cursed')) baseP += 5; // Risk pay
-        if (wName.includes('Key of Destiny')) baseP = 50; 
-
         addSellItem(`${wName} x${count}`, baseP, () => {
            // Logic to handle selling equipped items safely
            const equipped = state.player.weapon?.name === wName;
