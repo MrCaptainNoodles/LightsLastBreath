@@ -11199,7 +11199,7 @@ function makeWeaponOffer(){
 
 // ===== Merchant modal wiring (Buy/Sell greeting) =====
 document.addEventListener('DOMContentLoaded', ()=>{
-  // DOM
+  // DOM Elements
   const modal   = document.getElementById('merchantModal');
   const goldNow = document.getElementById('goldNow');
   const msg     = document.getElementById('merchantMsg');
@@ -11207,304 +11207,230 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnB    = document.getElementById('mOfferB');
   const btnC    = document.getElementById('mOfferC');
   const backBtn = document.getElementById('mBack');
+  
+  // Helper: Find or Create the Button Row and List Container
+  const btnRow = btnA.parentElement; // The row holding A, B, C
+  
+  let listDiv = document.getElementById('merchantSellList');
+  if (!listDiv) {
+    listDiv = document.createElement('div');
+    listDiv.id = 'merchantSellList';
+    listDiv.style.cssText = 'display:none; flex-direction:column; gap:8px; max-height:50vh; overflow-y:auto; margin-bottom:10px; padding-right:4px;';
+    btnRow.parentNode.insertBefore(listDiv, btnRow); // Insert before buttons
+  }
 
-  // Header Back/Close logic (kept local so the element exists)
+  // --- Header Back/Close logic ---
   function setBackMode(mode){
     if (!backBtn) return;
-
-    // clear stale state
     backBtn.removeAttribute('data-close');
     backBtn.onclick = null;
 
-    if (mode === 'hide'){                 // greeting: hide header button
+    if (mode === 'hide'){                 
       backBtn.style.display = 'none';
-    } else if (mode === 'back'){          // inside Buy/Sell: show Back
+    } else if (mode === 'back'){          
       backBtn.style.display = '';
       backBtn.textContent = 'Back';
       backBtn.onclick = renderGreeting;
-    } else {                              // 'close' (if you ever want a real close)
-  backBtn.style.display = '';
-  backBtn.textContent = 'Close';
-  backBtn.setAttribute('data-close','1');
-  backBtn.onclick = ()=>{
-    modal.style.display='none';
-
-    // Unlock controls when closing via header
-    state._inputLocked = false;
-
-    if (!state._pauseOpen) {
-      setMobileControlsVisible?.(true);
+    } else {                              
+      backBtn.style.display = '';
+      backBtn.textContent = 'Close';
+      backBtn.setAttribute('data-close','1');
+      backBtn.onclick = ()=>{
+        modal.style.display='none';
+        state._inputLocked = false;
+        if (!state._pauseOpen) setMobileControlsVisible?.(true);
+      };
     }
-  };
-}
-
   }
 
-  // --- Merchant weapon catalog (must match your real weapons) ---
-  const MERCHANT_WEAPON_NAMES = ['Shortsword','Claymore','Spear','Axe','Knuckle Duster'];
-  const MERCHANT_WEAPON_PRICES = {
-    'Shortsword': 28,
-    'Claymore':   42,
-    'Spear':      36,
-    'Axe':        38,
-    'Knuckle Duster': 22
-  };
-  function weaponStatsFor(name){
-    const stats = {
-      'Shortsword': [3,5,'one'],
-      'Claymore':   [5,9,'two'],
-      'Spear':      [4,7,'spear'],
-      'Axe':        [4,8,'axe'],
-      'Knuckle Duster': [2,4,'hand'],
-      'Key of Destiny': [5,7,'one']
-    }[name];
-    return stats ? { name, min:stats[0], max:stats[1], type:stats[2] } : null;
-  }
-
-  // Depth price: +10% every 3 floors
+  // --- Pricing Helper ---
   function depthPrice(base){
     const f = state.floor | 0;
     const mult = 1 + 0.10 * Math.floor(Math.max(0, f - 1) / 3);
     return Math.ceil(base * mult);
   }
 
-  // Labels and button binding
-  const label = (o)=> o.kind==='buy'
-  ? `Buy ${o.item} — ${o.price}g${Number.isFinite(o.stock) ? ` (${o.stock} left)` : ''}`
-  : `Sell ${o.item} — +${o.price}g`;
-
-
-  const bind = (el, text, fn)=>{
-    // reset stale SOLD / disabled / pointer state from previous screen
-    el.disabled = false;
-    el.style.opacity = 1;
-    el.style.pointerEvents = '';
-    el.textContent = text || '';
-    el.style.display = text ? '' : 'none';
-    el.onclick = fn || null;
-  };
-
-  // Persistent 3-offer stock (per floor)
+  // Persistent Stock (Buy Menu)
   function getBuyStock(){
     if (!state.merchant) state.merchant = {};
     if (!state.merchant.stock){
-      state.merchant.stock = merchantBuyOnly().map(o => ({ ...o, sold:false }));
+      state.merchant.stock = [
+        { kind:'buy', item:'Potion',   price:depthPrice(10), stock:rand(1,5), do:()=>{ state.inventory.potions=(state.inventory.potions|0)+1; } },
+        { kind:'buy', item:'Tonic',    price:depthPrice(12), stock:rand(1,5), do:()=>{ state.inventory.tonics=(state.inventory.tonics|0)+1; } },
+        { kind:'buy', item:'Lockpick', price:depthPrice(15), stock:rand(1,5), do:()=>{ state.inventory.lockpicks=(state.inventory.lockpicks|0)+1; } }
+      ].map(o => ({ ...o, sold:false }));
     }
     return state.merchant.stock;
   }
 
-  // Random weapon line (guarded so it never crashes)
-  function makeWeaponOffer(){
-    const name = MERCHANT_WEAPON_NAMES[rand(0, MERCHANT_WEAPON_NAMES.length-1)];
-    const st = weaponStatsFor(name);
-
-    // Guard: if a weapon name slipped in without stats, fall back to a Potion
-    if (!st){
-      return {
-        kind:'buy', item:'Potion', price: depthPrice(10),
-        do:()=>{ state.inventory.potions=(state.inventory.potions|0)+1; }
-      };
-    }
-
-    const price = depthPrice(MERCHANT_WEAPON_PRICES[name] || 20);
-    return {
-      kind: 'buy',
-      item: `${name} (${st.min}–${st.max})`,
-      price,
-      do: ()=>{
-        state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
-      }
-    };
-  }
-
-  
-  // BUY: always 3 purchase choices (bundled consumables only)
-function merchantBuyOnly(){
-  const mk = (label, unitBasePrice, invKey) => {
-    const stock = rand(1,5);
-    const price = depthPrice(unitBasePrice);
-    return {
-      kind: 'buy',
-      item: label,
-      price,
-      stock,
-      do: ()=>{ state.inventory[invKey] = (state.inventory[invKey] | 0) + 1; }
-    };
-  };
-
-  // Just return the fixed array directly. 
-  // If you add more items later, bring back the shuffle.
-  return [
-    mk('Potion',   10, 'potions'),
-    mk('Tonic',    12, 'tonics'),
-    mk('Lockpick', 15, 'lockpicks'),
-  ];
-}
-
-
-
   // --- RENDERERS ---
+
   function renderBuy(){
     setBackMode('back');
-    const offers = getBuyStock();
     msg.textContent = "I've got plenty of things that might interest you.";
+    
+    // Toggle Views
+    btnRow.style.display = 'flex'; // Show A/B/C buttons
+    listDiv.style.display = 'none'; // Hide Sell List
 
-    const paint = (btn, o) => {
-      if (!o){ btn.style.display = 'none'; return; }
-      const text = o.sold ? (label(o) + ' — SOLD') : label(o);
-      btn.textContent = text;
+    const offers = getBuyStock();
+    
+    const bindBuy = (btn, o) => {
+      if (!o){ btn.style.display='none'; return; }
+      const label = o.sold ? `${o.item} — SOLD` : `Buy ${o.item} — ${o.price}g (${o.stock})`;
+      btn.textContent = label;
       btn.style.display = '';
       btn.disabled = !!o.sold;
       btn.style.opacity = o.sold ? 0.5 : 1;
-      btn.style.pointerEvents = o.sold ? 'none' : '';
-      btn.onclick = o.sold ? null : () => doBuy(o);
+      btn.onclick = () => {
+        if ((state.inventory.gold|0) < o.price) { msg.textContent = 'Not enough gold.'; return; }
+        state.inventory.gold -= o.price;
+        o.do();
+        o.stock--;
+        if (o.stock <= 0) o.sold = true;
+        
+        unlockCodex('Merchant_Bought', true);
+        goldNow.textContent = state.inventory.gold;
+        updateInvBody?.();
+        renderBuy(); // Refresh
+      };
     };
 
-function doBuy(o){
-  const have = (state.inventory.gold|0);
-  if (have < o.price){ msg.textContent = 'Not enough gold.'; return; }
-
-  // Audio removed here (plays only on entering menu)
-
-  state.inventory.gold = have - o.price;
-  o.do();                                 // grant ONE item
-
-  if (Number.isFinite(o.stock)) {
-    o.stock = Math.max(0, o.stock - 1);   // decrement per click
-    o.sold  = (o.stock <= 0);             // SOLD when stock runs out
-  } else {
-    o.sold = true;                        // fallback for any legacy line
-  }
-unlockCodex('Merchant_Bought', true); // <--- TRACK PURCHASE
-  goldNow.textContent = state.inventory.gold|0;
-  updateInvBody?.();
-  renderBuy();                            // refresh labels / SOLD state
-}
-
-
-
-    paint(btnA, offers[0]);
-    paint(btnB, offers[1]);
-    paint(btnC, offers[2]);
+    bindBuy(btnA, offers[0]);
+    bindBuy(btnB, offers[1]);
+    bindBuy(btnC, offers[2]);
   }
 
   function renderSell(){
     setBackMode('back');
-    msg.textContent = "I'll buy just about anything you have. ";
+    msg.textContent = "I'll buy just about anything you have.";
+    
+    // Toggle Views
+    btnRow.style.display = 'none'; // Hide the 3 big buttons
+    listDiv.style.display = 'flex'; // Show the scrollable list
+    listDiv.innerHTML = ''; // Clear previous
 
-    // Build three sell picks (only if you have extras)
-    const picks = [];
-    const push = (cond, label, price, doSell)=>{ if (cond) picks.push({label, price, doSell}); };
+    // Helper to create a sell row
+    const addSellItem = (label, price, onSell) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.1);';
+      
+      const txt = document.createElement('span');
+      txt.textContent = `${label}`;
+      txt.style.fontWeight = 'bold';
+      
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = `Sell (+${price}g)`;
+      btn.style.padding = '6px 12px';
+      btn.style.fontSize = '14px';
+      
+      btn.onclick = () => {
+        onSell();
+        state.inventory.gold = (state.inventory.gold|0) + price;
+        unlockCodex('Merchant_Sold', true);
+        goldNow.textContent = state.inventory.gold;
+        updateInvBody?.();
+        renderSell(); // Re-render list to update counts
+      };
+      
+      row.appendChild(txt);
+      row.appendChild(btn);
+      listDiv.appendChild(row);
+    };
 
-    // weapons: if you have >1 of any weapon, allow selling one
-    // weapons: allow selling any you own; if it was the last equipped copy, swap to Fists
-for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
-  if (count > 0) {
-    const price = Math.max(5, Math.floor((MERCHANT_WEAPON_PRICES[wName] || 20) * 0.5));
-    picks.push({
-      label: `Sell ${wName}`,
-      price,
-      doSell: () => {
-        const equipped = state.player.weapon?.name === wName;
-        const stashedCnt = (state.inventory.stashed?.[wName]?.length) || 0;
+    let hasItems = false;
 
-        // CHECK: If this is the last copy you own (inventory + stash) AND it's equipped
-        if (equipped && count <= 1 && stashedCnt === 0) {
-          // Force switch to Fists + recompute/UI update immediately
-          state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
-          
-          if (typeof recomputeWeapon === 'function') recomputeWeapon();
-          if (typeof updateEquipUI === 'function') updateEquipUI(); // <-- CRITICAL: Force HUD update NOW
-          
-          if (typeof log === 'function') log(`Sold your last ${wName}. Equipped Fists.`);
-          
-          if (state.player.shield) { 
-            // Also unequip the shield if it was equipped with this two-handed weapon, 
-            // though Fists should allow a shield, so this may not be needed, but safe to keep.
-            unequipShield(); 
-          }
-        }
-        
-        // Decrement inventory count and gain gold
-        state.inventory.weapons[wName] = Math.max(0, (state.inventory.weapons[wName] | 0) - 1);
-        
-        // CRITICAL STEP: CLEAN UP THE ZERO-COUNT ENTRY
-        if (state.inventory.weapons[wName] === 0) {
-            delete state.inventory.weapons[wName];
-        }
-        
-        state.inventory.gold = (state.inventory.gold | 0) + price;
+    // 1. Sell Consumables
+    const cons = [
+      { id:'potions', name:'Potion', price:5 },
+      { id:'tonics', name:'Tonic', price:6 },
+      { id:'antidotes', name:'Antidote', price:7 },
+      { id:'lockpicks', name:'Lockpick', price:8 },
+      { id:'bombs', name:'Bomb', price:15 },
+      { id:'shields', name:'Std Shield', price:10 },
+      { id:'warpStones', name:'Warp Stone', price:25 }
+    ];
+    cons.forEach(c => {
+      const count = state.inventory[c.id]|0;
+      if (count > 0) {
+        hasItems = true;
+        addSellItem(`${c.name} x${count}`, c.price, () => { state.inventory[c.id]--; });
       }
     });
+
+    // 2. Sell Weapons (All of them)
+    // Price = 50% of Buy Price (approx)
+    const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10 };
+    
+    for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
+      if (count > 0) {
+        hasItems = true;
+        // Estimate price: Default 10g if unknown
+        let baseP = W_PRICES[wName] || 15;
+        if (wName.includes('Shield')) baseP = 12; // Shield fallback
+        
+        addSellItem(`${wName} x${count}`, baseP, () => {
+           // Logic to handle selling equipped items safely
+           const equipped = state.player.weapon?.name === wName;
+           const stashedCnt = (state.inventory.stashed?.[wName]?.length) || 0;
+
+           if (equipped && count <= 1 && stashedCnt === 0) {
+              // Swap to Fists if selling last equipped weapon
+              state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
+              if (typeof recomputeWeapon === 'function') recomputeWeapon();
+              if (typeof updateEquipUI === 'function') updateEquipUI();
+              log(`Sold your last ${wName}. Equipped Fists.`);
+           }
+           
+           state.inventory.weapons[wName]--;
+           if (state.inventory.weapons[wName] <= 0) delete state.inventory.weapons[wName];
+        });
+      }
+    }
+
+    if (!hasItems) {
+      listDiv.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">You have nothing to sell.</div>';
+    }
   }
-}
 
-
-    // paint up to three
-    const paintSell = (btn, pick)=>{
-  if (!pick){ bind(btn, '', null); return; }
-  bind(btn, `${pick.label} — +${pick.price}g`, ()=>{
-    // Audio removed here (plays only on entering menu)
-    pick.doSell();
-    unlockCodex('Merchant_Sold', true); // <--- TRACK SALE
-    goldNow.textContent = state.inventory.gold|0;
-    updateInvBody?.();
-    renderSell();
-  });
-};
-
-
-    paintSell(btnA, picks[0] || null);
-    paintSell(btnB, picks[1] || null);
-    paintSell(btnC, picks[2] || null);
-  }
-
-function renderGreeting(){
+  function renderGreeting(){
     setBackMode('hide');
+    // Ensure button row is visible, list is hidden
+    btnRow.style.display = 'flex';
+    listDiv.style.display = 'none';
+    
     msg.textContent = 'Hello adventurer, are you looking to buy or sell?';
-    [btnA, btnB, btnC].forEach(b=>{
-      b.disabled = false; b.style.opacity = 1; b.style.pointerEvents = '';
-    });
+    
+    // Reset Buttons to Greeting Mode
+    [btnA, btnB, btnC].forEach(b => { b.style.display=''; b.disabled=false; b.style.opacity=1; });
+    
+    btnA.textContent = 'Buy';
+    btnA.onclick = () => { playNpcDialogue(NPC_DIALOGUE_URLS.merchant.buy); renderBuy(); };
 
-    bind(btnA, 'Buy',  ()=>{
-      playNpcDialogue(NPC_DIALOGUE_URLS.merchant.buy);
-      renderBuy();
-    });
+    btnB.textContent = 'Sell';
+    btnB.onclick = () => { playNpcDialogue(NPC_DIALOGUE_URLS.merchant.sell); renderSell(); };
 
-    bind(btnB, 'Sell', ()=>{
-      playNpcDialogue(NPC_DIALOGUE_URLS.merchant.sell);
-      renderSell();
-    });
-
-    bind(btnC, 'Leave', ()=>{
+    btnC.textContent = 'Leave';
+    btnC.onclick = () => {
       playNpcDialogue(NPC_DIALOGUE_URLS.merchant.leave);
       modal.style.display='none';
-
-      // Unlock controls when leaving the merchant
       state._inputLocked = false;
-
-      if (!state._pauseOpen) {
-        setMobileControlsVisible?.(true);
-      }
-    });
+      if (!state._pauseOpen) setMobileControlsVisible?.(true);
+    };
   }
 
   // Public opener
   window.openMerchant = function openMerchant(){
     if (!modal) return;
-    unlockCodex('Merchant'); // <--- ADD THIS
+    unlockCodex('Merchant');
     playNpcDialogue(NPC_DIALOGUE_URLS.merchant.interact);
-
     goldNow.textContent = state.inventory.gold|0;
     renderGreeting();
     modal.style.display = 'flex';
-
-    // Lock player input while talking to the merchant
     state._inputLocked = true;
-
     setMobileControlsVisible?.(false);
   };
-
 });
 
 
