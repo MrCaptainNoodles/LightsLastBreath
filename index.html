@@ -15236,7 +15236,8 @@ function handleEnemyDeath(e, source) {
       
       // If the player leveled up on this kill, the Level Up modal is open.
       // We defer the Omen choice until the player closes the Level Up menu.
-      const hasLeveled = (state.player.xp - e.xp) <= 0; // Check if XP crossed threshold
+      // FIX: Correctly check if Current XP + Reward >= Next Level Threshold
+      const hasLeveled = (state.player.xp + e.xp) >= state.player.next;
       
       if (hasLeveled) {
           // Store Omen as pending
