@@ -1238,7 +1238,10 @@ input[type=range].custom-slider::-webkit-slider-thumb {
   <button class="btn" id="dbgSpawnKey">Spawn Key Below</button>
 <button class="btn" id="dbgSpawnCursed">Spawn Cursed Sword</button>
   <button class="btn" id="dbgSpawnGoldWell">Spawn Gold Well</button>
-  <button class="btn" id="dbgSpawnCleric">Spawn Cleric</button> <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button> </div>
+  <button class="btn" id="dbgSpawnCleric">Spawn Cleric</button>
+  <button class="btn" id="dbgSpawnVampiric">Spawn Vampiric Sword</button>
+  <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button> </div>
+  
 
 
     </div>
@@ -3371,6 +3374,9 @@ function getBossName(type){
 // ====== Map Gen ======
 function gen(){
    state.noFog = false; 
+   // FIX: Reset boss/event flags so new floors can trigger them again
+   state._bossStairsSpawned = false; 
+   
   const W=state.size.w,H=state.size.h;
   state.tiles = Array.from({length:H},()=>Array.from({length:W},()=>0));
   state.rooms=[]; state.corridor=new Set(); state.seen=new Set();
@@ -7293,23 +7299,24 @@ function updateEquipUI(){
   // 1. Staff Logic (Magic)
   if (w.type === 'staff') {
       if (state.floorEffect === 'ArcaneFlux') {
-          // Staffs get BOOSTED by Arcane Flux (Magic Floor)
+          // BOOST: x1.5 Damage
           effMin = Math.ceil(effMin * 1.5);
           effMax = Math.ceil(effMax * 1.5);
           dispText = `ATK: ${effMin}–${effMax}`;
       } else if (state.floorEffect === 'AntiMagic') {
-          // Staffs are SILENCED by Anti-Magic
+          // SILENCE: No Attack
           dispText = `ATK: SILENCED`;
       }
+      // Normal Floor: Default stats
   } 
   // 2. Melee Logic (Physical)
   else {
       if (state.floorEffect === 'AntiMagic') {
-          // Melee gets BOOSTED by Anti-Magic
+          // BOOST: x1.5 Damage
           effMin = Math.ceil(effMin * 1.5);
           effMax = Math.ceil(effMax * 1.5);
       } else if (state.floorEffect === 'ArcaneFlux') {
-          // Melee gets NERFED by Arcane Flux
+          // NERF: x0.25 Damage (Min 1)
           effMin = Math.max(1, Math.ceil(effMin * 0.25));
           effMax = Math.max(1, Math.ceil(effMax * 0.25));
       }
@@ -9213,17 +9220,17 @@ if (nextFloor % 10 !== 0) {
        const roll = Math.random();
        // ~80% Chance of an effect (0.20 each for 4 types)
        if (roll < 0.20) {
-           state.floorEffect = 'MiasmaChamber';
-           newBgColor = 'rgba(34,197,94,0.18)'; 
-       } else if (roll < 0.40) {
            state.floorEffect = 'Bloodhunt';
            newBgColor = 'rgba(190,24,93,0.14)';
-       } else if (roll < 0.60) {
+       } else if (roll < 0.40) {
            state.floorEffect = 'AntiMagic';
            newBgColor = 'rgba(100, 100, 100, 0.25)';
-       } else if (roll < 0.80) { // <--- ADDED ARCANE FLUX
+       } else if (roll < 0.60) {
            state.floorEffect = 'ArcaneFlux';
            newBgColor = 'rgba(147, 51, 234, 0.15)'; 
+       } else if (roll < 0.80) { 
+           state.floorEffect = 'MiasmaChamber';
+           newBgColor = 'rgba(34,197,94,0.18)'; 
        }
        // 0.80 - 1.00 = Normal Floor
     }
@@ -9286,7 +9293,7 @@ state.floor++;
 state.run.depth = Math.max(state.run.depth, state.floor);
 
 // build the next floor while we’re still black
-gen(); enemyStep(); draw?.(); updateBars();
+gen(); enemyStep(); draw?.(); updateBars(); updateEquipUI(); 
 
     // sync Depth chip
     const fc = document.getElementById('floorChip');
@@ -9310,10 +9317,11 @@ gen(); enemyStep(); draw?.(); updateBars();
         if (state.floorEffect === 'MiasmaChamber') {
           showBanner('Miasma Chamber — the air itself poisons you.', 4000);
         } else if (state.floorEffect === 'ShadowLabyrinth') {
-  showBanner('Shadow Labyrinth — your vision is strangled by darkness.', 4000);
-} else if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt') {
-  showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
-}
+          showBanner('Shadow Labyrinth — your vision is strangled by darkness.', 4000);
+        } else if (state.floorEffect === 'Bloodhunt') {
+          // Removed "gameMode !== classic" check so it shows in Demo/Classic too
+          showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
+        }
 else if (state.floorEffect === 'GlacialFreeze') {
           showBanner('Glacial Freeze — the floor is slick. Momentum carries you.', 4000);
         } else if (state.floorEffect === 'VolatileAether') {
@@ -9870,10 +9878,17 @@ function openChest(x,y){
       }
       
       case 'shield': {
-        state.inventory.shields = (state.inventory.shields|0) + 1;
-        lootMsg.push('+1 shield');
+        // Pick a random specific shield type
+        const types = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
+        const name = types[Math.floor(Math.random() * types.length)];
+
+        // Add to named inventory (not generic counter)
+        state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+        lootMsg.push(`+1 ${name}`);
+
+        // Auto-equip if allowed
         if (!state.player.shield && isShieldAllowed()) {
-          equipShield();              
+          equipShield(name);              
         } else {
           updateEquipUI?.();          
         }
@@ -10009,7 +10024,7 @@ function equipWeaponByName(name){
   
   if (name.includes('Sharp '))       { baseName = baseName.replace('Sharp ', '');   bonMin+=1; bonMax+=1; }
   else if (name.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
-  else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); }
+  else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); isVamp = true; } // <--- Added isVamp = true
   // Fix: Check that it isn't the specific item "Ancient Shield" before stripping
   else if (name.includes('Ancient ') && name !== 'Ancient Shield') { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
   
@@ -10595,16 +10610,8 @@ function useWeaponArt(){
           spawnFloatText(dmg+"!", e.x, e.y, '#ffae00');
           
           if(e.hp <= 0) {
-             state.enemies = state.enemies.filter(x=>x!==e);
-             state.run.kills++;
-             awardKill(t, e.xp);
-             SFX.kill();
-             if (e.boss) spawnBossStairs();
-             if (state.floorEffect === 'VolatileAether') {
-                if (!state.explosions) state.explosions = [];
-                state.explosions.push({ x: e.x, y: e.y, timer: 3 }); 
-                spawnFloatText("3...", e.x, e.y, '#f97316');
-             }
+             // Use central handler to ensure Stairs/Omens/Explosions trigger
+             handleEnemyDeath(e, t);
           } else {
              flashEnemy(e, 'red');
           }
@@ -10649,11 +10656,7 @@ function useWeaponArt(){
         
         // Handle Kill
         if(e.hp <= 0) { 
-            state.enemies=state.enemies.filter(x=>x!==e); 
-            state.run.kills++; 
-            awardKill(t, e.xp); 
-            SFX.kill(); 
-            if(e.boss) spawnBossStairs();
+            handleEnemyDeath(e, t);
         }
 
         // DROP LOGIC
@@ -10716,7 +10719,7 @@ function useWeaponArt(){
       SFX.swingFor('spear');
       const dmg = rand(w.min, w.max);
       
-      if(e1) { e1.hp -= dmg; spawnFloatText(dmg, e1.x, e1.y, '#fff'); flashEnemy(e1); if(e1.hp<=0){ state.enemies=state.enemies.filter(x=>x!==e1); state.run.kills++; awardKill(t,e1.xp); } }
+      if(e1) { e1.hp -= dmg; spawnFloatText(dmg, e1.x, e1.y, '#fff'); flashEnemy(e1); if(e1.hp<=0) handleEnemyDeath(e1, t); }
       if(e2) { e2.hp -= dmg; spawnFloatText(dmg, e2.x, e2.y, '#fff'); flashEnemy(e2); if(e2.hp<=0){ state.enemies=state.enemies.filter(x=>x!==e2); state.run.kills++; awardKill(t,e2.xp); } }
       
       log("You Pierce through the line!");
@@ -10750,7 +10753,7 @@ function useWeaponArt(){
         SFX.enemyHit();
         log(`Backstab! Critical hit for ${dmg}.`);
         
-        if (e.hp <= 0) { state.enemies = state.enemies.filter(x=>x!==e); state.run.kills++; awardKill(t, e.xp); SFX.kill(); }
+        if(e.hp <= 0) handleEnemyDeath(e, t);
         
         acted = true;
         state.player.artCooldown = 12;
@@ -10779,7 +10782,7 @@ function useWeaponArt(){
       SFX.attack();
       log(`Flurry of blows! ${total} total damage.`);
       
-      if (e.hp <= 0) { state.enemies = state.enemies.filter(x=>x!==e); state.run.kills++; awardKill(t, e.xp); SFX.kill(); }
+      if(e.hp <= 0) handleEnemyDeath(e, t);
       
       acted = true;
       state.player.artCooldown = 8;
@@ -10829,12 +10832,11 @@ function useWeaponArt(){
     
     // Cleanup dead
     const kills = state.enemies.filter(e => e._dead);
-    if (kills.length > 0) {
-       state.enemies = state.enemies.filter(e => !e._dead);
-       state.run.kills += kills.length;
-       kills.forEach(k => awardKill('magic', k.xp)); // Grants Magic XP
-       SFX.kill();
-    }
+    kills.forEach(k => {
+       // Reset flag so handleEnemyDeath doesn't get confused (optional but safe)
+       k._dead = false; 
+       handleEnemyDeath(k, 'magic');
+    });
 
     if (hitCount > 0) log(`You unleash raw Aether! Hit ${hitCount} enemies.`);
     else log("You release the energy, but no one is there.");
@@ -12303,15 +12305,27 @@ const pMax  = ws.max + bonus;
 // --- NEW: Apply Floor Modifiers to Display ---
 let dMin = pMin, dMax = pMax;
 let dStyle = ''; 
+let dNote  = '';
 
 if (state.floorEffect === 'AntiMagic') {
-    dMin = Math.ceil(dMin * 1.5);
-    dMax = Math.ceil(dMax * 1.5);
-    dStyle = 'color:#4ade80; font-weight:bold;'; // Green (Buff)
+    if (wType === 'staff') {
+        dStyle = 'color:#f87171; text-decoration:line-through;'; // Red + Strike
+        dNote = ' (SILENCED)';
+    } else {
+        dMin = Math.ceil(dMin * 1.5);
+        dMax = Math.ceil(dMax * 1.5);
+        dStyle = 'color:#4ade80; font-weight:bold;'; // Green (Buff)
+    }
 } else if (state.floorEffect === 'ArcaneFlux') {
-    dMin = Math.max(1, Math.ceil(dMin * 0.25));
-    dMax = Math.max(1, Math.ceil(dMax * 0.25));
-    dStyle = 'color:#f87171; font-weight:bold;'; // Red (Nerf)
+    if (wType === 'staff') {
+        dMin = Math.ceil(dMin * 1.5);
+        dMax = Math.ceil(dMax * 1.5);
+        dStyle = 'color:#4ade80; font-weight:bold;'; // Green (Buff)
+    } else {
+        dMin = Math.max(1, Math.ceil(dMin * 0.25));
+        dMax = Math.max(1, Math.ceil(dMax * 0.25));
+        dStyle = 'color:#f87171; font-weight:bold;'; // Red (Nerf)
+    }
 }
 // ---------------------------------------------
 
@@ -12325,8 +12339,15 @@ if (!isEquipped) {
   
   // Recalculate equipped effective dmg for fair comparison
   let curMin = cur.min, curMax = cur.max;
-  if (state.floorEffect === 'AntiMagic') { curMin*=1.5; curMax*=1.5; }
-  else if (state.floorEffect === 'ArcaneFlux') { curMin*=0.25; curMax*=0.25; }
+  const curIsStaff = (cur.type === 'staff');
+
+  if (state.floorEffect === 'ArcaneFlux') {
+      const mult = curIsStaff ? 1.5 : 0.25;
+      curMin = Math.ceil(curMin * mult); curMax = Math.ceil(curMax * mult);
+  } else if (state.floorEffect === 'AntiMagic') {
+      const mult = curIsStaff ? 0 : 1.5; // 0 effectively handles silence for math
+      curMin = Math.ceil(curMin * mult); curMax = Math.ceil(curMax * mult);
+  }
   
   const curAvg = (curMin + curMax) / 2;
   const rowAvg = (dMin + dMax) / 2;
@@ -12337,8 +12358,7 @@ if (!isEquipped) {
   else diffHTML = ` <span style="color:#9ca3af;">(=)</span>`;
 }
 
-left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${dMax}</span>${durTxt}${diffHTML}`;
-// -----------------------------
+left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${dMax}${dNote}</span>${durTxt}${diffHTML}`;// -----------------------------
 
 
       const btn = document.createElement('button');
@@ -15012,8 +15032,19 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
 
      // Normal Weapon Logic
      let dMin = min, dMax = max;
-     if (state.floorEffect === 'AntiMagic') { dMin = Math.ceil(dMin*1.5); dMax = Math.ceil(dMax*1.5); }
-     else if (state.floorEffect === 'ArcaneFlux') { dMin = Math.ceil(dMin*0.25); dMax = Math.ceil(dMax*0.25); }
+     const isStaff = (type === 'staff');
+
+     // Arcane Flux: Staffs x1.5, Melee x0.25
+     if (state.floorEffect === 'ArcaneFlux') {
+        if (isStaff) { dMin = Math.ceil(dMin * 1.5); dMax = Math.ceil(dMax * 1.5); }
+        else         { dMin = Math.ceil(dMin * 0.25); dMax = Math.ceil(dMax * 0.25); }
+     } 
+     // Anti-Magic: Staffs Silenced, Melee x1.5
+     else if (state.floorEffect === 'AntiMagic') {
+        if (isStaff) return `<b>${name}</b><br><span style="font-size:12px; opacity:0.8; color:#f87171; text-decoration:line-through;">SILENCED</span>`;
+        dMin = Math.ceil(dMin * 1.5); dMax = Math.ceil(dMax * 1.5); 
+     }
+     
      return `<b>${name}</b><br><span style="font-size:12px; opacity:0.8">Dmg: ${dMin}-${dMax}</span>`;
   };
 
@@ -15877,6 +15908,34 @@ if (cursBtn) cursBtn.addEventListener('click', ()=>{
   draw?.();
   hideDebug?.();
   log('[debug] Cursed Shortsword spawned below.');
+});
+
+// --- NEW: Spawn Vampiric Debug ---
+const vampBtn = document.getElementById('dbgSpawnVampiric');
+if (vampBtn) vampBtn.addEventListener('click', ()=>{
+  state.pickups ||= {};
+  const px = state.player.x;
+  const py = state.player.y + 1;
+
+  if (!inBounds(px, py)) { log('[debug] Out of bounds.'); return; }
+  const t = state.tiles[py][px];
+  if (t !== 1 && t !== 5) { log('[debug] Tile below is not floor.'); return; }
+
+  const kxy = key(px, py);
+  state.tiles[py][px] = 5;
+  state.pickups[kxy] = { 
+    kind: 'weapon', 
+    payload: { 
+      name: 'Vampiric Shortsword', 
+      type: 'one', 
+      min: 4, max: 6, // Base 3-5 +1 for Vampiric usually, or just custom stats
+      vampiric: true
+    } 
+  };
+
+  draw?.();
+  hideDebug?.();
+  log('[debug] Vampiric Shortsword spawned below.');
 });
 document.getElementById('dbgSpawnGoldWell')?.addEventListener('click', ()=>{
   const px = state.player.x, py = state.player.y + 1;
