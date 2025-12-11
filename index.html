@@ -4633,8 +4633,10 @@ if (r < 0.12){
   kind = 'tonic';                       
   payload = 1;
 } else if (r < 0.81){
-  kind = 'shield';                      
-  payload = 1;
+  kind = 'shield';
+  // FIX: Pick a specific shield name instead of generic "1"
+  const sTypes = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
+  payload = sTypes[Math.floor(Math.random() * sTypes.length)];
 } else {
   kind = 'antidote';                    
   payload = 1;
@@ -8868,12 +8870,19 @@ function collectIfPickup(){
 
         } else if (it.kind === 'shield'){
   SFX.pickup();
-  state.inventory.shields = (state.inventory.shields|0) + 1;
-  log('Picked up a shield.');
-  if (!state.player.shield && isShieldAllowed()) { equipShield(); }
+  // FIX: Use the name from payload (fallback to Buckler if old save data)
+  const sName = (typeof it.payload === 'string') ? it.payload : 'Buckler';
+  
+  // Add to named weapons inventory
+  state.inventory.weapons[sName] = (state.inventory.weapons[sName]||0) + 1;
+  
+  log(`Picked up a ${sName}.`);
+  
+  // Auto-equip specific name
+  if (!state.player.shield && isShieldAllowed()) { equipShield(sName); }
   else { updateEquipUI?.(); }
 
-        updateEquipUI();
+  updateEquipUI();
 }else if(it.kind === 'spell'){
   SFX.pickup();
   const sp   = it.payload;      // { name, cost, tier }
@@ -15794,8 +15803,9 @@ if (spawnBtn) spawnBtn.addEventListener('click', ()=>{
   if (!(t === 1 || t === 5)) { log('[debug] Tile below is not free floor.'); return; }
 
   const kxy = key(px, py);
-  state.tiles[py][px] = 5;                        // mark as pickup tile
-  state.pickups[kxy] = { kind: 'shield', payload: 1 }; // your pickup code already understands 'shield'
+  state.tiles[py][px] = 5;
+  // FIX: Spawn a specific Tower Shield instead of generic
+  state.pickups[kxy] = { kind: 'shield', payload: 'Tower Shield' };
 
   draw?.();
   updateInvBody?.();
