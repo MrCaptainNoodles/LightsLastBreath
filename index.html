@@ -1383,8 +1383,8 @@ function isNearBlacksmith(px,py){
 function isJesterTile(x,y){
   const j = state.jester;
   if (!j) return false;
+  // FIX: Removed j.left check since the Jester is only 2 tiles wide (NPC + Wheel)
   return (x===j.x && y===j.y) ||
-         (j.left && x===j.left.x && y===j.left.y) ||
          (j.right && x===j.right.x && y===j.right.y);
 }
 function isNearJester(px,py){
@@ -3200,8 +3200,8 @@ function drawEmoji(ctx, glyph, x, y, w, h){
 // ====== Game State ======
 const state = {
   floor:1,
-  size: {w:64,h:64},
-  tiles: [],          // 0 wall, 1 floor, 2 door, 3 chest, 4 stairs, 5 pickup
+  size: {w:84,h:84}, // Increased from 64x64 to 84x84
+  tiles: [],        // 0 wall, 1 floor, 2 door, 3 chest, 4 stairs, 5 pickup
   rooms: [],
   corridor: new Set(),
   seen:new Set(),
@@ -3580,9 +3580,10 @@ return;
 
 
   // --- rooms with occasional corner notch ---
-  const roomCount = 9;
+  // Scale rooms slightly with floor depth (min 12, max 18)
+  const roomCount = 12 + Math.min(6, Math.floor(state.floor / 5)); 
   let attempts=0;
-  while(state.rooms.length<roomCount && attempts<400){
+  while(state.rooms.length<roomCount && attempts<1000){ // Increased attempts to 1000
     attempts++;
     const w=rand(6,12), h=rand(6,12);
     const x=rand(2,W-w-3), y=rand(2,H-h-3);
@@ -4019,19 +4020,32 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < JE
 // 25% Chance on non-boss floors (Can now co-exist with NPCs)
 state.goldWell = null;
 if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < 0.25) {
-  const r = state.rooms[rand(1, state.rooms.length-1)];
-  if (r && r.w >= 4 && r.h >= 4) {
-     const wx = Math.floor(r.x + r.w/2) - 1;
-     const wy = Math.floor(r.y + r.h/2) - 1;
-     
-     // Ensure space is floor AND not occupied by an existing NPC
-     if (state.tiles[wy][wx]===1 && state.tiles[wy+1][wx+1]===1 &&
-         !isMerchantTile(wx, wy) && !isBlacksmithTile(wx, wy) && 
-         !isJesterTile(wx, wy) && !isCartographerTile(wx, wy)) {
+  // Filter out rooms already taken by NPCs
+  const availableRooms = state.rooms.slice(1).filter(r => 
+      r !== state._stairsRoom &&
+      r !== state.merchant?.room &&
+      r !== state.blacksmith?.room &&
+      r !== state.jester?.room
+  );
+
+  if (availableRooms.length > 0) {
+      const r = availableRooms[rand(0, availableRooms.length-1)];
+      if (r && r.w >= 4 && r.h >= 4) {
+         const wx = Math.floor(r.x + r.w/2) - 1;
+         const wy = Math.floor(r.y + r.h/2) - 1;
          
-       state.goldWell = { x:wx, y:wy, used:false };
-       showBanner("A Golden Well shimmers nearby...", 4000); 
-     }
+         // Helper to check a specific point against all NPCs
+         const isBlocked = (x,y) => isMerchantTile(x,y) || isBlacksmithTile(x,y) || isJesterTile(x,y) || isCartographerTile(x,y);
+
+         // Ensure all 4 tiles of the 2x2 well are free
+         if (state.tiles[wy][wx]===1 && state.tiles[wy+1][wx+1]===1 &&
+             !isBlocked(wx, wy) && !isBlocked(wx+1, wy) && 
+             !isBlocked(wx, wy+1) && !isBlocked(wx+1, wy+1)) {
+             
+           state.goldWell = { x:wx, y:wy, used:false, room:r }; // Store room ref for later NPCs
+           showBanner("A Golden Well shimmers nearby...", 4000); 
+         }
+      }
   }
 }
 
@@ -4049,6 +4063,8 @@ if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < 0
         if (mr && rx===mr.x && ry===mr.y && rw===mr.w && rh===mr.h) return false;
         if (br && rx===br.x && ry===br.y && rw===br.w && rh===br.h) return false;
         if (jr && rx===jr.x && ry===jr.y && rw===jr.w && rh===jr.h) return false;
+        // NEW: Don't spawn in the Gold Well's room
+        if (state.goldWell?.room === r) return false;
         return true;
       });
 
@@ -4075,8 +4091,16 @@ ensureCartographerAudio();
   // --- NEW: Cleric Spawn (15% chance, non-boss floors) ---
   state.cleric = null; // Reset
   // RESTRICTED: Endless Mode only
-if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.15) { // <--- Removed random check     // Reuse logic: Find a room not used by others
-     const rooms5 = state.rooms.slice(1).filter(r => r !== state._stairsRoom && !state.merchant?.room && !state.blacksmith?.room && !state.jester?.room && !state.cartographer?.room);
+if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.15) { 
+     // Added check for state.goldWell?.room
+     const rooms5 = state.rooms.slice(1).filter(r => 
+        r !== state._stairsRoom && 
+        !state.merchant?.room && 
+        !state.blacksmith?.room && 
+        !state.jester?.room && 
+        !state.cartographer?.room &&
+        r !== state.goldWell?.room
+     );
      const pick5 = rooms5.length ? rooms5[rand(0, rooms5.length-1)] : null;
      
      if (pick5) {
