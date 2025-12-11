@@ -12263,6 +12263,8 @@ function renderShield(){
     // Helper to get type safely (handles Key of Destiny + Affixes)
     const getType = (name) => {
       if (name === 'Key of Destiny') return 'one';
+      // FIX: Force anything containing "Shield" to be type 'shield'
+      if (name.includes('Shield')) return 'shield';
       return weaponStatsFor(name)?.type || 'hand';
     };
 
