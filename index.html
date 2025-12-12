@@ -1240,10 +1240,10 @@ input[type=range].custom-slider::-webkit-slider-thumb {
   <button class="btn" id="dbgSpawnGoldWell">Spawn Gold Well</button>
   <button class="btn" id="dbgSpawnCleric">Spawn Cleric</button>
   <button class="btn" id="dbgSpawnVampiric">Spawn Vampiric Sword</button>
-  <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button> </div>
-  
+  <button class="btn" id="dbgGiveAllWeapons">Give All Weapons</button>
+  <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button>
 
-
+        </div>
     </div>
   </div>
 </div>
@@ -1254,6 +1254,13 @@ const rand = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
 const key=(x,y)=>x+','+y;
+
+// Helper: Check if an effect is active (supports Multi-Effects)
+function hasEffect(name){
+  if (state.activeEffects && state.activeEffects.includes(name)) return true;
+  return state.floorEffect === name; // Fallback
+}
+
 // === Boss color variations (tints) ===
 const BOSS_TINTS = [
   'hue-rotate(40deg)  saturate(1.35) brightness(1.05)',
@@ -3200,7 +3207,7 @@ function drawEmoji(ctx, glyph, x, y, w, h){
 // ====== Game State ======
 const state = {
   floor:1,
-  size: {w:84,h:84}, // Increased from 64x64 to 84x84
+  size: {w:100,h:100}, // Increased from 64x64 to 84x84
   tiles: [],          // 0 wall, 1 floor, 2 door, 3 chest, 4 stairs, 5 pickup
   rooms: [],
   corridor: new Set(),
@@ -3581,9 +3588,9 @@ return;
 
   // --- rooms with occasional corner notch ---
   // Scale rooms slightly with floor depth (min 12, max 18)
-  const roomCount = 12 + Math.min(6, Math.floor(state.floor / 5)); 
+  const roomCount = 8 + Math.min(17, Math.floor(state.floor / 4)); 
   let attempts=0;
-  while(state.rooms.length<roomCount && attempts<1000){ // Increased attempts to 1000
+  while(state.rooms.length<roomCount && attempts<1500){ // Increased attempts to 1000
     attempts++;
     const w=rand(6,12), h=rand(6,12);
     const x=rand(2,W-w-3), y=rand(2,H-h-3);
@@ -5166,11 +5173,15 @@ function recomputeWeapon(){
 }
 
 function awardKill(type,amount){
-  incrementMetaStat('kills_' + type); // <--- NEW: Track kills by weapon type (kills_axe, kills_magic)
+  incrementMetaStat('kills_' + type); 
 
-  if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
-    amount = Math.max(1, Math.round(amount * 1.35));
+  // --- NEW: Hidden XP Multiplier (0.5x bonus per active effect) ---
+  // 0 effects = 1.0x, 1 effect = 1.5x, 2 effects = 2.0x, etc.
+  const effCount = state.activeEffects ? state.activeEffects.length : (state.floorEffect ? 1 : 0);
+  if (effCount > 0) {
+      amount = Math.round(amount * (1.0 + (effCount * 0.5)));
   }
+  // ----------------------------------------------------------------
 
   state.player.xp += amount;
   let leveled=false;
@@ -9235,6 +9246,7 @@ setTimeout(() => {
 
 // Cleanup Floor Effects
 delete state.floorEffect;
+delete state.activeEffects; // Clear list
 delete state.player.tempVisionRange;
 
 // reset “every other step” counter when entering a new floor
@@ -9268,32 +9280,34 @@ if (nextFloor % 10 !== 0) {
        // 0.80 - 1.00 = Normal Floor
     }
     
-    // 2. ENDLESS MODE (Full Random Pool)
+    // 2. ENDLESS MODE (Scaling Multi-Effects)
     else {
-        const roll = Math.random();
-        if (roll < 0.12) { 
-            state.floorEffect = 'MiasmaChamber';
-            newBgColor = 'rgba(34,197,94,0.18)'; 
-        } else if (roll < 0.24) { 
-            state.floorEffect = 'ShadowLabyrinth';
-            state.player.tempVisionRange = 2;
-        } else if (roll < 0.36) { 
-            state.floorEffect = 'Bloodhunt';
-            newBgColor = 'rgba(190,24,93,0.14)';
-        } else if (roll < 0.48) {
-            state.floorEffect = 'GlacialFreeze';
-            newBgColor = 'rgba(165, 243, 252, 0.15)'; 
-        } else if (roll < 0.60) {
-            state.floorEffect = 'VolatileAether';
-            newBgColor = 'rgba(234, 88, 12, 0.15)';   
-            state.explosions = []; 
-        } else if (roll < 0.72) {
-            state.floorEffect = 'AntiMagic';
-            newBgColor = 'rgba(100, 100, 100, 0.25)'; 
-        } else if (roll < 0.84) {
-            state.floorEffect = 'ArcaneFlux';
-            newBgColor = 'rgba(147, 51, 234, 0.15)';  
-        }
+        // Full Pool (Active Effects)
+        const pool = [
+            'MiasmaChamber', 'ShadowLabyrinth', 'Bloodhunt', 
+            'GlacialFreeze', 'VolatileAether', 'AntiMagic', 
+            'ArcaneFlux', 'HeavyGravity'
+        ];
+
+        // Calculate Stack Count: 1 + (Floor / 50). Caps at pool size.
+        const count = Math.min(pool.length, 1 + Math.floor(state.floor / 50));
+        
+        // Pick N unique effects
+        state.activeEffects = shuffle(pool).slice(0, count);
+        state.floorEffect = state.activeEffects[0]; // Primary (for BG color)
+
+        // Set BG Color based on PRIMARY effect
+        if (state.floorEffect === 'MiasmaChamber')   newBgColor = 'rgba(34,197,94,0.18)';
+        else if (state.floorEffect === 'Bloodhunt')  newBgColor = 'rgba(190,24,93,0.14)';
+        else if (state.floorEffect === 'AntiMagic')  newBgColor = 'rgba(100, 100, 100, 0.25)';
+        else if (state.floorEffect === 'ArcaneFlux') newBgColor = 'rgba(147, 51, 234, 0.15)';
+        else if (state.floorEffect === 'GlacialFreeze') newBgColor = 'rgba(165, 243, 252, 0.15)';
+        else if (state.floorEffect === 'VolatileAether') { newBgColor = 'rgba(234, 88, 12, 0.15)'; state.explosions = []; }
+        else if (state.floorEffect === 'HeavyGravity') newBgColor = 'rgba(90, 70, 50, 0.25)';
+        
+        // Apply Passive Traits from ANY active effect
+        if (hasEffect('ShadowLabyrinth')) state.player.tempVisionRange = 2;
+        if (hasEffect('VolatileAether') && !state.explosions) state.explosions = [];
     }
 }
 
@@ -9344,25 +9358,23 @@ gen(); enemyStep(); draw?.(); updateBars(); updateEquipUI();
 
         // --- NEW: floor-effect popup banner ---
         
-        // This SINGLE line covers Miasma, Shadow, and Bloodhunt automatically:
-        unlockCodex(state.floorEffect); 
-
-        if (state.floorEffect === 'MiasmaChamber') {
-          showBanner('Miasma Chamber — the air itself poisons you.', 4000);
-        } else if (state.floorEffect === 'ShadowLabyrinth') {
-          showBanner('Shadow Labyrinth — your vision is strangled by darkness.', 4000);
-        } else if (state.floorEffect === 'Bloodhunt') {
-          // Removed "gameMode !== classic" check so it shows in Demo/Classic too
-          showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
-        }
-else if (state.floorEffect === 'GlacialFreeze') {
-          showBanner('Glacial Freeze — the floor is slick. Momentum carries you.', 4000);
-        } else if (state.floorEffect === 'VolatileAether') {
-          showBanner('Volatile Aether — the air hums. Enemies explode upon death.', 4000);
-        } else if (state.floorEffect === 'AntiMagic') {
-          showBanner('Anti-Magic Field — spells act strangely silent, but your blade sings.', 4000);
-        } else if (state.floorEffect === 'ArcaneFlux') {
-          showBanner('Arcane Flux — raw magic surges, but your physical strength wanes.', 4000);
+        // Handle Multi-Effects Banner
+        if (state.activeEffects && state.activeEffects.length > 1) {
+            state.activeEffects.forEach(k => unlockCodex(k));
+            const names = state.activeEffects.map(k => (CODEX_DEF[k] ? CODEX_DEF[k].name : k)).join(' + ');
+            showBanner(`Anomalies: ${names}`, 5000);
+        } 
+        // Single Effect (Classic / Early Endless)
+        else {
+            unlockCodex(state.floorEffect); 
+            if (state.floorEffect === 'MiasmaChamber') showBanner('Miasma Chamber — the air itself poisons you.', 4000);
+            else if (state.floorEffect === 'ShadowLabyrinth') showBanner('Shadow Labyrinth — your vision is strangled by darkness.', 4000);
+            else if (state.floorEffect === 'Bloodhunt') showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
+            else if (state.floorEffect === 'GlacialFreeze') showBanner('Glacial Freeze — the floor is slick. Momentum carries you.', 4000);
+            else if (state.floorEffect === 'VolatileAether') showBanner('Volatile Aether — the air hums. Enemies explode upon death.', 4000);
+            else if (state.floorEffect === 'AntiMagic') showBanner('Anti-Magic Field — spells act strangely silent, but your blade sings.', 4000);
+            else if (state.floorEffect === 'ArcaneFlux') showBanner('Arcane Flux — raw magic surges, but your physical strength wanes.', 4000);
+            else if (state.floorEffect === 'HeavyGravity') showBanner('Heavy Gravity — your body feels like lead. Stamina usage is doubled.', 4000);
         }
 // --- END: floor-effect popup banner ---
 
@@ -10229,14 +10241,15 @@ function shootBow(){
   if (state.gameOver) return;
   if (state._inputLocked || state._descending) return;
   
-  // New: Stamina Cost
-  if (state.player.stamina < 1) { spawnFloatText("No Stamina", state.player.x, state.player.y, '#9ca3af'); return; }
+// New: Stamina Cost
+  const cost = (state.floorEffect === 'HeavyGravity') ? 2 : 1; // <--- DYNAMIC COST
+  if (state.player.stamina < cost) { spawnFloatText("No Stamina", state.player.x, state.player.y, '#9ca3af'); return; }
 
   // need a loaded arrow
   if (!state.player?.bow?.loaded){ log('No arrow loaded.'); return; }
 
-  // Deduct Stamina
-  state.player.stamina--; 
+ // Deduct Stamina
+  state.player.stamina -= cost;
   state._skipStaminaRegen = true; // <--- ADD THIS
   updateBars();
 
@@ -10383,14 +10396,16 @@ function attack(){
     // -----------------------------
 
     // New: Stamina Cost for Normal Attack (Melee / Smash)
-    if (state.player.stamina < 1) { 
+    const cost = (state.floorEffect === 'HeavyGravity') ? 2 : 1; // <--- DYNAMIC COST
+
+    if (state.player.stamina < cost) { 
        spawnFloatText("Resting...", state.player.x, state.player.y, '#9ca3af'); 
        log("You are out of breath and take a moment to recover.");
        enemyStep(); 
        draw();
        return; 
     }
-    state.player.stamina--; 
+    state.player.stamina -= cost;
     state._skipStaminaRegen = true; 
     updateBars();
 
@@ -10624,7 +10639,8 @@ function useWeaponArt(){
   // --- NEW: Stamina Check (Melee Only) ---
   // Staffs use Mana (handled in their specific block), so they skip this cost.
   if (t !== 'staff') {
-      const STAMINA_COST = 4;
+      const STAMINA_COST = (state.floorEffect === 'HeavyGravity') ? 8 : 4; // <--- DYNAMIC COST (Double 4)
+
       if (state.player.stamina < STAMINA_COST) {
         spawnFloatText("Need Stamina", state.player.x, state.player.y, '#9ca3af');
         log(`Not enough Stamina for Weapon Art (${state.player.stamina}/${STAMINA_COST}).`);
@@ -13811,7 +13827,9 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
 
 // SPRINT CHECK: Holding Shift?
     if (e.shiftKey) {
-      if (state.player.stamina >= 3) {
+      const sprintCost = (state.floorEffect === 'HeavyGravity') ? 6 : 3; // <--- DYNAMIC COST
+
+      if (state.player.stamina >= sprintCost) {
          const x1 = state.player.x + dx;
          const y1 = state.player.y + dy;
          
@@ -13841,7 +13859,7 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
              // If we calculated a valid sprint target (at least 2 steps, OR 1 step onto stairs)
              const dist = Math.abs(finalX - state.player.x) + Math.abs(finalY - state.player.y);
              if (dist >= 2 || (dist === 1 && stopNow)) {
-                 state.player.stamina -= 3;
+                 state.player.stamina -= sprintCost;
                  
                  // --- TUTORIAL: Step 2 -> 3 (Sprint) ---
                  if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
@@ -15821,7 +15839,29 @@ if (keyBtn) keyBtn.addEventListener('click', ()=>{
   hideDebug?.();
   log('[debug] Granted Key of Destiny.');
 });
+// --- NEW: Give All Basic Weapons ---
+const allWepBtn = document.getElementById('dbgGiveAllWeapons');
+if (allWepBtn) allWepBtn.addEventListener('click', ()=>{
+  const basics = [
+    // Standard
+    'Shortsword', 'Claymore', 'Spear', 'Axe', 'Knuckle Duster',
+    // Heavy/New
+    'Warhammer', 'Battleaxe', 'Halberd', 'Claws',
+    // Staffs
+    'Fire Staff', 'Ice Staff', 'Lightning Staff', 'Wind Staff', 'Earth Staff'
+  ];
 
+  state.inventory.weapons = state.inventory.weapons || {};
+  
+  basics.forEach(name => {
+    state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+  });
+
+  updateInvBody?.();
+  updateEquipUI?.(); // In case we want to show counts
+  hideDebug?.();
+  log('[debug] Added 1 of every basic weapon.');
+});
 // --- NEW: Unlock All Classes Cheat ---
 const clsBtn = document.getElementById('dbgUnlockClasses');
 if (clsBtn) clsBtn.addEventListener('click', ()=>{
@@ -16123,7 +16163,7 @@ const CODEX_DEF = {
   VolatileAether: { name:'Volatile Aether', desc:'Enemies explode shortly after death.', seen:false },
   AntiMagic:      { name:'Anti-Magic Field',desc:'Magic is disabled, but Melee is stronger.', seen:false },
   ArcaneFlux:     { name:'Arcane Flux',     desc:'Magic is amplified, but Melee is weak.', seen:false },
-  
+  HeavyGravity:   { name:'Heavy Gravity',   desc:'The air is heavy. All Stamina costs are doubled.', seen:false }, // <--- ADD THIS
 // Existing Interactable
   Shrine: { name:'Mystical Shrine', desc:'A holy altar that offers a blessing... or a curse.', seen:false, triggered:0 }, 
   Gold_Well: { name:'Golden Well', desc:'Toss 500g to wish for power.', seen:false, activated:0 }, // <--- ADDED
