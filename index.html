@@ -15191,26 +15191,6 @@ function handleEnemyDeath(e, source) {
       if (typeof offerPick2Choice === 'function') offerPick2Choice('boss');
   }
 
-  // 5. Mini-Boss Logic (Warlord Omen)
-  if (e.miniBoss && state.gameMode === 'endless') {
-      log("The Warlord falls! A dark power calls to you...");
-      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
-      
-      // If the player leveled up on this kill, the Level Up modal is open.
-      // We defer the Omen choice until the player closes the Level Up menu.
-      // FIX: Correctly check if Current XP + Reward >= Next Level Threshold
-      const hasLeveled = (state.player.xp + e.xp) >= state.player.next;
-      
-      if (hasLeveled) {
-          // Store Omen as pending
-          state._pendingOmen = true;
-          log("Omen deferred until Level Up is chosen.");
-      } else {
-          // Open Omen normally
-          setTimeout(() => { triggerOmenChoice(); }, 800);
-      }
-  }
-
   // 6. Loot Drops (Stolen items, Gold)
   if (e.stolenItems || e.stolen) {
       if (e.stolenItems) e.stolenItems.forEach(it => dropStolenNear(e.x, e.y, it));
@@ -15229,10 +15209,30 @@ function handleEnemyDeath(e, source) {
   // 7. Cleanup & Stats
   state.enemies = state.enemies.filter(x => x !== e);
   state.run.kills++;
+  
+  // Capture level before XP
+  const oldLevel = state.player.level;
+
   awardKill(source, Math.max(1, e.xp|0));
   SFX.kill();
   unlockCodex(e.displayName || e.type, true);
   log(`${e.displayName || e.type} falls.`);
+
+  // 5. Mini-Boss Omen Logic (Moved to end to check actual leveling)
+  if (e.miniBoss && state.gameMode === 'endless') {
+      log("The Warlord falls! A dark power calls to you...");
+      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+      
+      // Check actual level change
+      if (state.player.level > oldLevel) {
+          state._pendingOmen = true;
+          log("Omen deferred until Level Up is chosen.");
+      } else {
+          setTimeout(() => { 
+             if(typeof triggerOmenChoice === 'function') triggerOmenChoice(); 
+          }, 800);
+      }
+  }
 }
 
 function useStaff(w) {
