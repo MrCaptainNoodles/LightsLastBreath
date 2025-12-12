@@ -4619,33 +4619,33 @@ let kind, payload;
 const r = Math.random();
 
 if (r < 0.12){
-  kind = 'weapon';                      // ~12%
+  kind = 'weapon';                      // 12%
   payload = randomWeapon();
-} else if (r < 0.18){
-  kind = 'spell';                       // +6%
-  payload = randomSpell();
 } else if (r < 0.24){
-  kind = 'arrows';                      // +6%
-  payload = rand(2, 6);
-} else if (r < 0.27){                   // --- NEW: 3% Chance for Bomb
-  kind = 'bomb';
+  kind = 'spell';                       // 12% (Doubled from 6%)
+  payload = randomSpell();
+} else if (r < 0.30){
+  kind = 'arrows';                      // 6%
+  payload = rand(3, 8);
+} else if (r < 0.34){                   
+  kind = 'bomb';                        // 4% (Slightly more common)
   payload = 1;
-} else if (r < 0.29){                   // --- NEW: 2% Chance for Warp Stone
-  kind = 'warp';
+} else if (r < 0.36){                   
+  kind = 'warp';                        // 2%
   payload = 1;
-} else if (r < 0.52){                   // Adjusted thresholds to fit
-  kind = 'potion';                      
+} else if (r < 0.56){                   
+  kind = 'potion';                      // 20% (Reduced from 23%)
   payload = 1;
-} else if (r < 0.75){
-  kind = 'tonic';                       
+} else if (r < 0.76){
+  kind = 'tonic';                       // 20% (Reduced from 23%)
   payload = 1;
-} else if (r < 0.81){
-  kind = 'shield';
+} else if (r < 0.84){
+  kind = 'shield';                      // 8% (Slightly more common)
   // FIX: Pick a specific shield name instead of generic "1"
   const sTypes = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
   payload = sTypes[Math.floor(Math.random() * sTypes.length)];
 } else {
-  kind = 'antidote';                    
+  kind = 'antidote';                    // ~16% (Remainder)
   payload = 1;
 }
 
@@ -9774,7 +9774,8 @@ const NON_WEAPON_BASE = {
   lockpicks: 8,
   shield: 12,
   bomb: 6,       // NEW: Rare offensive drop
-  warp: 4        // NEW: Very rare utility drop
+  warp: 4,       // NEW: Very rare utility drop
+  spell: 10      // FIX: Added base weight for spells so they can spawn
 };
 
 // Depth scaling: fewer basic heals deeper; more MP/spells deeper
