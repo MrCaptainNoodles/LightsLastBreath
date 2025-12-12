@@ -8094,13 +8094,11 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
             if (e) {
               e.hp -= 10;
               spawnFloatText(10, e.x, e.y, '#f97316');
+              
               if (e.hp <= 0) {
-                 // Chain reaction: Spawn new bomb on death
-                 state.explosions.push({ x: e.x, y: e.y, timer: 2 }); // 2-turn fuse for chains
-                 spawnFloatText("2...", e.x, e.y, '#f97316');
-
-                 state.enemies = state.enemies.filter(x => x !== e);
-                 state.run.kills++;
+                 // FIX: Use central handler to ensure Warlords drop Omens & XP
+                 // This also handles spawning the next explosion (via Volatile logic in handleEnemyDeath)
+                 handleEnemyDeath(e, 'explosion');
               }
             }
           }
@@ -12467,50 +12465,11 @@ function useBomb(){
            const dmg = 10 + Math.floor(state.floor * 1.5);
            e.hp -= dmg;
            spawnFloatText(dmg, e.x, e.y, '#ff0000');
+           
            if (e.hp <= 0) {
-             
-             // --- FIX: Depth 50 Boss Cutscene Checks ---
-             if (state.floor === 50 && e.boss) {
-                // Phase 1 -> Phase 2
-                if (e.type === 'Clone' && !state.flags.depth50Phase2) {
-                   runDepth50Phase2(e); 
-                   return; // Stop here, let the cutscene handle the rest
-                }
-                // Phase 2 -> Outro
-                if (e.type === 'Mad King' && !state.flags.depth50Done) {
-                   runDepth50Outro(e); 
-                   return; // Stop here, let the cutscene handle the rest
-                }
-             }
-             // ------------------------------------------
-
-             state.enemies = state.enemies.filter(en => en !== e);
-             state.run.kills++;
-             
-             // --- FIX: Trigger Stairs if Boss ---
-             if (e.boss) {
-                spawnBossStairs();
-                log("The explosion clears the path!");
-             }
-             // ----------------------------------
-             
-             // --- FIX: Award Player XP Only (No Skill XP) ---
-             state.player.xp += (e.xp || 1);
-             
-             // Check for Level Up
-             while(state.player.xp >= state.player.next){
-               state.player.xp -= state.player.next;
-               state.player.level++;
-               state.player.next = Math.floor(state.player.next * 1.30); 
-               
-               // Trigger Level Up UI
-               state._inputLocked = true;
-               if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
-               const m = document.getElementById('lvlupModal');
-               if(m) m.style.display = 'flex';
-               SFX.levelUp();
-             }
-             // -----------------------------------------------
+             // FIX: Route through central handler
+             // This ensures Warlords drop Omens, Bosses trigger stairs/cutscenes, and XP is awarded correctly
+             handleEnemyDeath(e, 'bomb');
            }
            hitCount++;
         }
