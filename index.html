@@ -3397,9 +3397,7 @@ state._starterChest = null;        // ← avoid stale pointer
 state.merchant   = null;
 state.blacksmith = null;
 state.jester     = null;
-state.cartographer = null;
-state.cleric     = null;            // <--- FIX: Clear Cleric to prevent ghosting
-state.goldWell   = null;            // <--- FIX: Clear Golden Well to prevent ghosting
+state.cartographer = null;          // NEW
 state.safeRect   = null;
 state.safeRect2  = null;
 state.safeRect3  = null;
@@ -4621,35 +4619,35 @@ let kind, payload;
 const r = Math.random();
 
 if (r < 0.12){
-  kind = 'weapon';                      // 12%
+  kind = 'weapon';                      // ~12%
   payload = randomWeapon();
-} else if (r < 0.24){
-  kind = 'spell';                       // 12% (Doubled from 6%)
+} else if (r < 0.18){
+  kind = 'spell';                       // +6%
   payload = randomSpell();
-} else if (r < 0.30){
-  kind = 'arrows';                      // 6%
-  payload = rand(3, 8);
-} else if (r < 0.34){                   
-  kind = 'bomb';                        // 4% (Slightly more common)
+} else if (r < 0.24){
+  kind = 'arrows';                      // +6%
+  payload = rand(2, 6);
+} else if (r < 0.27){                   // --- NEW: 3% Chance for Bomb
+  kind = 'bomb';
   payload = 1;
-} else if (r < 0.36){                   
-  kind = 'warp';                        // 2%
+} else if (r < 0.29){                   // --- NEW: 2% Chance for Warp Stone
+  kind = 'warp';
   payload = 1;
-} else if (r < 0.56){                   
-  kind = 'potion';                      // 20% (Reduced from 23%)
+} else if (r < 0.52){                   // Adjusted thresholds to fit
+  kind = 'potion';                      
   payload = 1;
-} else if (r < 0.76){
-  kind = 'tonic';                       // 20% (Reduced from 23%)
+} else if (r < 0.75){
+  kind = 'tonic';                       
   payload = 1;
-} else if (r < 0.84){
-  kind = 'shield';                      // 8% (Slightly more common)
+} else if (r < 0.81){
+  kind = 'shield';
   // FIX: Pick a specific shield name instead of generic "1"
   const sTypes = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
   payload = sTypes[Math.floor(Math.random() * sTypes.length)];
 } else {
-  kind = 'antidote';                    // ~16% (Remainder)
+  kind = 'antidote';                    
   payload = 1;
-}e
+}
 
 
 state.pickups[kxy] = { kind, payload };
@@ -8096,11 +8094,13 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
             if (e) {
               e.hp -= 10;
               spawnFloatText(10, e.x, e.y, '#f97316');
-              
               if (e.hp <= 0) {
-                 // FIX: Use central handler to ensure Warlords drop Omens & XP
-                 // This also handles spawning the next explosion (via Volatile logic in handleEnemyDeath)
-                 handleEnemyDeath(e, 'explosion');
+                 // Chain reaction: Spawn new bomb on death
+                 state.explosions.push({ x: e.x, y: e.y, timer: 2 }); // 2-turn fuse for chains
+                 spawnFloatText("2...", e.x, e.y, '#f97316');
+
+                 state.enemies = state.enemies.filter(x => x !== e);
+                 state.run.kills++;
               }
             }
           }
@@ -9776,8 +9776,7 @@ const NON_WEAPON_BASE = {
   lockpicks: 8,
   shield: 12,
   bomb: 6,       // NEW: Rare offensive drop
-  warp: 4,       // NEW: Very rare utility drop
-  spell: 10      // FIX: Added base weight for spells so they can spawn
+  warp: 4        // NEW: Very rare utility drop
 };
 
 // Depth scaling: fewer basic heals deeper; more MP/spells deeper
@@ -12468,11 +12467,50 @@ function useBomb(){
            const dmg = 10 + Math.floor(state.floor * 1.5);
            e.hp -= dmg;
            spawnFloatText(dmg, e.x, e.y, '#ff0000');
-           
            if (e.hp <= 0) {
-             // FIX: Route through central handler
-             // This ensures Warlords drop Omens, Bosses trigger stairs/cutscenes, and XP is awarded correctly
-             handleEnemyDeath(e, 'bomb');
+             
+             // --- FIX: Depth 50 Boss Cutscene Checks ---
+             if (state.floor === 50 && e.boss) {
+                // Phase 1 -> Phase 2
+                if (e.type === 'Clone' && !state.flags.depth50Phase2) {
+                   runDepth50Phase2(e); 
+                   return; // Stop here, let the cutscene handle the rest
+                }
+                // Phase 2 -> Outro
+                if (e.type === 'Mad King' && !state.flags.depth50Done) {
+                   runDepth50Outro(e); 
+                   return; // Stop here, let the cutscene handle the rest
+                }
+             }
+             // ------------------------------------------
+
+             state.enemies = state.enemies.filter(en => en !== e);
+             state.run.kills++;
+             
+             // --- FIX: Trigger Stairs if Boss ---
+             if (e.boss) {
+                spawnBossStairs();
+                log("The explosion clears the path!");
+             }
+             // ----------------------------------
+             
+             // --- FIX: Award Player XP Only (No Skill XP) ---
+             state.player.xp += (e.xp || 1);
+             
+             // Check for Level Up
+             while(state.player.xp >= state.player.next){
+               state.player.xp -= state.player.next;
+               state.player.level++;
+               state.player.next = Math.floor(state.player.next * 1.30); 
+               
+               // Trigger Level Up UI
+               state._inputLocked = true;
+               if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
+               const m = document.getElementById('lvlupModal');
+               if(m) m.style.display = 'flex';
+               SFX.levelUp();
+             }
+             // -----------------------------------------------
            }
            hitCount++;
         }
@@ -15153,6 +15191,26 @@ function handleEnemyDeath(e, source) {
       if (typeof offerPick2Choice === 'function') offerPick2Choice('boss');
   }
 
+  // 5. Mini-Boss Logic (Warlord Omen)
+  if (e.miniBoss && state.gameMode === 'endless') {
+      log("The Warlord falls! A dark power calls to you...");
+      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+      
+      // If the player leveled up on this kill, the Level Up modal is open.
+      // We defer the Omen choice until the player closes the Level Up menu.
+      // FIX: Correctly check if Current XP + Reward >= Next Level Threshold
+      const hasLeveled = (state.player.xp + e.xp) >= state.player.next;
+      
+      if (hasLeveled) {
+          // Store Omen as pending
+          state._pendingOmen = true;
+          log("Omen deferred until Level Up is chosen.");
+      } else {
+          // Open Omen normally
+          setTimeout(() => { triggerOmenChoice(); }, 800);
+      }
+  }
+
   // 6. Loot Drops (Stolen items, Gold)
   if (e.stolenItems || e.stolen) {
       if (e.stolenItems) e.stolenItems.forEach(it => dropStolenNear(e.x, e.y, it));
@@ -15171,30 +15229,10 @@ function handleEnemyDeath(e, source) {
   // 7. Cleanup & Stats
   state.enemies = state.enemies.filter(x => x !== e);
   state.run.kills++;
-  
-  // Capture level before XP
-  const oldLevel = state.player.level;
-
   awardKill(source, Math.max(1, e.xp|0));
   SFX.kill();
   unlockCodex(e.displayName || e.type, true);
   log(`${e.displayName || e.type} falls.`);
-
-  // 5. Mini-Boss Omen Logic (Moved to end to check actual leveling)
-  if (e.miniBoss && state.gameMode === 'endless') {
-      log("The Warlord falls! A dark power calls to you...");
-      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
-      
-      // Check actual level change
-      if (state.player.level > oldLevel) {
-          state._pendingOmen = true;
-          log("Omen deferred until Level Up is chosen.");
-      } else {
-          setTimeout(() => { 
-             if(typeof triggerOmenChoice === 'function') triggerOmenChoice(); 
-          }, 800);
-      }
-  }
 }
 
 function useStaff(w) {
