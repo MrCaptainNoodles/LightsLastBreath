@@ -3397,7 +3397,9 @@ state._starterChest = null;        // ← avoid stale pointer
 state.merchant   = null;
 state.blacksmith = null;
 state.jester     = null;
-state.cartographer = null;          // NEW
+state.cartographer = null;
+state.cleric     = null;            // <--- FIX: Clear Cleric to prevent ghosting
+state.goldWell   = null;            // <--- FIX: Clear Golden Well to prevent ghosting
 state.safeRect   = null;
 state.safeRect2  = null;
 state.safeRect3  = null;
@@ -4647,7 +4649,7 @@ if (r < 0.12){
 } else {
   kind = 'antidote';                    // ~16% (Remainder)
   payload = 1;
-}
+}e
 
 
 state.pickups[kxy] = { kind, payload };
