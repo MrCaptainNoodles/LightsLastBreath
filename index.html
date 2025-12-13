@@ -172,7 +172,52 @@
 
 
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;overscroll-behavior:none;}
+
+/* --- NEW: Title Bar Styles --- */
+/* Remove body drag so buttons work again */
+#titleBar {
+  display: flex; 
+  height: 32px;
+  background: #0b141d;
+  border-bottom: 1px solid var(--chipBorder);
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  -webkit-app-region: drag; 
+  /* FIX: Ensure it sits on top of the canvas */
+  position: relative; 
+  z-index: 10000; 
+}
+
+.window-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #9ca3af;
+  pointer-events: none; /* Let clicks pass through text */
+}
+
+.window-controls {
+  display: flex;
+  gap: 8px;
+  -webkit-app-region: no-drag; /* Buttons must be clickable */
+}
+
+.win-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  opacity: 0.8;
+}
+.win-btn:hover { opacity: 1; }
+.win-close { background: #ef4444; }
+.win-min   { background: #eab308; }
+.win-max   { background: #22c55e; }
+/* ----------------------- */
+
+/* FIX: overflow:hidden removes the scrollbar */
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;overscroll-behavior:none;}
 .app{max-width:800px;margin:0 auto;padding:10px 10px 40px;}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .chip{background:var(--chip);border:1px solid var(--chipBorder);padding:10px 14px;border-radius:14px;font-weight:600;font-size:14px;line-height:1;color:var(--text);}
@@ -670,6 +715,14 @@ input[type=range].custom-slider::-webkit-slider-thumb {
 
 </head>
 <body>
+  <div id="titleBar">
+    <div class="window-title">Light's Last Breath</div>
+    <div class="window-controls">
+      <button class="win-btn win-min" id="btnWinMin" title="Minimize"></button>
+      <button class="win-btn win-max" id="btnWinMax" title="Maximize"></button>
+      <button class="win-btn win-close" id="btnWinClose" title="Close"></button>
+    </div>
+  </div>
  <!-- ====== TITLE SCREEN (full-screen) ====== -->
 <div id="titleScreen"
      class="fullOverlay"
@@ -695,6 +748,7 @@ input[type=range].custom-slider::-webkit-slider-thumb {
         <a id="btnShop" class="menuLink" href="#" style="color:#f9d65c">Soul Shop (0)</a>
         <a id="btnSettings" class="menuLink" href="#">Settings</a>
         <a id="btnCredits" class="menuLink" href="#">Credits</a>
+        <a id="btnQuitGame" class="menuLink" href="#" style="margin-top:10px; opacity:0.8;">Quit Game</a>
       </div>
 
       <div id="mm-play" style="display:none; flex-direction:column; gap:18px;">
@@ -819,6 +873,14 @@ input[type=range].custom-slider::-webkit-slider-thumb {
               <input id="volFoot" class="custom-slider" type="range" min="0" max="100" value="100"></div>
           </div>
           <div id="tab-graphics" class="settings-panel">
+            <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer; margin-bottom:10px;">
+              <div><div style="font-weight:700; color:#60a5fa;">Window Mode</div><div style="font-size:12px; opacity:0.7;">Change display mode.</div></div>
+              <select id="selWindowMode" style="background:#1b2a3a; color:#d9e7f5; border:1px solid var(--chipBorder); padding:6px; border-radius:6px; font-weight:700;">
+                 <option value="fullscreen">Fullscreen</option>
+                 <option value="windowed">Windowed</option>
+              </select>
+            </label>
+
             <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer;">
               <div><div style="font-weight:700; color:#ff9a8b;">Arachnophobia Mode</div><div style="font-size:12px; opacity:0.7;">Replaces spiders with text labels.</div></div>
               <input id="chkArachno" type="checkbox" style="width:24px; height:24px; accent-color:#ff9a8b;">
@@ -1071,6 +1133,19 @@ input[type=range].custom-slider::-webkit-slider-thumb {
   </div>
 </div>
 
+<div class="modal" id="demoEndModal" style="display:none;">
+  <div class="sheet">
+    <div class="title" style="text-align:center; font-weight:800; margin-bottom:10px;">Thanks for Playing!</div>
+    <div style="text-align:center; opacity:.9; margin-bottom:15px; line-height:1.5;">
+      You've reached the end of the demo (Depth 25).<br><br>
+      Keep an eye out for the full release!<br>
+    </div>
+    <div class="row" style="gap:10px; justify-content:center;">
+      <button class="btn" id="btnDemoMenu">Menu</button>
+    </div>
+  </div>
+</div>
+
 <!-- Tutorial Mode Clear Modal -->
 <div class="modal" id="tutorialCompleteModal" style="display:none;">
   <div class="sheet">
@@ -1240,10 +1315,10 @@ input[type=range].custom-slider::-webkit-slider-thumb {
   <button class="btn" id="dbgSpawnGoldWell">Spawn Gold Well</button>
   <button class="btn" id="dbgSpawnCleric">Spawn Cleric</button>
   <button class="btn" id="dbgSpawnVampiric">Spawn Vampiric Sword</button>
-  <button class="btn" id="dbgGiveAllWeapons">Give All Weapons</button>
-  <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button>
+  <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button> </div>
+  
 
-        </div>
+
     </div>
   </div>
 </div>
@@ -1254,13 +1329,6 @@ const rand = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}return arr}
 const key=(x,y)=>x+','+y;
-
-// Helper: Check if an effect is active (supports Multi-Effects)
-function hasEffect(name){
-  if (state.activeEffects && state.activeEffects.includes(name)) return true;
-  return state.floorEffect === name; // Fallback
-}
-
 // === Boss color variations (tints) ===
 const BOSS_TINTS = [
   'hue-rotate(40deg)  saturate(1.35) brightness(1.05)',
@@ -2528,6 +2596,49 @@ document.addEventListener('DOMContentLoaded', ()=>{
   bind('volUi',       ()=>_volUi,       (v)=>{ _volUi=v;       applyGroupVolumes(); }, 'volUi');
   bind('volFoot',     ()=>_volFoot,     (v)=>{ _volFoot=v;     applyGroupVolumes(); }, 'volFoot');
 
+  // --- Window Mode Wiring (Electron Only) ---
+  const selWin = document.getElementById('selWindowMode');
+  const titleBar = document.getElementById('titleBar');
+  
+  // Helper to toggle bar visibility
+  const updateTitleBar = (mode) => {
+    if (titleBar) titleBar.style.display = (mode === 'windowed') ? 'flex' : 'none';
+  };
+
+  // Wire up the Traffic Light Buttons
+  if (typeof require !== 'undefined') {
+    try {
+      const { ipcRenderer } = require('electron');
+      document.getElementById('btnWinMin')?.addEventListener('click', () => ipcRenderer.send('win-min'));
+      document.getElementById('btnWinMax')?.addEventListener('click', () => ipcRenderer.send('win-max'));
+      document.getElementById('btnWinClose')?.addEventListener('click', () => window.close());
+    } catch(e){}
+  }
+
+  const savedMode = localStorage.getItem('windowMode') || 'fullscreen'; // Changed default to fullscreen
+  
+  if (selWin) {
+      selWin.value = savedMode;
+      updateTitleBar(savedMode); // Apply visual state immediately
+
+      selWin.addEventListener('change', () => {
+          const mode = selWin.value;
+          localStorage.setItem('windowMode', mode);
+          updateTitleBar(mode); // Toggle the bar
+          
+          if (typeof require !== 'undefined') {
+              try {
+                  require('electron').ipcRenderer.send('set-window-mode', mode);
+              } catch(e) {}
+          }
+      });
+      
+      // Force apply logic on startup
+      if (typeof require !== 'undefined') {
+          try { require('electron').ipcRenderer.send('set-window-mode', savedMode); } catch(e){}
+      }
+  }
+
   // --- Arachnophobia Mode Wiring ---
   const chkArachno = document.getElementById('chkArachno');
   window._arachnophobiaMode = (localStorage.getItem('arachnoMode') === '1');
@@ -3067,6 +3178,12 @@ if (title){
     if(m) m.style.zIndex = '10001';
     openModal('#creditsOverlay');
   });
+
+  // --- NEW: Quit Game Button ---
+  document.getElementById('btnQuitGame')?.addEventListener('click', ()=>{
+    // Standard way to close the window (works in Browser tabs and Electron)
+    window.close();
+  });
   
 // Leaderboard button in stats menu
   document.getElementById('btnShowLeaderboard')?.addEventListener('click', () => {
@@ -3439,7 +3556,8 @@ for (let y = ry; y < ry + rh; y++) {
     state.seen.add(key(x,y));
     
     // --- NEW: Throne Room Columns (Floor 50 only) ---
-    if (state.floor === 50) {
+    // FIX: Only generate pillars in Classic Mode (for the cutscene)
+    if (state.floor === 50 && state.gameMode === 'classic') {
       // Create pillars in a grid pattern (every 4th tile)
       // Keep center clear for the cutscene walking
       const relX = x - rx;
@@ -3473,7 +3591,8 @@ while (!placed && guard < 300){
 
   let boss;
 
-  if (state.floor === 50){
+  // FIX: Only trigger the special scripted Clone boss in Classic Mode
+  if (state.floor === 50 && state.gameMode === 'classic'){
     // --- 2×2 CLONE OF THE PLAYER ---
    const p = state.player;
 const w = p.weapon || {min:1,max:2};
@@ -3588,9 +3707,9 @@ return;
 
   // --- rooms with occasional corner notch ---
   // Scale rooms slightly with floor depth (min 12, max 18)
-  const roomCount = 8 + Math.min(17, Math.floor(state.floor / 4)); 
+  const roomCount = 8 + Math.min(17, Math.floor(state.floor / 5)); // Max rooms capped at 25
   let attempts=0;
-  while(state.rooms.length<roomCount && attempts<1500){ // Increased attempts to 1000
+  while(state.rooms.length<roomCount && attempts<1000){ // Increased attempts to 1000
     attempts++;
     const w=rand(6,12), h=rand(6,12);
     const x=rand(2,W-w-3), y=rand(2,H-h-3);
@@ -5175,13 +5294,21 @@ function recomputeWeapon(){
 function awardKill(type,amount){
   incrementMetaStat('kills_' + type); 
 
-  // --- NEW: Hidden XP Multiplier (0.5x bonus per active effect) ---
-  // 0 effects = 1.0x, 1 effect = 1.5x, 2 effects = 2.0x, etc.
-  const effCount = state.activeEffects ? state.activeEffects.length : (state.floorEffect ? 1 : 0);
-  if (effCount > 0) {
-      amount = Math.round(amount * (1.0 + (effCount * 0.5)));
+  // --- XP Multiplier based on Effect Count ---
+  let count = 0;
+  if (Array.isArray(state.floorEffect)) count = state.floorEffect.length;
+  else if (state.floorEffect) count = 1;
+
+  if (count > 0) {
+      // 1 effect = 1.5x, 2 = 2.0x ... 8 = 5.0x
+      const mult = 1.0 + (count * 0.5);
+      amount = Math.max(1, Math.round(amount * mult));
   }
-  // ----------------------------------------------------------------
+
+  // Bloodhunt bonus stacks on top
+  if (state.gameMode !== 'classic' && isEffectActive('Bloodhunt')){
+    amount = Math.max(1, Math.round(amount * 1.35));
+  }
 
   state.player.xp += amount;
   let leveled=false;
@@ -7335,25 +7462,23 @@ function updateEquipUI(){
 
   // 1. Staff Logic (Magic)
   if (w.type === 'staff') {
-      if (state.floorEffect === 'ArcaneFlux') {
-          // BOOST: x1.5 Damage
+      if (isEffectActive('AntiMagic')) {
+          dispText = `ATK: SILENCED`;
+      } else if (isEffectActive('ArcaneFlux')) {
           effMin = Math.ceil(effMin * 1.5);
           effMax = Math.ceil(effMax * 1.5);
           dispText = `ATK: ${effMin}–${effMax}`;
-      } else if (state.floorEffect === 'AntiMagic') {
-          // SILENCE: No Attack
-          dispText = `ATK: SILENCED`;
       }
-      // Normal Floor: Default stats
   } 
   // 2. Melee Logic (Physical)
   else {
-      if (state.floorEffect === 'AntiMagic') {
-          // BOOST: x1.5 Damage
+      // Apply AntiMagic Buff FIRST (if active)
+      if (isEffectActive('AntiMagic')) {
           effMin = Math.ceil(effMin * 1.5);
           effMax = Math.ceil(effMax * 1.5);
-      } else if (state.floorEffect === 'ArcaneFlux') {
-          // NERF: x0.25 Damage (Min 1)
+      }
+      // Apply ArcaneFlux Nerf SECOND (if active) - this handles the rare case where BOTH are active
+      if (isEffectActive('ArcaneFlux')) {
           effMin = Math.max(1, Math.ceil(effMin * 0.25));
           effMax = Math.max(1, Math.ceil(effMax * 0.25));
       }
@@ -7976,14 +8101,30 @@ function triggerGameOver(){
 }
 
 
+// Helper: Check if effect is active (handles Array or String)
+function isEffectActive(name){
+  if (Array.isArray(state.floorEffect)) return state.floorEffect.includes(name);
+  return state.floorEffect === name;
+}
+
+// Helper: Stamina cost multiplier
+function getStaminaCost(base){
+  return isEffectActive('StaminaDrain') ? base * 2 : base;
+}
+
 function enemyStep(){
   // --- NEW: Stamina Regen ---
-  // If we just sprinted, skip the regen for this turn
   if (state._skipStaminaRegen) {
-    state._skipStaminaRegen = false; // Reset flag, do not recover
-} 
+    state._skipStaminaRegen = false; 
+  } 
   else if (state.player.stamina < state.player.staminaMax) {
-    state.player.stamina++;
+    // Stamina Drain Effect: Regenerate every OTHER turn
+    if (isEffectActive('StaminaDrain')) {
+       if (state._stamDrainTick) state.player.stamina++;
+       state._stamDrainTick = !state._stamDrainTick;
+    } else {
+       state.player.stamina++;
+    }
     updateBars();
   }
 
@@ -9048,8 +9189,8 @@ function tryMove(dx,dy){
   else if (dy>0) state.player.facing='down';
   else if (dy<0) state.player.facing='up';
 
-  // --- NEW: Glacial Freeze (Slide) for non-Sprint ---
-  if (state.floorEffect === 'GlacialFreeze') {
+// --- NEW: Glacial Freeze (Slide) for non-Sprint ---
+  if (isEffectActive('GlacialFreeze')) { // FIX: Use isEffectActive
     // 1. CRITICAL: If the tile we just stepped onto (nx, ny) is STAIRS, STOP!
     if (state.tiles[ny][nx] !== 4) {
 
@@ -9064,9 +9205,9 @@ function tryMove(dx,dy){
         if (inBounds(slideX, slideY) && validTile && !enemyAt(slideX, slideY) &&
             !isMerchantTile(slideX,slideY) && !isBlacksmithTile(slideX,slideY) &&
             !isJesterTile(slideX,slideY) && !isCartographerTile(slideX,slideY) &&
-            !isClericTile(slideX,slideY)) { // Added Cleric safety
+            !isClericTile(slideX,slideY)) { 
             
-            // Before sliding to (slideX, slideY), check the intermediate tile (nx, ny) for pickup
+            // Before sliding, check intermediate pickup
             const kIntermediate = key(nx, ny);
             if (state.pickups[kIntermediate]) {
                 state.player.x = nx; state.player.y = ny; 
@@ -9095,7 +9236,7 @@ function tryMove(dx,dy){
 
 
 // --- NEW: MIASMA ticks every other PLAYER STEP (movement only) ---
-if (state.floorEffect === 'MiasmaChamber'){
+if (isEffectActive('MiasmaChamber')){ // FIX: Use isEffectActive
   state._miasmaSteps = (state._miasmaSteps|0) + 1;
   if (state._miasmaSteps % 3 === 0){
     // Scale: 1 dmg base + 1 per 15 floors
@@ -9108,11 +9249,6 @@ if (state.floorEffect === 'MiasmaChamber'){
     log(`The miasma burns you for ${p}.`);
     updateBars();
     if (state.player.hp <= 0){ triggerGameOver(); return; }
-
-    // Enemy Damage (REMOVED: Miasma only hurts player now)
-    /*
-    for (const e of state.enemies) { ... } 
-    */
   }
 }
 // --- END: MIASMA step tick ---
@@ -9203,8 +9339,19 @@ draw();
 
 // helper: descend a floor with audio + short fade
 function doDescend(){
-if (state.gameOver || state._descending) return;
-state._descending = true;
+  // --- DEMO LIMIT: Floor 25 Cap ---
+  if (state.gameMode === 'classic' && state.floor >= 25) {
+     const m = document.getElementById('demoEndModal');
+     if(m) {
+        m.style.display = 'flex';
+        document.body.classList.add('noscroll');
+     }
+     return; // Stop descent
+  }
+  // --------------------------------
+
+  if (state.gameOver || state._descending) return;
+  state._descending = true;
 
 // make sure flags exists for depth-50 checks later
 state.flags ||= {};
@@ -9245,8 +9392,7 @@ setTimeout(() => {
     delete state.player.movementSlowed;
 
 // Cleanup Floor Effects
-delete state.floorEffect;
-delete state.activeEffects; // Clear list
+state.floorEffect = []; 
 delete state.player.tempVisionRange;
 
 // reset “every other step” counter when entering a new floor
@@ -9260,54 +9406,55 @@ let newBgColor = 'rgba(0,0,0,0)';
 // Only apply effects if it's NOT a boss floor
 if (nextFloor % 10 !== 0) {
     
-    // 1. CLASSIC MODE (Random Chance for 4 Effects)
-    if (!isEndless) {
-       const roll = Math.random();
-       // ~80% Chance of an effect (0.20 each for 4 types)
-       if (roll < 0.20) {
-           state.floorEffect = 'Bloodhunt';
-           newBgColor = 'rgba(190,24,93,0.14)';
-       } else if (roll < 0.40) {
-           state.floorEffect = 'AntiMagic';
-           newBgColor = 'rgba(100, 100, 100, 0.25)';
-       } else if (roll < 0.60) {
-           state.floorEffect = 'ArcaneFlux';
-           newBgColor = 'rgba(147, 51, 234, 0.15)'; 
-       } else if (roll < 0.80) { 
-           state.floorEffect = 'MiasmaChamber';
-           newBgColor = 'rgba(34,197,94,0.18)'; 
-       }
-       // 0.80 - 1.00 = Normal Floor
-    }
-    
-    // 2. ENDLESS MODE (Scaling Multi-Effects)
-    else {
-        // Full Pool (Active Effects)
-        const pool = [
+    // --- COMBINATION LOGIC (Depth 51+) ---
+    if (isEndless && nextFloor > 50 && (nextFloor % 50 !== 0)) { // (Updated check to ensure it runs on non-boss floors)
+        // Calculate number of effects (starts at 2 for floor 51+, 3 for 101+, max 8)
+        const numEffects = Math.min(8, 2 + Math.floor((nextFloor - 51) / 50));
+        
+        const ALL_EFFECTS = [
             'MiasmaChamber', 'ShadowLabyrinth', 'Bloodhunt', 
             'GlacialFreeze', 'VolatileAether', 'AntiMagic', 
-            'ArcaneFlux', 'HeavyGravity'
+            'ArcaneFlux', 'StaminaDrain'
         ];
-
-        // Calculate Stack Count: 1 + (Floor / 50). Caps at pool size.
-        const count = Math.min(pool.length, 1 + Math.floor(state.floor / 50));
         
-        // Pick N unique effects
-        state.activeEffects = shuffle(pool).slice(0, count);
-        state.floorEffect = state.activeEffects[0]; // Primary (for BG color)
-
-        // Set BG Color based on PRIMARY effect
-        if (state.floorEffect === 'MiasmaChamber')   newBgColor = 'rgba(34,197,94,0.18)';
-        else if (state.floorEffect === 'Bloodhunt')  newBgColor = 'rgba(190,24,93,0.14)';
-        else if (state.floorEffect === 'AntiMagic')  newBgColor = 'rgba(100, 100, 100, 0.25)';
-        else if (state.floorEffect === 'ArcaneFlux') newBgColor = 'rgba(147, 51, 234, 0.15)';
-        else if (state.floorEffect === 'GlacialFreeze') newBgColor = 'rgba(165, 243, 252, 0.15)';
-        else if (state.floorEffect === 'VolatileAether') { newBgColor = 'rgba(234, 88, 12, 0.15)'; state.explosions = []; }
-        else if (state.floorEffect === 'HeavyGravity') newBgColor = 'rgba(90, 70, 50, 0.25)';
+        // Pick unique effects
+        state.floorEffect = shuffle([...ALL_EFFECTS]).slice(0, numEffects);
         
-        // Apply Passive Traits from ANY active effect
-        if (hasEffect('ShadowLabyrinth')) state.player.tempVisionRange = 2;
-        if (hasEffect('VolatileAether') && !state.explosions) state.explosions = [];
+        // Apply immediate flags
+        if (state.floorEffect.includes('ShadowLabyrinth')) state.player.tempVisionRange = 2;
+        if (state.floorEffect.includes('VolatileAether')) state.explosions = []; 
+
+        // Visuals: Pick a tint based on the first effect
+        const base = state.floorEffect[0];
+        if (base === 'MiasmaChamber') newBgColor = 'rgba(34,197,94,0.18)';
+        else if (base === 'Bloodhunt') newBgColor = 'rgba(190,24,93,0.14)';
+        else if (base === 'GlacialFreeze') newBgColor = 'rgba(165, 243, 252, 0.15)';
+        else if (base === 'VolatileAether') newBgColor = 'rgba(234, 88, 12, 0.15)';
+        else if (base === 'AntiMagic') newBgColor = 'rgba(100, 100, 100, 0.25)';
+        else if (base === 'ArcaneFlux') newBgColor = 'rgba(147, 51, 234, 0.15)';
+        else if (base === 'StaminaDrain') newBgColor = 'rgba(234, 234, 234, 0.15)';
+        
+        log(`Depth ${nextFloor}: ${numEffects} active curses!`);
+    }
+    // --- CLASSIC MODE ---
+    else if (!isEndless) {
+       const roll = Math.random();
+       if (roll < 0.20) { state.floorEffect = 'Bloodhunt'; newBgColor = 'rgba(190,24,93,0.14)'; }
+       else if (roll < 0.40) { state.floorEffect = 'AntiMagic'; newBgColor = 'rgba(100, 100, 100, 0.25)'; }
+       else if (roll < 0.60) { state.floorEffect = 'ArcaneFlux'; newBgColor = 'rgba(147, 51, 234, 0.15)'; }
+       else if (roll < 0.80) { state.floorEffect = 'MiasmaChamber'; newBgColor = 'rgba(34,197,94,0.18)'; }
+    }
+    // --- ENDLESS MODE (Floors 1-49) ---
+    else {
+        const roll = Math.random();
+        if (roll < 0.12) { state.floorEffect = 'MiasmaChamber'; newBgColor = 'rgba(34,197,94,0.18)'; }
+        else if (roll < 0.24) { state.floorEffect = 'ShadowLabyrinth'; state.player.tempVisionRange = 2; }
+        else if (roll < 0.36) { state.floorEffect = 'Bloodhunt'; newBgColor = 'rgba(190,24,93,0.14)'; }
+        else if (roll < 0.48) { state.floorEffect = 'GlacialFreeze'; newBgColor = 'rgba(165, 243, 252, 0.15)'; }
+        else if (roll < 0.60) { state.floorEffect = 'VolatileAether'; newBgColor = 'rgba(234, 88, 12, 0.15)'; state.explosions = []; }
+        else if (roll < 0.72) { state.floorEffect = 'AntiMagic'; newBgColor = 'rgba(100, 100, 100, 0.25)'; }
+        else if (roll < 0.84) { state.floorEffect = 'ArcaneFlux'; newBgColor = 'rgba(147, 51, 234, 0.15)'; }
+        else if (roll < 0.96) { state.floorEffect = 'StaminaDrain'; newBgColor = 'rgba(234, 234, 234, 0.15)'; }
     }
 }
 
@@ -9358,25 +9505,38 @@ gen(); enemyStep(); draw?.(); updateBars(); updateEquipUI();
 
         // --- NEW: floor-effect popup banner ---
         
-        // Handle Multi-Effects Banner
-        if (state.activeEffects && state.activeEffects.length > 1) {
-            state.activeEffects.forEach(k => unlockCodex(k));
-            const names = state.activeEffects.map(k => (CODEX_DEF[k] ? CODEX_DEF[k].name : k)).join(' + ');
-            showBanner(`Anomalies: ${names}`, 5000);
-        } 
-        // Single Effect (Classic / Early Endless)
-        else {
-            unlockCodex(state.floorEffect); 
-            if (state.floorEffect === 'MiasmaChamber') showBanner('Miasma Chamber — the air itself poisons you.', 4000);
-            else if (state.floorEffect === 'ShadowLabyrinth') showBanner('Shadow Labyrinth — your vision is strangled by darkness.', 4000);
-            else if (state.floorEffect === 'Bloodhunt') showBanner('Bloodhunt — in the unseen, enemies surge toward you.', 4000);
-            else if (state.floorEffect === 'GlacialFreeze') showBanner('Glacial Freeze — the floor is slick. Momentum carries you.', 4000);
-            else if (state.floorEffect === 'VolatileAether') showBanner('Volatile Aether — the air hums. Enemies explode upon death.', 4000);
-            else if (state.floorEffect === 'AntiMagic') showBanner('Anti-Magic Field — spells act strangely silent, but your blade sings.', 4000);
-            else if (state.floorEffect === 'ArcaneFlux') showBanner('Arcane Flux — raw magic surges, but your physical strength wanes.', 4000);
-            else if (state.floorEffect === 'HeavyGravity') showBanner('Heavy Gravity — your body feels like lead. Stamina usage is doubled.', 4000);
+        // 1. Normalize active effects to an array (handles Strings or Arrays)
+        const active = Array.isArray(state.floorEffect) 
+            ? state.floorEffect 
+            : (state.floorEffect ? [state.floorEffect] : []);
+
+        // 2. Unlock Codex for ALL active effects
+        active.forEach(eff => unlockCodex(eff));
+
+        // 3. Define text mappings (Short names for combos, Long for single)
+        const TEXT_MAP = {
+            MiasmaChamber:   { short: "Miasma",   long: "Miasma Chamber — the air itself poisons you." },
+            ShadowLabyrinth: { short: "Shadows",  long: "Shadow Labyrinth — your vision is strangled by darkness." },
+            Bloodhunt:       { short: "Bloodhunt",long: "Bloodhunt — in the unseen, enemies surge toward you." },
+            GlacialFreeze:   { short: "Ice",      long: "Glacial Freeze — the floor is slick. Momentum carries you." },
+            VolatileAether:  { short: "Aether",   long: "Volatile Aether — the air hums. Enemies explode upon death." },
+            AntiMagic:       { short: "Silence",  long: "Anti-Magic Field — spells act strangely silent, but your blade sings." },
+            ArcaneFlux:      { short: "Flux",     long: "Arcane Flux — raw magic surges, but your physical strength wanes." },
+            StaminaDrain:    { short: "Fatigue",  long: "Stamina Drain — every action requires double effort." }
+        };
+
+        // 4. Generate Banner
+        if (active.length === 1) {
+            // Single Effect: Show full flavor text
+            const info = TEXT_MAP[active[0]];
+            if (info) showBanner(info.long, 4000);
+        } else if (active.length > 1) {
+            // Combo Effect: Join short names (e.g. "CURSES: Miasma + Shadows + Fatigue")
+            const names = active.map(e => TEXT_MAP[e] ? TEXT_MAP[e].short : e);
+            showBanner(`CURSES: ${names.join(" + ")}`, 5000);
         }
-// --- END: floor-effect popup banner ---
+        
+        // --- END: floor-effect popup banner ---
 
         // Depth 50 Classic: trigger intro cutscene (it will hide HUD again)
         if (state.gameMode === 'classic' &&
@@ -10241,15 +10401,14 @@ function shootBow(){
   if (state.gameOver) return;
   if (state._inputLocked || state._descending) return;
   
-// New: Stamina Cost
-  const cost = (state.floorEffect === 'HeavyGravity') ? 2 : 1; // <--- DYNAMIC COST
-  if (state.player.stamina < cost) { spawnFloatText("No Stamina", state.player.x, state.player.y, '#9ca3af'); return; }
+  // New: Stamina Cost
+  if (state.player.stamina < 1) { spawnFloatText("No Stamina", state.player.x, state.player.y, '#9ca3af'); return; }
 
   // need a loaded arrow
   if (!state.player?.bow?.loaded){ log('No arrow loaded.'); return; }
 
- // Deduct Stamina
-  state.player.stamina -= cost;
+  // Deduct Stamina
+  state.player.stamina--; 
   state._skipStaminaRegen = true; // <--- ADD THIS
   updateBars();
 
@@ -10396,8 +10555,7 @@ function attack(){
     // -----------------------------
 
     // New: Stamina Cost for Normal Attack (Melee / Smash)
-    const cost = (state.floorEffect === 'HeavyGravity') ? 2 : 1; // <--- DYNAMIC COST
-
+    const cost = getStaminaCost(1);
     if (state.player.stamina < cost) { 
        spawnFloatText("Resting...", state.player.x, state.player.y, '#9ca3af'); 
        log("You are out of breath and take a moment to recover.");
@@ -10405,7 +10563,7 @@ function attack(){
        draw();
        return; 
     }
-    state.player.stamina -= cost;
+    state.player.stamina -= cost; 
     state._skipStaminaRegen = true; 
     updateBars();
 
@@ -10440,10 +10598,11 @@ if (state.player.blessTicks > 0) {
 // --------------------------------
 
 // --- NEW: Floor Effect Modifiers ---
-if (state.floorEffect === 'AntiMagic') {
+if (isEffectActive('AntiMagic')) {
   dmg = Math.ceil(dmg * 1.5); // Melee buff
-} else if (state.floorEffect === 'ArcaneFlux') {
-  dmg = Math.ceil(dmg * 0.25); // Melee nerf (weak!)
+} 
+if (isEffectActive('ArcaneFlux')) { // Note: Removed 'else' to allow stacking if both occur
+  dmg = Math.ceil(dmg * 0.25); // Melee nerf
   if (dmg < 1) dmg = 1;
 }
 // ----------------------------------
@@ -10637,10 +10796,8 @@ function useWeaponArt(){
   const t = w.type;
 
   // --- NEW: Stamina Check (Melee Only) ---
-  // Staffs use Mana (handled in their specific block), so they skip this cost.
   if (t !== 'staff') {
-      const STAMINA_COST = (state.floorEffect === 'HeavyGravity') ? 8 : 4; // <--- DYNAMIC COST (Double 4)
-
+      const STAMINA_COST = getStaminaCost(4);
       if (state.player.stamina < STAMINA_COST) {
         spawnFloatText("Need Stamina", state.player.x, state.player.y, '#9ca3af');
         log(`Not enough Stamina for Weapon Art (${state.player.stamina}/${STAMINA_COST}).`);
@@ -10997,7 +11154,7 @@ function cast(){
   const spell = state.equippedSpell;
 
   // --- NEW: Anti-Magic Block ---
-  if (state.floorEffect === 'AntiMagic') {
+  if (isEffectActive('AntiMagic')) {
     log('A field of silence prevents magic here!');
     return;
   }
@@ -11059,7 +11216,7 @@ else if (wName.includes('Earth') && spell.name === 'Pebble') { dmg+=3; log('Eart
 // ----------------------------------
 
 // --- NEW: Arcane Flux Boost ---
-if (state.floorEffect === 'ArcaneFlux') {
+if (isEffectActive('ArcaneFlux')) {
   dmg = Math.ceil(dmg * 1.5);
 }
 // ------------------------------
@@ -13827,8 +13984,7 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
 
 // SPRINT CHECK: Holding Shift?
     if (e.shiftKey) {
-      const sprintCost = (state.floorEffect === 'HeavyGravity') ? 6 : 3; // <--- DYNAMIC COST
-
+      const sprintCost = getStaminaCost(3);
       if (state.player.stamina >= sprintCost) {
          const x1 = state.player.x + dx;
          const y1 = state.player.y + dy;
@@ -13846,11 +14002,10 @@ if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arr
                      stopNow = (state.tiles[y2][x2] === 4); // STOP if x2 is stairs
                      
                      // 3. Glacial Freeze: If x2 is valid & NOT stairs, try x3 (Slide)
-                     if (!stopNow && state.floorEffect === 'GlacialFreeze') {
+                     if (!stopNow && isEffectActive('GlacialFreeze')) { // Use helper
                          const x3 = x2 + dx, y3 = y2 + dy;
                          if (isPassableForPlayer(x3, y3)) {
                              finalX = x3; finalY = y3;
-                             // Removed duplicate spawnFloatText here
                          }
                      }
                  }
@@ -15237,7 +15392,7 @@ function handleEnemyDeath(e, source) {
 
 function useStaff(w) {
     // --- FIX: Anti-Magic Field Block ---
-    if (state.floorEffect === 'AntiMagic') {
+    if (isEffectActive('AntiMagic')) {
         log('A field of silence prevents the staff from firing!');
         return;
     }
@@ -15327,7 +15482,7 @@ function useStaff(w) {
                 }
 
                 // --- FIX: Arcane Flux Boost ---
-                if (state.floorEffect === 'ArcaneFlux') {
+                if (isEffectActive('ArcaneFlux')) {
                     dmg = Math.ceil(dmg * 1.5);
                 }
                 // ------------------------------
@@ -15839,29 +15994,7 @@ if (keyBtn) keyBtn.addEventListener('click', ()=>{
   hideDebug?.();
   log('[debug] Granted Key of Destiny.');
 });
-// --- NEW: Give All Basic Weapons ---
-const allWepBtn = document.getElementById('dbgGiveAllWeapons');
-if (allWepBtn) allWepBtn.addEventListener('click', ()=>{
-  const basics = [
-    // Standard
-    'Shortsword', 'Claymore', 'Spear', 'Axe', 'Knuckle Duster',
-    // Heavy/New
-    'Warhammer', 'Battleaxe', 'Halberd', 'Claws',
-    // Staffs
-    'Fire Staff', 'Ice Staff', 'Lightning Staff', 'Wind Staff', 'Earth Staff'
-  ];
 
-  state.inventory.weapons = state.inventory.weapons || {};
-  
-  basics.forEach(name => {
-    state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
-  });
-
-  updateInvBody?.();
-  updateEquipUI?.(); // In case we want to show counts
-  hideDebug?.();
-  log('[debug] Added 1 of every basic weapon.');
-});
 // --- NEW: Unlock All Classes Cheat ---
 const clsBtn = document.getElementById('dbgUnlockClasses');
 if (clsBtn) clsBtn.addEventListener('click', ()=>{
@@ -16163,7 +16296,7 @@ const CODEX_DEF = {
   VolatileAether: { name:'Volatile Aether', desc:'Enemies explode shortly after death.', seen:false },
   AntiMagic:      { name:'Anti-Magic Field',desc:'Magic is disabled, but Melee is stronger.', seen:false },
   ArcaneFlux:     { name:'Arcane Flux',     desc:'Magic is amplified, but Melee is weak.', seen:false },
-  HeavyGravity:   { name:'Heavy Gravity',   desc:'The air is heavy. All Stamina costs are doubled.', seen:false }, // <--- ADD THIS
+  StaminaDrain:   { name:'Stamina Drain',   desc:'Every action requires double effort.', seen:false }, // NEW
 // Existing Interactable
   Shrine: { name:'Mystical Shrine', desc:'A holy altar that offers a blessing... or a curse.', seen:false, triggered:0 }, 
   Gold_Well: { name:'Golden Well', desc:'Toss 500g to wish for power.', seen:false, activated:0 }, // <--- ADDED
@@ -16343,9 +16476,17 @@ function renderCodexUI(){
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  document.getElementById('btnCodex')?.addEventListener('click', ()=>{
+document.getElementById('btnCodex')?.addEventListener('click', ()=>{
     renderCodexUI();
     window.openModal('#codexOverlay');
+  });
+
+  // Wire up the Demo End "Menu" button
+  document.getElementById('btnDemoMenu')?.addEventListener('click', () => {
+    document.getElementById('demoEndModal').style.display = 'none';
+    document.body.classList.remove('noscroll');
+    // Trigger standard game-over flow (save score -> show leaderboard)
+    if (typeof openScoreEntry === 'function') openScoreEntry(); 
   });
 });
 
