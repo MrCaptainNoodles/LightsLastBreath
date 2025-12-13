@@ -1742,6 +1742,48 @@ function updateJesterAudio(){
 
 const DEFAULT_BGM_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/bg.mp3';
 
+// --- NEW: Dynamic Music Config ---
+const MUSIC_CONFIG = {
+  // Biomes: [1-4] is 'early', [5-9] is 'late'
+  sewers: { 
+    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_sewers_1.mp3', 
+    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_sewers_2.mp3' 
+  },
+  crypt: { 
+    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_crypt_1.mp3', 
+    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_crypt_2.mp3' 
+  },
+  magma: { 
+    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_magma_1.mp3', 
+    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_magma_2.mp3' 
+  },
+  ruins: { 
+    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_ruins_1.mp3', 
+    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_ruins_2.mp3' 
+  },
+  void: { 
+    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_void_1.mp3', 
+    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_void_2.mp3' 
+  },
+  gilded: { 
+    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_gilded_1.mp3', 
+    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_gilded_2.mp3' 
+  },
+
+  // Boss Tracks (Triggers on Floor 10, 20, 30...)
+  bosses: {
+    'Rat':      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_boss_rat.mp3',
+    'Bat':      'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_boss_bat.mp3',
+    'Spider':   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_boss_spider.mp3',
+    'Slime':    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_boss_slime.mp3',
+    'Goblin':   'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_boss_goblin.mp3',
+    'Skeleton': 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_boss_skeleton.mp3',
+    'Mage':     'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_boss_mage.mp3',
+    'Clone':    'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/boss1.mp3',    // Floor 50
+    'Mad King': 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/boss2.mp3'     // Floor 50 Phase 2
+  }
+};
+
 // ---- NPC dialogue (one-shot voice lines) ----
 // Replace these placeholder URLs with your recorded lines.
 const NPC_DIALOGUE_URLS = {
@@ -2874,9 +2916,46 @@ function playMenuBgm(){
 
 function playGameBgm(url){
   ensureBgmNodes();
-  setBgmUrl(url);              // load gameplay track
-  attachBgmNodeIfNeeded();     // connect to WebAudio
+  setBgmUrl(url);              
+  attachBgmNodeIfNeeded();     
   if (bgmAudio){ bgmAudio.muted = false; bgmAudio.play()?.catch(()=>{}); }
+}
+
+// --- NEW: Dynamic Music Selector ---
+function updateDynamicMusic() {
+  let url = DEFAULT_BGM_URL;
+  const f = state.floor;
+
+  // 1. BOSS FLOORS (10, 20, 30...)
+  if (f % 10 === 0) {
+    // Find the boss entity to get its Type
+    const boss = state.enemies && state.enemies.find(e => e.boss);
+    if (boss && MUSIC_CONFIG.bosses[boss.type]) {
+       url = MUSIC_CONFIG.bosses[boss.type];
+    } else {
+       // Fallback for generic boss or if spawn hasn't happened yet (Cutscenes)
+       url = MUSIC_CONFIG.bosses['Clone']; 
+    }
+  } 
+  // 2. EXPLORATION FLOORS
+  else {
+    const biomes = ['sewers', 'crypt', 'magma', 'ruins', 'void', 'gilded'];
+    // Cycle through biomes (0-5), looping for Endless mode
+    const biomeIndex = Math.floor((f - 1) / 10) % biomes.length;
+    const biomeKey = biomes[biomeIndex];
+    
+    // Floors 1-4 = Early, 5-9 = Late
+    const subFloor = f % 10;
+    if (subFloor >= 1 && subFloor <= 4) {
+       url = MUSIC_CONFIG[biomeKey].early;
+    } else {
+       url = MUSIC_CONFIG[biomeKey].late;
+    }
+  }
+
+  // Only switch if the URL is different from what's playing
+  if (bgmAudio && bgmAudio.src === url) return; 
+  playGameBgm(url);
 }
 
 
@@ -3061,8 +3140,7 @@ async function startTutorial(e){
   if (e?.preventDefault) e.preventDefault();
   if (menu) menu.style.display = 'none';
   playGameBgm(CLASSIC_BGM_URL);
-
-  // Mark mode
+  
   state.gameMode = 'classic';
   
   // Trigger Restart logic (which now checks for Class Unlocks)
@@ -3077,12 +3155,13 @@ function startEndless(e){
 
   // Mark mode + music
   state.gameMode = 'endless';
-  playGameBgm(ENDLESS_BGM_URL);
+ 
 
   // Trigger Restart logic (Checks for Classes)
   // Note: The "Pick 1 of 2" Omen will trigger automatically inside doRestart 
   // because we added the check at the bottom of doRestart in the previous batch.
   doRestart();
+  updateDynamicMusic(); // <--- NEW: Use dynamic logic
 }
 
 
@@ -9487,7 +9566,9 @@ state.floor++;
 state.run.depth = Math.max(state.run.depth, state.floor);
 
 // build the next floor while we’re still black
-gen(); enemyStep(); draw?.(); updateBars(); updateEquipUI(); 
+gen(); 
+updateDynamicMusic(); // <--- NEW: Switch track based on new floor
+enemyStep(); draw?.(); updateBars(); updateEquipUI(); 
 
     // sync Depth chip
     const fc = document.getElementById('floorChip');
