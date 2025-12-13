@@ -3139,13 +3139,14 @@ async function startTutorial(e){
  function startClassic(e){
   if (e?.preventDefault) e.preventDefault();
   if (menu) menu.style.display = 'none';
-  playGameBgm(CLASSIC_BGM_URL);
+  // playGameBgm(CLASSIC_BGM_URL); // <-- Removed old static call
   
   state.gameMode = 'classic';
   
   // Trigger Restart logic (which now checks for Class Unlocks)
   // Passing null or undefined triggers the menu check
   doRestart(); 
+  updateDynamicMusic(); // <-- Added: Triggers the new biome music for Floor 1
 }
 
 function startEndless(e){
