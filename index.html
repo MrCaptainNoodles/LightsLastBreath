@@ -8310,18 +8310,17 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
               log(`Aether explosion hits you for ${dmg}!`);
             }
             
-            // Hit Enemy
+           // Hit Enemy
             const e = enemyAt(tx, ty);
             if (e) {
               e.hp -= 10;
               spawnFloatText(10, e.x, e.y, '#f97316');
               if (e.hp <= 0) {
-                 // Chain reaction: Spawn new bomb on death
-                 state.explosions.push({ x: e.x, y: e.y, timer: 2 }); // 2-turn fuse for chains
-                 spawnFloatText("2...", e.x, e.y, '#f97316');
-
-                 state.enemies = state.enemies.filter(x => x !== e);
-                 state.run.kills++;
+                 // Force central death handler
+                 // Note: handleEnemyDeath will spawn the NEXT explosion for us
+                 handleEnemyDeath(e, 'magic');
+              
+            
 
                  // --- FIX: Award XP for Explosion Kills ---
                  state.player.xp += (e.xp || 1);
@@ -8520,10 +8519,8 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
       e.bleedTicks--;
       e.hp -= (e.bleedDmg|0) || 1;
       if (e.hp <= 0){
-        // standard kill path
-        state.enemies = state.enemies.filter(x=>x!==e);
-        state.run.kills = (state.run.kills|0) + 1;
-        SFX.kill?.();
+        // Route through central handler
+        handleEnemyDeath(e, 'spear'); // Assume spear/bleed source
         continue;
       }
     }
@@ -10573,23 +10570,11 @@ const range = baseRange + Math.floor(Math.max(0, bowLvl - 1) / 3); // +1 range e
       const onDone = ()=>{ 
         // Safety check: ensure enemy exists and is killed if fatal flag was set
         if (isFatal) {
-          // 1. Handle Depth 50 Transitions
-          if (state.floor === 50 && target.boss && target.type === 'Clone' && !(state.flags?.depth50Phase2)) {
-             runDepth50Phase2(target); return;
-          }
-          if (state.floor === 50 && target.boss && target.type === 'Mad King' && !(state.flags?.depth50Done)) {
-             runDepth50Outro(target); return;
-          }
-
-          // 2. Remove Enemy & Award XP
-          state.enemies = state.enemies.filter(x=>x!==e);
-          state.run.kills++; 
-          awardKill('bow', Math.max(1, e.xp|0));
-          SFX.kill();
-          if (typeof log === 'function') log(`${e.type} falls.`);
+          // Route through central handler to catch Boss/Mini-Boss events
+          handleEnemyDeath(e, 'bow');
         }
 
-  enemyStep(); 
+  enemyStep();
   draw(); 
 };
       spawnProjectileEffect({
