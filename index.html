@@ -10822,12 +10822,20 @@ handleSuccessfulHitDurabilityTick();
   return;
 }
 
-function spawnBossStairs(){
+function spawnBossStairs(targetX, targetY){
   if (state._bossStairsSpawned) return;
-  const r = state.rooms && state.rooms[0] ? state.rooms[0]
-      : {x:0, y:0, w:state.size.w, h:state.size.h};
-  const sx = Math.floor(r.x + r.w/2);
-  const sy = Math.floor(r.y + r.h/2);
+  
+  // Use passed coordinates, or fallback to room center
+  let sx = targetX;
+  let sy = targetY;
+  
+  if (sx === undefined || sy === undefined) {
+      const r = state.rooms && state.rooms[0] ? state.rooms[0]
+          : {x:0, y:0, w:state.size.w, h:state.size.h};
+      sx = Math.floor(r.x + r.w/2);
+      sy = Math.floor(r.y + r.h/2);
+  }
+
   state.tiles[sy][sx] = 4;                 // put stairs down
   state._bossStairsSpawned = true;
   if (typeof ensurePathToStairsUnlocked === 'function'){
@@ -12738,7 +12746,7 @@ function useBomb(){
              
              // --- FIX: Trigger Stairs if Boss ---
              if (e.boss) {
-                spawnBossStairs();
+                spawnBossStairs(e.x, e.y);
                 log("The explosion clears the path!");
              }
              // ----------------------------------
@@ -15437,7 +15445,7 @@ function handleEnemyDeath(e, source) {
 
   // 4. Boss Logic (Stairs + Omen)
   if (e.boss) {
-      spawnBossStairs(); // Checks internally if already spawned
+      spawnBossStairs(e.x, e.y); // Checks internally if already spawned
       if (typeof offerPick2Choice === 'function') offerPick2Choice('boss');
   }
 
