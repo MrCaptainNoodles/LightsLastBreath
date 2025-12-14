@@ -1610,7 +1610,7 @@ function updateCartographerAudio(){
   const shaped = Math.pow(v, 0.65);
 
   // NOTE: Interactables slider is already applied by interactGain
-  cartographerGain.gain.value = shaped * 0.6;
+  cartographerGain.gain.value = shaped * 1;
 }
 
 // --- NEW: Cleric Audio ---
@@ -1666,7 +1666,7 @@ function updateClericAudio(){
   const shaped = Math.pow(v, 0.65);
   
   // Volume is 60% max
-  clericGain.gain.value = shaped * 0.6;
+  clericGain.gain.value = shaped * 1;
 }
 
 
@@ -1729,7 +1729,7 @@ function updateJesterAudio(){
   const shaped = Math.pow(v, 0.65);
 
   // NOTE: Interactables slider is already applied by interactGain
-  jesterGain.gain.value = shaped * 0.6;
+  jesterGain.gain.value = shaped * 1;
 }
 
 
@@ -1975,7 +1975,7 @@ function updateMerchantAudio(){
   const shaped = Math.pow(v, 0.65); // gentler falloff so it doesn't feel “short”
 
   // NOTE: Interactables slider is already applied by interactGain
-  merchantGain.gain.value = shaped * 0.6;
+  merchantGain.gain.value = shaped * 1;
 }
 
 
@@ -2035,7 +2035,7 @@ function updateBlacksmithAudio(){
   const shaped = Math.pow(v, 0.65);
 
   // NOTE: Interactables slider is already applied by interactGain
-  blacksmithGain.gain.value = shaped * 0.7;
+  blacksmithGain.gain.value = shaped * 1;
 }
 
 
