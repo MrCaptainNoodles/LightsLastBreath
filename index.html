@@ -9743,7 +9743,7 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
   } else if (roll < 0.40) {
     const dmg = Math.floor(state.player.hpMax * 0.15);
     state.player.hp = Math.max(1, state.player.hp - dmg);
-    const gold = rand(50, 150) + (state.floor * 5);
+    const gold = rand(25, 75) + (state.floor * 3); // <--- Reduced base (25-75) and scaling (*3)
     state.inventory.gold += gold;
     updateBars();
     flashDamage();
