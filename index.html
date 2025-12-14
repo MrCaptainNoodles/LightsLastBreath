@@ -8322,6 +8322,16 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
 
                  state.enemies = state.enemies.filter(x => x !== e);
                  state.run.kills++;
+
+                 // --- FIX: Award XP for Explosion Kills ---
+                 state.player.xp += (e.xp || 1);
+                 while(state.player.xp >= state.player.next){
+                    state.player.xp -= state.player.next;
+                    state.player.level++;
+                    state.player.next = Math.floor(state.player.next * 1.30);
+                    if(typeof openLevelUpModal === 'function') openLevelUpModal(); 
+                 }
+                 // ----------------------------------------
               }
             }
           }
@@ -14808,10 +14818,12 @@ function doRestart(className){
   if (!isTut) {
     state.player.hpMax += ((meta[upgPrefix+'vitality']||0) * 5);
     state.player.mpMax += ((meta[upgPrefix+'wisdom']||0) * 10);
+    state.player.staminaMax += ((meta[upgPrefix+'endurance']||0) * 5); // <--- Added: Apply Max Stamina boost
   }
 
   state.player.hp = state.player.hpMax;
   state.player.mp = state.player.mpMax;
+  state.player.stamina = state.player.staminaMax; // <--- Added: Fill Stamina to new Max
 
   // Defaults
   state.player.weapon = { name:'Fists', type:'hand', min:1, max:2, base:{min:1,max:2}, dur:null, durMax:null };
