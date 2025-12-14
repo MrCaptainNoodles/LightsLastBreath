@@ -2770,7 +2770,7 @@ function ensureBgmNodes(){
   initAudio();
   if (!bgmGain){
   bgmGain = audioCtx.createGain();
-  bgmGain.gain.value = 0.35;       // BGM base volume
+  bgmGain.gain.value = 0.25;       // BGM base volume
   bgmGain.connect(musicGain || masterGain); // route through Music group
 }
 
