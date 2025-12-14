@@ -3610,10 +3610,11 @@ function gen(){
   state.tiles = Array.from({length:H},()=>Array.from({length:W},()=>0));
   state.rooms=[]; state.corridor=new Set(); state.seen=new Set();
   state.enemies=[]; state.pickups={};
-  state.props={}; // <--- NEW: Init props
+ state.props={}; // <--- NEW: Init props
   state.lockedDoors = new Set();     // ← reset per-floor
-state._starterChest = null;        // ← avoid stale pointer
-
+  state._starterChest = null;        // ← avoid stale pointer
+  
+  delete state._pendingOmen;         // <--- FIX: Ensure Omen flag resets every floor
 
 // HARD RESET NPCs *before* any early return (boss floors)
 state.merchant   = null;
@@ -15475,26 +15476,6 @@ function handleEnemyDeath(e, source) {
       if (typeof offerPick2Choice === 'function') offerPick2Choice('boss');
   }
 
-  // 5. Mini-Boss Logic (Warlord Omen)
-  if (e.miniBoss && state.gameMode === 'endless') {
-      log("The Warlord falls! A dark power calls to you...");
-      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
-      
-      // If the player leveled up on this kill, the Level Up modal is open.
-      // We defer the Omen choice until the player closes the Level Up menu.
-      // FIX: Correctly check if Current XP + Reward >= Next Level Threshold
-      const hasLeveled = (state.player.xp + e.xp) >= state.player.next;
-      
-      if (hasLeveled) {
-          // Store Omen as pending
-          state._pendingOmen = true;
-          log("Omen deferred until Level Up is chosen.");
-      } else {
-          // Open Omen normally
-          setTimeout(() => { triggerOmenChoice(); }, 800);
-      }
-  }
-
   // 6. Loot Drops (Stolen items, Gold)
   if (e.stolenItems || e.stolen) {
       if (e.stolenItems) e.stolenItems.forEach(it => dropStolenNear(e.x, e.y, it));
@@ -15502,21 +15483,37 @@ function handleEnemyDeath(e, source) {
       log('Stolen items scatter on the floor!');
   }
   
-  // FIX: Restore Auto-Gold (50% chance), but NO floating text
+  // Restore Auto-Gold (50% chance), but NO floating text
   if (!e.boss && !e.miniBoss && Math.random() < 0.5) { 
       const g = goldFor(e);
       state.inventory.gold = (state.inventory.gold|0) + g;
-      // Note: spawnFloatText removed to keep UI clean
-      if (typeof updateInvBody === 'function') updateInvBody(); // Refresh UI if open
+      if (typeof updateInvBody === 'function') updateInvBody(); 
   }
 
-  // 7. Cleanup & Stats
+  // 7. Cleanup & Stats (MOVED UP)
   state.enemies = state.enemies.filter(x => x !== e);
   state.run.kills++;
-  awardKill(source, Math.max(1, e.xp|0));
+  awardKill(source, Math.max(1, e.xp|0)); // <--- This triggers Level Up Modal if needed
   SFX.kill();
   unlockCodex(e.displayName || e.type, true);
   log(`${e.displayName || e.type} falls.`);
+
+  // 5. Mini-Boss Logic (MOVED DOWN)
+  if (e.miniBoss && state.gameMode === 'endless') {
+      log("The Warlord falls! A dark power calls to you...");
+      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+      
+      // CHECK UI DIRECTLY: Is the level up modal visible?
+      const lvlM = document.getElementById('lvlupModal');
+      const isLeveled = (lvlM && lvlM.style.display === 'flex');
+      
+      if (isLeveled) {
+          state._pendingOmen = true;
+          log("Omen deferred until Level Up is chosen.");
+      } else {
+          setTimeout(() => { triggerOmenChoice(); }, 800);
+      }
+  }
 }
 
 function useStaff(w) {
