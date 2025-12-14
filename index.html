@@ -2422,6 +2422,31 @@ document.addEventListener('DOMContentLoaded', ()=>{
 });
 
 // --- Custom URLs (replace with your own, CORS-enabled) ---
+const SKELETON_REVIVE_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/skeleton.mp3'; // <--- PASTE HERE
+let skelReviveBuf = null;
+
+async function loadSkelRevive(){ 
+  try{ 
+    initAudio(); 
+    const arr = await (await fetch(SKELETON_REVIVE_URL, {mode:'cors'})).arrayBuffer(); 
+    skelReviveBuf = await new Promise((ok,err)=>audioCtx.decodeAudioData(arr,ok,err)); 
+  } catch(e){ console.warn('skel load fail', e); } 
+}
+function playSkelRevive(){
+  if(!audioCtx || muted) return;
+  if(skelReviveBuf){ 
+    const src = audioCtx.createBufferSource(); 
+    src.buffer = skelReviveBuf; 
+    const g = audioCtx.createGain(); 
+    g.gain.value = 0.5; 
+    src.connect(g); g.connect(combatGain||masterGain); 
+    src.start(); 
+  } else { 
+    SFX.weaponBreak(); // Fallback if file isn't loaded yet
+  }
+}
+document.addEventListener('DOMContentLoaded', loadSkelRevive);
+
 const MISS_SFX_URL        = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/miss.mp3';
 const LOCK_SUCCESS_SFX_URL= 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/lockpick_success.mp3';
 const CHEST_OPEN_SFX_URL  = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/chest.mp3';
@@ -15430,6 +15455,9 @@ function handleEnemyDeath(e, source) {
       e._revived = true;
       e.hp = Math.max(2, Math.floor((e.hpMax || 7) * 0.6));
       if(e.atk) { e.atk[0] = Math.max(0, e.atk[0]-1); }
+      
+      playSkelRevive(); // <--- Plays your custom file (or fallback)
+      
       log('The Skeleton pulls itself back together!');
       return; 
   }
