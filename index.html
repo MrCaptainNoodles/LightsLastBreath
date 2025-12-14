@@ -13009,7 +13009,7 @@ function levelMpGain() {
   const magicLvl = (state.skills?.magic?.lvl || 1);
   const casterBias = Math.min(2, Math.floor(magicLvl / 3)) * 0.5; // up to +1
   const raw = 2 + 0.35 * L + 0.3 * F + casterBias;
-  return Math.max(2, Math.round(raw));
+  return Math.max(2, Math.round(raw * dangerFactor())); // <--- Added dangerFactor()
 }
 
 // --- NEW: Stamina Scaling ---
