@@ -3832,6 +3832,11 @@ if (state.rooms.length === 0) {
 
   // --- connect rooms (guarantee degree >= 2) ---
   const centers = state.rooms.map(r=>({x:Math.floor(r.x+r.w/2),y:Math.floor(r.y+r.h/2)}));
+  
+  // NEW: Sort centers by X coordinate to encourage connecting neighbors first
+  // This drastically reduces "cross-map" long corridors on early floors.
+  centers.sort((a,b) => a.x - b.x);
+
   const used=[0]; const edges=[];
   while(used.length<centers.length){
     let best=null;
@@ -3839,7 +3844,15 @@ if (state.rooms.length === 0) {
       for(let j=0;j<centers.length;j++){
         if(used.includes(j)) continue;
         const d = dist(centers[i].x,centers[i].y,centers[j].x,centers[j].y);
-        if(!best||d<best.d) best={i,j,d};
+        
+        // NEW: Bias heavily against long corridors on early floors
+        // If dist > 20 and we have few rooms, artificially inflate distance to discourage it
+        let penalty = 1;
+        if (state.rooms.length < 15 && d > 20) penalty = 3; 
+        
+        const weightedDist = d * penalty;
+
+        if(!best || weightedDist < best.d) best={i,j,d: weightedDist, realD: d};
       }
     }
     used.push(best.j);
