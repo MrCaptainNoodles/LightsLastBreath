@@ -14447,34 +14447,25 @@ function boot(){
 const HS_KEY = 'dc_hi10';
 const META_KEY = 'dc_meta_v1';
 
-// --- NEW: Classes & Meta Progress ---
 const CLASSES = {
   Adventurer: { name:'Adventurer', desc:'Just a basic adventurer.', unlock:true },
-  Rogue:      { name:'Rogue',      desc:'Starts with a Shortsword. + 5 Lockpicks. +5 MP / -3 HP.', req:'locks', val:5, msg:'Unlock: Pick 5 locks.' },
-  Barbarian:  { name:'Barbarian',  desc:'Starts with a Axe. +10 HP / -5 MP.', req:'kills_axe', val:10, msg:'Unlock: 10 Axe kills.' },
-  Wizard:    { name:'Wizard',    desc:'Starts with Fire Staff & Ember. +10 MP / -5 HP.', req:'kills_magic', val:10, msg:'Unlock: 10 Magic kills.' },
   
-  // --- Endless Only Classes ---
-  Mercenary: { name:'Mercenary', desc:'Starts with a Claymore. +8 HP / -8 MP.', req:'kills_two', val:10, msg:'Unlock: 10 Two-Handed kills.', endless:true },
-  Monk:      { name:'Monk',      desc:'Starts with Knuckle Dusters. +10 MP / -5 HP.', req:'kills_hand', val:10, msg:'Unlock: 10 Hand to Hand kills.', endless:true },
-  Ranger:    { name:'Ranger',    desc:'Starts with a Shortsword & 20 Arrows. +5 MP / -2 HP.', req:'kills_bow', val:10, msg:'Unlock: 10 Bow kills.', endless:true },
+  // Basic Classes
+  Rogue:      { name:'Rogue',      desc:'Shortsword, 8 Picks, Bomb. +5 Stam/MP, -2 HP.', req:'locks', val:15, msg:'Unlock: Pick 15 locks.' }, 
+  Barbarian:  { name:'Barbarian',  desc:'Battleaxe, Potion. +15 HP, +5 Stam. No Magic.', req:'kills_axe', val:50, msg:'Unlock: 50 Axe kills.' }, 
+  Wizard:     { name:'Wizard',     desc:'Fire Staff, Spark, Ember. +25 MP, -8 HP.', req:'kills_magic', val:50, msg:'Unlock: 50 Magic kills.' }, 
   
-  // Endless Classes
-  Lancer:    { name:'Lancer',    desc:'Polearm Specialist. Starts with Halberd. +10 Stamina / -5 MP.', req:'kills_spear', val:10, msg:'Unlock: 10 Polearm kills.', endless:true },
-  Soldier:   { name:'Soldier',   desc:'Standard Infantry. Starts with Shortsword & Kite Shield. Balanced stats.', req:'depth', val:5, msg:'Unlock: Reach Depth 5.', endless:true },
-  Spellblade:{ name:'Spellblade',desc:'Magic Knight. Starts with Shortsword & Ice Staff. Balanced stats.', req:'kills_magic', val:20, msg:'Unlock: 20 Magic kills.', endless:true },
-  Legionary: { name:'Legionary', desc:'Iron Wall. Starts with Shortsword & Tower Shield. +15 HP / -10 Stamina.', req:'kills_one', val:30, msg:'Unlock: 30 One-Handed kills.', endless:true },
-  Paladin:   { name:'Paladin',   desc:'Holy Crusader. Starts with Warhammer. +25 HP / +10 Stamina / -10 MP.', req:'depth', val:25, msg:'Unlock: Reach Depth 25.', endless:true },
-};
+  // Endless: Intermediate Classes
+  Mercenary:  { name:'Mercenary',  desc:'Claymore, 50g. +5 HP, +2 Stam, -5 MP.', req:'kills_two', val:75, msg:'Unlock: 75 Two-Handed kills.', endless:true }, 
+  Monk:       { name:'Monk',       desc:'Claws, Heal Spell. +15 MP, +8 Stam, -2 HP.', req:'kills_hand', val:75, msg:'Unlock: 75 Hand to Hand kills.', endless:true }, 
+  Ranger:     { name:'Ranger',     desc:'Sword, 30 Arrows, Gust. +5 MP, +5 Stam.', req:'kills_bow', val:50, msg:'Unlock: 50 Bow kills.', endless:true }, 
+  Lancer:     { name:'Lancer',     desc:'Halberd, 2 Bombs. +12 Stam, +2 HP, -8 MP.', req:'kills_spear', val:75, msg:'Unlock: 75 Polearm kills.', endless:true }, 
+  Soldier:    { name:'Soldier',    desc:'Sword, Kite Shield, Potion. +8 HP, +2 Stam.', req:'depth', val:15, msg:'Unlock: Reach Depth 15.', endless:true }, 
 
-// --- NEW: Soul Shop Definitions ---
-const SOUL_UPGRADES = {
-  vitality: { name:'Vitality', desc:'Start with +5 Max HP.', cost:100, max:5 },
-  greed:    { name:'Greed',    desc:'Start with +25 Gold.',  cost:75,  max:5 },
-  wisdom:   { name:'Wisdom',   desc:'Start with +10 Max MP.',cost:100, max:5 },
-  endurance:{ name:'Endurance',desc:'Start with +5 Max Stamina.', cost:100, max:5 }, // <--- Added this line
-  pockets:  { name:'Deep Pockets', desc:'Start with +1 Potion.', cost:150, max:3 },
-  vision:   { name:'Owl Eyes', desc:'Start with +1 Vision Range.', cost:300, max:2 }
+  // Endless: Expert Classes
+  Spellblade: { name:'Spellblade', desc:'Sword, Ice Staff, Frost. +15 MP, +3 Stam, -2 HP.', req:'kills_magic', val:200, msg:'Unlock: 200 Magic kills.', endless:true }, 
+  Legionary:  { name:'Legionary',  desc:'Sword, Tower Shield, 2 Potions. +12 HP. No Magic.', req:'kills_one', val:200, msg:'Unlock: 200 One-Handed kills.', endless:true }, 
+  Paladin:    { name:'Paladin',    desc:'Warhammer, Antidotes. +30 HP. Low Stam/MP.', req:'depth', val:40, msg:'Unlock: Reach Depth 40.', endless:true }, 
 };
 
 function getSoulBalance(){
@@ -14833,44 +14824,52 @@ function doRestart(className){
   };
 
   // --- Apply Class Stats Modifiers ---
+  // Adjusted for thematic attunement
   if (className === 'Barbarian') {
-    state.player.hpMax += 10; state.player.hp = state.player.hpMax;
-    state.player.mpMax = Math.max(0, state.player.mpMax - 5); state.player.mp = state.player.mpMax;
+    state.player.hpMax += 15; state.player.hp = state.player.hpMax; // Tanky
+    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // High endurance
+    state.player.mpMax = 0; state.player.mp = 0; // No magic
   } else if (className === 'Wizard') {
-    state.player.mpMax += 20; state.player.mp = state.player.mpMax;
-    state.player.hpMax -= 5;  state.player.hp = state.player.hpMax;
+    state.player.mpMax += 25; state.player.mp = state.player.mpMax; // Huge mana pool
+    state.player.hpMax -= 8;  state.player.hp = state.player.hpMax; // Very fragile
+    state.player.staminaMax -= 2; state.player.stamina = state.player.staminaMax; // Physically weak
   } else if (className === 'Rogue') {
-    state.player.mpMax += 5;  state.player.mp = state.player.mpMax;
-    state.player.hpMax -= 3;  state.player.hp = state.player.hpMax;
-  } else if (className === 'Mercenary') {
-    state.player.hpMax += 8;  state.player.hp = state.player.hpMax;
-    state.player.mpMax = Math.max(0, state.player.mpMax - 8); state.player.mp = state.player.mpMax;
-  } else if (className === 'Monk') {
-    state.player.mpMax += 10; state.player.mp = state.player.mpMax;
-    state.player.hpMax -= 5;  state.player.hp = state.player.hpMax;
-  } else if (className === 'Ranger') {
-    state.player.mpMax += 5;  state.player.mp = state.player.mpMax;
+    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // Agile
     state.player.hpMax -= 2;  state.player.hp = state.player.hpMax;
-  } else if (className === 'Lancer') {
-    state.player.staminaMax += 10; state.player.stamina = state.player.staminaMax;
+    state.player.mpMax += 5;  state.player.mp = state.player.mpMax; // Utility magic
+  } else if (className === 'Mercenary') {
+    state.player.hpMax += 5;  state.player.hp = state.player.hpMax;
+    state.player.staminaMax += 2; state.player.stamina = state.player.staminaMax;
     state.player.mpMax = Math.max(0, state.player.mpMax - 5); state.player.mp = state.player.mpMax;
+  } else if (className === 'Monk') {
+    state.player.staminaMax += 8; state.player.stamina = state.player.staminaMax; // Stamina heavy (Flurry)
+    state.player.mpMax += 15; state.player.mp = state.player.mpMax; // Chi/Mana focus
+    state.player.hpMax -= 2;  state.player.hp = state.player.hpMax;
+  } else if (className === 'Ranger') {
+    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // Kiting stamina
+    state.player.mpMax += 5;  state.player.mp = state.player.mpMax;
+  } else if (className === 'Lancer') {
+    state.player.staminaMax += 12; state.player.stamina = state.player.staminaMax; // Needs stamina for Pierce
+    state.player.hpMax += 2; state.player.hp = state.player.hpMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 8); state.player.mp = state.player.mpMax;
   } else if (className === 'Soldier') {
-    state.player.hpMax += 5;       state.player.hp = state.player.hpMax;
-    state.player.staminaMax += 5;  state.player.stamina = state.player.staminaMax;
-    state.player.mpMax = Math.max(0, state.player.mpMax - 10); state.player.mp = state.player.mpMax;
+    state.player.hpMax += 8;       state.player.hp = state.player.hpMax;
+    state.player.staminaMax += 2;  state.player.stamina = state.player.staminaMax;
+    state.player.mpMax = Math.max(0, state.player.mpMax - 8); state.player.mp = state.player.mpMax;
   } else if (className === 'Spellblade') {
-    state.player.mpMax += 5; state.player.mp = state.player.mpMax;
-    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax;
+    state.player.mpMax += 15; state.player.mp = state.player.mpMax; // Needs MP for spells & melee
+    state.player.staminaMax += 3; state.player.stamina = state.player.staminaMax;
+    state.player.hpMax -= 2; state.player.hp = state.player.hpMax; // Glass cannon hybrid
   } else if (className === 'Paladin') {
-    state.player.hpMax += 25; state.player.hp = state.player.hpMax;
-    state.player.staminaMax += 10; state.player.stamina = state.player.staminaMax;
+    state.player.hpMax += 30; state.player.hp = state.player.hpMax; // Massive Tank
+    state.player.staminaMax -= 2; state.player.stamina = state.player.staminaMax; // Heavy armor penalty
     state.player.mpMax = Math.max(0, state.player.mpMax - 10); 
     state.player.mp = state.player.mpMax;
-    // FIX: If MP max dropped to 0, reset current MP to 0 (important for Paladin)
     if (state.player.mpMax <= 0) state.player.mp = 0;
   } else if (className === 'Legionary') {
-    state.player.hpMax += 10; state.player.hp = state.player.hpMax;
-    state.player.staminaMax = Math.max(0, state.player.staminaMax - 5); state.player.stamina = state.player.staminaMax;
+    state.player.hpMax += 12; state.player.hp = state.player.hpMax;
+    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // Shield work takes stamina
+    state.player.mpMax = 0; state.player.mp = 0; // Pure martial
   }
 
   // --- Apply Soul Shop Upgrades (IF NOT TUTORIAL) ---
@@ -14919,44 +14918,57 @@ function doRestart(className){
   if (className === 'Rogue') {
     state.inventory.weapons['Shortsword'] = 1; 
     equipWeaponByName('Shortsword');
-    state.inventory.lockpicks = 5;
+    state.inventory.lockpicks = 8; // More picks for the thief archetype
+    state.inventory.bombs = 1; // A tool for sticky situations
   } else if (className === 'Barbarian') {
-    state.inventory.weapons['Axe'] = 1;
-    equipWeaponByName('Axe');
+    state.inventory.weapons['Battleaxe'] = 1; // Upgraded from Axe to Battleaxe
+    equipWeaponByName('Battleaxe');
+    state.inventory.potions = 1; // Self-sustain for melee
   } else if (className === 'Wizard') {
     state.inventory.weapons['Fire Staff'] = 1; equipWeaponByName('Fire Staff');
-state.spells.push({name:'Ember', cost:3, tier:1}); state.equippedSpell = state.spells[0];  }
+    state.spells.push({name:'Ember', cost:3, tier:1}); 
+    state.spells.push({name:'Spark', cost:1, tier:1}); // Basic low-cost spell backup
+    state.equippedSpell = state.spells[0];  
+    state.inventory.tonics = 2; // Mana sustain
+  }
 // -- New Classes --
   else if (className === 'Mercenary') {
-    // Claymore: High damage, cleave ability
     state.inventory.weapons['Claymore'] = 1;
     equipWeaponByName('Claymore');
-    // REMOVED DUPLICATE STATS (Already applied at top of function)
+    state.inventory.gold = 50; // Mercenaries start with coin
   } else if (className === 'Monk') {
-    // Knuckle Duster: Fast attack, stun chance
-    state.inventory.weapons['Knuckle Duster'] = 1;
-    equipWeaponByName('Knuckle Duster');
-    // REMOVED DUPLICATE STATS (Already applied at top of function)
+    state.inventory.weapons['Claws'] = 1; // Upgraded from Knuckle Duster to Claws
+    equipWeaponByName('Claws');
+    state.spells.push({name:'Heal', cost:4, tier:1}); // Self-sufficiency
+    state.equippedSpell = state.spells[0];
   } else if (className === 'Ranger') {
-    // Ranger gets standard sword backup + lots of ammo
     state.inventory.weapons['Shortsword'] = 1;
     equipWeaponByName('Shortsword');
-    state.inventory.arrows = 20;
+    state.inventory.arrows = 30; // More ammo
     state.player.bow.loaded = 1;
+    state.spells.push({name:'Gust', cost:2, tier:1}); // Control spell (Wind)
+    state.equippedSpell = state.spells[0];
   } else if (className === 'Lancer') {
     state.inventory.weapons['Halberd'] = 1; equipWeaponByName('Halberd');
+    state.inventory.bombs = 2; // Zone control
   } else if (className === 'Soldier') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.weapons['Kite Shield'] = 1; equipShield('Kite Shield');
+    state.inventory.potions = 1; // Standard issue
   } else if (className === 'Spellblade') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
-    state.inventory.weapons['Ice Staff'] = 1; // Backup
-    state.spells.push({name:'Frost', cost:3, tier:1}); state.equippedSpell = state.spells[0];
+    state.inventory.weapons['Ice Staff'] = 1; 
+    state.spells.push({name:'Frost', cost:3, tier:1}); // Ice synergy
+    state.spells.push({name:'Spark', cost:1, tier:1}); // Fast cast
+    state.equippedSpell = state.spells[0];
   } else if (className === 'Legionary') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
-    state.inventory.weapons['Tower Shield'] = 1; equipShield('Tower Shield');
+    state.inventory.weapons['Tower Shield'] = 1; equipShield('Tower Shield'); // Tankiest shield
+    state.inventory.potions = 2; // Sustain
   } else if (className === 'Paladin') {
     state.inventory.weapons['Warhammer'] = 1; equipWeaponByName('Warhammer');
+    state.inventory.antidotes = 2; // Purity theme
+    state.inventory.shields = 1; // Starts with spare standard shield
   }
 
   // Finalize
