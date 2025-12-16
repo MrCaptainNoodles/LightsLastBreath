@@ -15494,6 +15494,19 @@ function getProjectileEnd(x, y, dx, dy, range) {
 }
 
 function handleEnemyDeath(e, source) {
+  // --- FIX: Mini-Boss Omen Trigger (Priority) ---
+  // We handle this FIRST to ensure it never gets blocked by other logic.
+  if (e.miniBoss && state.gameMode === 'endless') {
+      log("The Warlord falls! A dark power calls to you...");
+      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+      // Trigger immediately (0.8s delay for visual effect).
+      // We removed the "defer if leveled" check so it always happens.
+      setTimeout(() => { 
+          if(typeof triggerOmenChoice === 'function') triggerOmenChoice(); 
+      }, 800);
+  }
+  // ----------------------------------------------
+
   // 1. Depth 50 Transitions (Classic/Endless) - Stop death if cutscene starts
   if (state.floor === 50 && e.boss) {
       if (e.type === 'Clone' && !state.flags.depth50Phase2) {
