@@ -652,6 +652,9 @@ body.noscroll{
 .menuCard{ display:none !important; }
 
 /* --- NEW SETTINGS UI --- */
+.master-slider .vol-header { font-size: 16px !important; color: #fff !important; font-weight:bold; }
+.master-slider input { height: 10px !important; }
+.master-slider { margin-bottom: 25px !important; }
 #settingsOverlay .creditsCard {
   width: min(800px, 96vw); height: min(600px, 90vh);
   padding: 0; display: flex; flex-direction: column; overflow: hidden;
@@ -858,19 +861,7 @@ input[type=range].custom-slider::-webkit-slider-thumb {
         </div>
         <div class="settings-content">
           <div id="tab-sound" class="settings-panel active">
-            <div class="vol-group"><div class="vol-header"><span>Master Volume</span><span id="valMaster">50%</span></div>
-              <input id="volMaster" class="custom-slider" type="range" min="0" max="100" value="50"></div>
-            <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 20px 0;">
-            <div class="vol-group"><div class="vol-header"><span>Music</span><span id="valMusic">80%</span></div>
-              <input id="volMusic" class="custom-slider" type="range" min="0" max="100" value="80"></div>
-            <div class="vol-group"><div class="vol-header"><span>Combat (Hits, Magic)</span><span id="valCombat">90%</span></div>
-              <input id="volCombat" class="custom-slider" type="range" min="0" max="100" value="90"></div>
-            <div class="vol-group"><div class="vol-header"><span>System / UI (Pickups, Level Up)</span><span id="valUi">90%</span></div>
-              <input id="volUi" class="custom-slider" type="range" min="0" max="100" value="90"></div>
-            <div class="vol-group"><div class="vol-header"><span>Environment (Doors, NPCs)</span><span id="valInteract">90%</span></div>
-              <input id="volInteract" class="custom-slider" type="range" min="0" max="100" value="90"></div>
-            <div class="vol-group"><div class="vol-header"><span>Footsteps</span><span id="valFoot">100%</span></div>
-              <input id="volFoot" class="custom-slider" type="range" min="0" max="100" value="100"></div>
+            <div id="audioSettingsList"></div>
           </div>
           <div id="tab-graphics" class="settings-panel">
             <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer; margin-bottom:10px;">
@@ -1868,7 +1859,7 @@ function playNpcDialogue(input){
     // Route through WebAudio so your "Interactables" slider affects the dialogue.
     try{
       const node = audioCtx.createMediaElementSource(el);
-      node.connect(interactGain || masterGain);
+      node.connect(voiceGain || masterGain);
       _npcDialogueNodes[url] = node;
       el.volume = 1;
     }catch(e){
@@ -2048,61 +2039,78 @@ const SHIELD_DUR  = 20;     // max durability
 
 // ====== Audio (WebAudio, synthesized SFX) ======
 
-// Per-group volume (0..1). These are the *sliders*.
-let _volMaster   = 0.5; // New Master slider
-let _volMusic    = 0.8; 
-let _volCombat   = 0.9; 
-let _volInteract = 0.9; 
-let _volUi       = 0.9; // New UI Group
-let _volFoot     = 1.0; 
-
-// Try to restore saved volumes from localStorage
-(function restoreVolumePrefs(){
-  try{
-    const get = (k, def) => { const v = localStorage.getItem(k); return v!==null ? parseFloat(v) : def; };
-    _volMaster   = clamp(get('volMaster', 0.5), 0, 1);
-    _volMusic    = clamp(get('volMusic', 0.8), 0, 1);
-    _volCombat   = clamp(get('volCombat', 0.9), 0, 1);
-    _volInteract = clamp(get('volInteract', 0.9), 0, 1);
-    _volUi       = clamp(get('volUi', 0.9), 0, 1);
-    _volFoot     = clamp(get('volFoot', 1.0), 0, 1);
-  } catch(e){}
-})();
-
-// Main audio nodes
-let audioCtx, masterGain,
-    musicGain, combatGain, interactGain, uiGain, footstepGain, 
-    muted = false;
-
+// Globals for backward compatibility (so your SFX calls still work)
+var _volMaster=0.5, _volMusic=0.8, _volCombat=0.9, _volInteract=0.9, _volUi=0.9, _volFoot=1.0;
+var audioCtx, masterGain, musicGain, combatGain, interactGain, uiGain, footstepGain, voiceGain;
+let muted = false;
 const SFX = {};
 
-function initAudio(){
-  if (audioCtx) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const AudioSystem = {
+  channels: {
+    music:    { def: 0.8, label: 'Music', var:'_volMusic', node:'musicGain' },
+    voice:    { def: 1.0, label: 'Voice / Dialogue', var: null, node:'voiceGain' }, // New Channel
+    combat:   { def: 0.9, label: 'Combat', var:'_volCombat', node:'combatGain' },
+    interact: { def: 0.9, label: 'Environment', var:'_volInteract', node:'interactGain' },
+    foot:     { def: 1.0, label: 'Footsteps', var:'_volFoot', node:'footstepGain' },
+    ui:       { def: 0.9, label: 'Interface', var:'_volUi', node:'uiGain' }
+  },
+  volumes: { master: 0.5 },
 
-  // Master Gain
-  masterGain = audioCtx.createGain();
-  masterGain.connect(audioCtx.destination);
+  init() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-  // Group Gains
-  musicGain    = audioCtx.createGain(); musicGain.connect(masterGain);
-  combatGain   = audioCtx.createGain(); combatGain.connect(masterGain);
-  interactGain = audioCtx.createGain(); interactGain.connect(masterGain);
-  uiGain       = audioCtx.createGain(); uiGain.connect(masterGain); // New
-  footstepGain = audioCtx.createGain(); footstepGain.connect(masterGain);
+    // Create Master
+    masterGain = audioCtx.createGain();
+    masterGain.connect(audioCtx.destination);
 
-  applyGroupVolumes();
-}
+    // Create Channels & Restore Saves
+    Object.keys(this.channels).forEach(k => {
+      const ch = this.channels[k];
+      const g = audioCtx.createGain();
+      g.connect(masterGain);
+      
+      // Assign to global variable (e.g. window.combatGain = g)
+      window[ch.node] = g;
 
-function applyGroupVolumes(){
-  if (!audioCtx) return;
-  if (masterGain)   masterGain.gain.value   = muted ? 0 : _volMaster;
-  if (musicGain)    musicGain.gain.value    = _volMusic;
-  if (combatGain)   combatGain.gain.value   = _volCombat;
-  if (interactGain) interactGain.gain.value = _volInteract;
-  if (uiGain)       uiGain.gain.value       = _volUi;
-  if (footstepGain) footstepGain.gain.value = _volFoot;
-}
+      // Load save
+      const saved = localStorage.getItem(`vol_${k}`);
+      this.volumes[k] = saved !== null ? parseFloat(saved) : ch.def;
+    });
+
+    const savedM = localStorage.getItem('vol_master');
+    this.volumes.master = savedM !== null ? parseFloat(savedM) : 0.5;
+
+    this.apply();
+  },
+
+  apply() {
+    if (!audioCtx) return;
+    // Apply Master
+    const mv = muted ? 0 : this.volumes.master;
+    masterGain.gain.value = mv;
+    _volMaster = mv; // Sync global
+
+    // Apply Channels
+    Object.keys(this.channels).forEach(k => {
+      const ch = this.channels[k];
+      const vol = this.volumes[k];
+      if (window[ch.node]) window[ch.node].gain.value = vol;
+      // Sync legacy globals if they exist (e.g. _volMusic)
+      if (ch.var && typeof window[ch.var] !== 'undefined') window[ch.var] = vol;
+    });
+  },
+
+  setVol(key, val) {
+    this.volumes[key] = Math.max(0, Math.min(1, val));
+    this.apply();
+    localStorage.setItem(`vol_${key}`, this.volumes[key]);
+  }
+};
+
+// Map old init function to new system
+function initAudio() { AudioSystem.init(); }
+function applyGroupVolumes() { AudioSystem.apply(); }
 
 
 // iOS/Android: unlock audio on first touch/click
@@ -2639,29 +2647,61 @@ window.switchTab = function(tabName) {
 
 // Settings sliders → per-group volume
 document.addEventListener('DOMContentLoaded', ()=>{
-  const bind = (id, get, set, key) => {
-    const el = document.getElementById(id);
-    const label = document.getElementById(id.replace('vol','val')); // e.g. valMaster
-    if (!el) return;
-    
-    el.value = Math.round(get() * 100);
-    if(label) label.textContent = el.value + '%';
+  const container = document.getElementById('audioSettingsList');
+  if (container) {
+    // Define the Visual Layout (Headers + Sliders)
+    const layout = [
+      { type: 'slider', key: 'master', label: 'Master Volume', class: 'master-slider' },
+      
+      { type: 'header', label: 'Atmosphere' },
+      { type: 'slider', key: 'music', label: 'Music' },
+      { type: 'slider', key: 'voice', label: 'Voice / Dialogue' }, // <--- New Slider
+      
+      { type: 'header', label: 'Sound Effects' },
+      { type: 'slider', key: 'combat',   label: 'Combat' },
+      { type: 'slider', key: 'interact', label: 'Environment' },
+      { type: 'slider', key: 'foot',     label: 'Footsteps' },
+      { type: 'slider', key: 'ui',       label: 'Interface' },
+    ];
 
-    el.addEventListener('input', ()=>{
-      const v = clamp(el.value / 100, 0, 1);
-      set(v);
-      if(label) label.textContent = el.value + '%';
-      if (!audioCtx) initAudio();
-      try{ localStorage.setItem(key, String(v)); }catch(e){}
+    container.innerHTML = '';
+
+    layout.forEach(item => {
+      if (item.type === 'header') {
+        const h = document.createElement('div');
+        h.style.cssText = 'color:#f9d65c; font-size:12px; font-weight:800; text-transform:uppercase; margin:15px 0 5px 0; border-bottom:1px solid rgba(255,255,255,0.1); opacity:0.8;';
+        h.textContent = item.label;
+        container.appendChild(h);
+        return;
+      }
+
+      // Render Slider
+      const val = AudioSystem.volumes[item.key] ?? 0.5;
+      const div = document.createElement('div');
+      div.className = 'vol-group';
+      if(item.class) div.classList.add(item.class);
+
+      div.innerHTML = `
+        <div class="vol-header" style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:14px;">
+          <span>${item.label}</span>
+          <span id="label_${item.key}" style="opacity:0.8">${Math.round(val * 100)}%</span>
+        </div>
+        <input type="range" class="custom-slider" min="0" max="100" value="${val * 100}" style="width:100%; cursor:pointer;">
+      `;
+
+      const input = div.querySelector('input');
+      const label = div.querySelector(`#label_${item.key}`);
+
+      input.addEventListener('input', (e) => {
+        const v = e.target.value / 100;
+        AudioSystem.setVol(item.key, v);
+        label.textContent = Math.round(v * 100) + '%';
+        if (!audioCtx) AudioSystem.init();
+      });
+
+      container.appendChild(div);
     });
-  };
-
-  bind('volMaster',   ()=>_volMaster,   (v)=>{ _volMaster=v;   applyGroupVolumes(); }, 'volMaster');
-  bind('volMusic',    ()=>_volMusic,    (v)=>{ _volMusic=v;    applyGroupVolumes(); }, 'volMusic');
-  bind('volCombat',   ()=>_volCombat,   (v)=>{ _volCombat=v;   applyGroupVolumes(); }, 'volCombat');
-  bind('volInteract', ()=>_volInteract, (v)=>{ _volInteract=v; applyGroupVolumes(); }, 'volInteract');
-  bind('volUi',       ()=>_volUi,       (v)=>{ _volUi=v;       applyGroupVolumes(); }, 'volUi');
-  bind('volFoot',     ()=>_volFoot,     (v)=>{ _volFoot=v;     applyGroupVolumes(); }, 'volFoot');
+  }
 
   // --- Window Mode Wiring (Electron Only) ---
   const selWin = document.getElementById('selWindowMode');
@@ -2778,8 +2818,10 @@ let bgmGain  = null;   // gain for BGM (routes into masterGain)
 let bgmUrl   = null;   // object URL for the chosen file
 
 function attachBgmNodeIfNeeded(){
-  // Only wire the media source after the context is unlocked/running (Android/iOS/Chrome autoplay fix)
-  if (!audioCtx || audioCtx.state !== 'running') return;
+  // Fix: Connect immediately if context exists, regardless of state.
+  // This prevents the audio from playing "raw" (loud) before routing.
+  if (!audioCtx) return; 
+  
   if (!bgmAudio || bgmNode) return;
   try {
     bgmNode = audioCtx.createMediaElementSource(bgmAudio);
@@ -2910,34 +2952,24 @@ const TITLE_BGM_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawl
 const MENU_BGM_URL  = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/New_Title.mp3';
 
 function playTitleBgm(){
-  ensureBgmNodes();
-  setBgmUrl(TITLE_BGM_URL);     // load title track
-  attachBgmNodeIfNeeded();      // connect to WebAudio
-  if (bgmAudio){ 
-    // FIX: Manually apply volume to the raw element.
-    // This handles the "Suspended" state (refresh) where WebAudio sliders aren't active yet.
-    // Formula: Master * Music * Base(0.35)
-    const safeVol = (_volMaster * _volMusic * 0.35);
-    bgmAudio.volume = Math.max(0, Math.min(1, safeVol));
-    
-    bgmAudio.muted = false; 
-    bgmAudio.play()?.catch(()=>{}); 
+  // 1. If track is loaded but paused (autoplay blocked), try playing again
+  if (bgmAudio && bgmAudio.src === TITLE_BGM_URL) {
+    if (bgmAudio.paused) bgmAudio.play()?.catch(()=>{});
+    return;
   }
-}
 
-function playMenuBgm(){
+  // 2. Otherwise load and play fresh
   ensureBgmNodes();
-  setBgmUrl(MENU_BGM_URL);      // load menu track
+  setBgmUrl(TITLE_BGM_URL);
   attachBgmNodeIfNeeded();
   if (bgmAudio){ 
-    // FIX: Manually apply volume to the raw element to prevent blasting on refresh/suspend.
-    const safeVol = (_volMaster * _volMusic * 0.35);
-    bgmAudio.volume = Math.max(0, Math.min(1, safeVol));
-
+    bgmAudio.volume = 1.0;
     bgmAudio.muted = false; 
     bgmAudio.play()?.catch(()=>{}); 
   }
 }
+
+// (Deleted)
 
 function playGameBgm(url){
   ensureBgmNodes();
@@ -3078,9 +3110,9 @@ function goMenu(e){
 
   unlockAudioAndLoops();
 
-  // NEW: when we go back to the main menu, play the menu BGM
-  if (typeof playMenuBgm === 'function') {
-    playMenuBgm();
+  // NEW: Use Title BGM for the menu (Seamless transition)
+  if (typeof playTitleBgm === 'function') {
+    playTitleBgm();
   }
 
   if (title) title.style.display = 'none';
