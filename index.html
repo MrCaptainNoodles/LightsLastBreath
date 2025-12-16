@@ -7836,7 +7836,7 @@ function showSkillDetails(type){
   const nonWeaponLines = {
     magic: () => [
       ...accuracyLines('magic'),
-      `Every 2 Magic levels increases spell damage and accuracy (up to ${magicPow()} bonus power).`
+      `Every 2 Magic levels increases spell damage and accuracy.`
     ],
     lockpicking: () => {
       const bonusPct = Math.round(lockpickBonusFromSkill() * 100);
@@ -15669,7 +15669,7 @@ function useStaff(w) {
 
                 t.hp = Math.max(0, t.hp - dmg);
                 spawnFloatText(dmg, t.x, t.y, color);
-                checkMiniBossReward(t); 
+                // REMOVED: checkMiniBossReward(t); <-- This was triggering Omen on every hit!
                 
                 // Vampiric Logic
                 if (w.vampiric && dmg > 0) {
