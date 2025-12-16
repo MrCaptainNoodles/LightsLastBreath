@@ -15565,22 +15565,6 @@ function handleEnemyDeath(e, source) {
   unlockCodex(e.displayName || e.type, true);
   log(`${e.displayName || e.type} falls.`);
 
-  // 5. Mini-Boss Logic (MOVED DOWN)
-  if (e.miniBoss && state.gameMode === 'endless') {
-      log("The Warlord falls! A dark power calls to you...");
-      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
-      
-      // CHECK UI DIRECTLY: Is the level up modal visible?
-      const lvlM = document.getElementById('lvlupModal');
-      const isLeveled = (lvlM && lvlM.style.display === 'flex');
-      
-      if (isLeveled) {
-          state._pendingOmen = true;
-          log("Omen deferred until Level Up is chosen.");
-      } else {
-          setTimeout(() => { triggerOmenChoice(); }, 800);
-      }
-  }
 }
 
 function useStaff(w) {
