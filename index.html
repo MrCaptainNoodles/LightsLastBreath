@@ -3312,6 +3312,19 @@ if (title){
     window.close();
   });
   
+// --- FIX: Codex Button Wiring ---
+  document.getElementById('btnCodex')?.addEventListener('click', () => {
+    // 1. Populate the content (so it's not empty)
+    if (typeof renderCodexUI === 'function') renderCodexUI();
+    
+    // 2. Show the overlay
+    const m = document.getElementById('codexOverlay');
+    if (m) {
+        m.style.zIndex = '10001'; // Force it above the Main Menu
+        m.style.display = 'flex';
+    }
+  });
+
 // Leaderboard button in stats menu
   document.getElementById('btnShowLeaderboard')?.addEventListener('click', () => {
     const m = document.getElementById('scoreModal');
