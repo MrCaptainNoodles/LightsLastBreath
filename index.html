@@ -4111,7 +4111,7 @@ state._stairsRoom = rr;
 
 // Cursed Descent: Chance to spawn Red Stairs (Tile 10) in a different room
 // Only on non-boss floors (floors ending in 0 are boss floors)
-if (state.floor % 10 !== 0 && state.rooms.length > 2 && Math.random() < 1) {
+if (state.floor % 10 !== 0 && state.rooms.length > 2 && Math.random() < 0.4) {
   const candidates = state.rooms.filter(r => r !== startRoom && r !== rr);
   if (candidates.length > 0) {
     const redRoom = candidates[rand(0, candidates.length - 1)];
