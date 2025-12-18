@@ -8499,7 +8499,7 @@ function enemyStep(){
         }
       }
       // 2. Spawn Reaper (e.g., 50 turns after finding stairs)
-      if (state.stairsFoundTurn && !state.reaperSpawned && (state.gameTurn - state.stairsFoundTurn > 50)) {
+      if (state.stairsFoundTurn && !state.reaperSpawned && (state.gameTurn - state.stairsFoundTurn > 150)) {
          state.reaperSpawned = true;
          // Try to spawn far from player
          let spawn = findFreeFloorTile(15) || {x:1, y:1};
