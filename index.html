@@ -1297,7 +1297,18 @@ input[type=range].custom-slider::-webkit-slider-thumb {
   <button class="btn" id="dbgSpawnVampiric">Spawn Vampiric Sword</button>
   <button class="btn" id="dbgSpawnWarp">Spawn Warp Stone</button>
   <button class="btn" id="dbgInstaKill" style="border-color:#ef4444; color:#ef4444;">Insta Kill: OFF</button>
-  <button class="btn" id="dbgAddShards" style="border-color:#f9d65c; color:#f9d65c;">+1000 Shards</button> </div>
+  <button class="btn" id="dbgAddShards" style="border-color:#f9d65c; color:#f9d65c;">+1000 Shards</button>
+  <button class="btn" id="dbgTrinket1" style="border-color:#d8b4fe; color:#d8b4fe;">Spawn Haste Ring</button>
+  <button class="btn" id="dbgTrinket2" style="border-color:#d8b4fe; color:#d8b4fe;">Spawn Life Amulet</button>
+  <button class="btn" id="dbgTrinket3" style="border-color:#d8b4fe; color:#d8b4fe;">Spawn Thief Band</button>
+  <button class="btn" id="dbgTrinket4" style="border-color:#d8b4fe; color:#d8b4fe;">Spawn Warrior Ring</button>
+  <button class="btn" id="dbgTrinket5" style="border-color:#d8b4fe; color:#d8b4fe;">Spawn Stone Charm</button>
+  <button class="btn" id="dbgTrinket6" style="border-color:#d8b4fe; color:#d8b4fe;">Spawn Scholar Lens</button>
+  <button class="btn" id="dbgIdol1" style="border-color:#ef4444; color:#ef4444;">Spawn Idol of War</button>
+  <button class="btn" id="dbgIdol2" style="border-color:#ef4444; color:#ef4444;">Spawn Idol of Stone</button>
+  <button class="btn" id="dbgIdol3" style="border-color:#ef4444; color:#ef4444;">Spawn Idol of Greed</button>
+  <button class="btn" id="dbgIdol4" style="border-color:#ef4444; color:#ef4444;">Spawn Idol of Rot</button>
+</div>
 
 
     </div>
@@ -3635,9 +3646,15 @@ function getBossName(type){
 
 // ====== Map Gen ======
 function gen(){
-   state.noFog = false; 
+   state.noFog = false;
+   
+   // Apply Cursed Descent flag from previous floor
+   state.cursedFloor = state.nextFloorCursed || false;
+   state.nextFloorCursed = false; // Reset for next time
+   if (state.cursedFloor) showBanner("The air is heavy here... (Cursed Floor: +50% Enemy Dmg, 2x Drops)", 4500);
+
    // FIX: Reset boss/event flags so new floors can trigger them again
-   state._bossStairsSpawned = false; 
+   state._bossStairsSpawned = false;
    
   const W=state.size.w,H=state.size.h;
   state.tiles = Array.from({length:H},()=>Array.from({length:W},()=>0));
@@ -4092,6 +4109,21 @@ state.tiles[sy][sx] = 4;
 // remember the room that contains the stairs (for spawn exclusions)
 state._stairsRoom = rr;
 
+// Cursed Descent: Chance to spawn Red Stairs (Tile 10) in a different room
+// Only on non-boss floors (floors ending in 0 are boss floors)
+if (state.floor % 10 !== 0 && state.rooms.length > 2 && Math.random() < 1) {
+  const candidates = state.rooms.filter(r => r !== startRoom && r !== rr);
+  if (candidates.length > 0) {
+    const redRoom = candidates[rand(0, candidates.length - 1)];
+    const rsx = Math.floor(redRoom.x + redRoom.w/2);
+    const rsy = Math.floor(redRoom.y + redRoom.h/2);
+    // Ensure tile is floor before placing
+    if (state.tiles[rsy][rsx] === 1) {
+      state.tiles[rsy][rsx] = 10; // Tile 10 = Red Cursed Stairs
+    }
+  }
+}
+
 
 // --- starter chest only on floor 1 adjacent ---
 if (state.floor===1){
@@ -4107,9 +4139,11 @@ if (state.floor===1){
 }
 
 state.mimicChests = new Set();
+  state.redChests = new Map(); state.redChestEvent = null;
 
+  // (Moved Red Chest logic to end of gen() so it detects NPCs correctly)
 
-// --- Shrines (tile 6) ---
+  // --- Shrines (tile 6) ---
 ensurePathToStairsUnlocked(); 
 
 if (state.gameMode === 'endless' || state.gameMode === 'classic') {
@@ -4143,9 +4177,29 @@ if (state.gameMode === 'endless' || state.gameMode === 'classic') {
 }
 // --- NEW: Spike Traps (Tile 7) ---
 // Scale with floor: 2 traps at floor 1, up to 12 at floor 50
-let trapCount = Math.min(12, 2 + Math.floor(state.floor / 5));
-let trapSafe = 0;
-while(trapCount > 0 && trapSafe < 500){
+// --- NEW: Toggle Spikes (Tile 9) ---
+  state.gameTurn = 0; // Reset turn timer on new floor
+  state.stairsFoundTurn = 0; // Reset Reaper timer
+  state.reaperSpawned = false; 
+
+  let toggleCount = rand(3, 6) + Math.floor(state.floor / 4);
+  let toggleSafe = 0;
+  while(toggleCount > 0 && toggleSafe < 500){
+    toggleSafe++;
+    const r = state.rooms[rand(0, state.rooms.length-1)];
+    if(!r) continue;
+    const x = rand(r.x+1, r.x+r.w-2);
+    const y = rand(r.y+1, r.y+r.h-2);
+    // Must be floor, no enemies, no static traps, not start room
+    if(state.tiles[y][x] === 1 && !enemyAt(x,y) && r !== state.startRoom){
+      state.tiles[y][x] = 9; // Tile 9 = Toggle Spike
+      toggleCount--;
+    }
+  }
+
+  let trapCount = Math.min(12, 2 + Math.floor(state.floor / 5));
+  let trapSafe = 0;
+  while(trapCount > 0 && trapSafe < 500){
   trapSafe++;
   // Pick random room
   const r = state.rooms[rand(0, state.rooms.length-1)];
@@ -4392,6 +4446,32 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.
   }
   // ------------------------------------------------------
 
+  // --- NEW: Red Chest Room (Moved Here) ---
+  if ((state.gameMode === 'classic' || state.gameMode === 'endless') && Math.random() < 0.15) { 
+    // Identify all "Busy" rooms (NPCs, Stairs, Wells, Shrines)
+    const busy = new Set([state.startRoom, state._stairsRoom]);
+    if (state.merchant?.room) busy.add(state.merchant.room);
+    if (state.blacksmith?.room) busy.add(state.blacksmith.room);
+    if (state.jester?.room) busy.add(state.jester.room);
+    if (state.cartographer?.room) busy.add(state.cartographer.room);
+    if (state.cleric?.room) busy.add(state.cleric.room); // Now checks state.cleric correctly!
+    if (state.goldWell?.room) busy.add(state.goldWell.room);
+    if (state.shrines) state.shrines.forEach(s => busy.add(s.room));
+
+    // Filter candidates avoiding busy rooms
+    const cands = state.rooms.filter(r => !busy.has(r));
+
+    if (cands.length > 0) {
+      const r = cands[rand(0, cands.length - 1)];
+      state.redChestRoom = r;
+      // Clear room interior (remove props/traps)
+      for(let y=r.y+1; y<r.y+r.h-1; y++) for(let x=r.x+1; x<r.x+r.w-1; x++) state.tiles[y][x] = 1;
+      // Place Red Chest in center
+      const cx = Math.floor(r.x + r.w/2), cy = Math.floor(r.y + r.h/2);
+      state.tiles[cy][cx] = 3;
+      state.redChests.set(`${cx},${cy}`, { room:r, active:false, cleared:false, wave:0 });
+    }
+  }
 
 // --- NEW: Dynamic Spawn Message (Handles any combination of 5 NPCs) ---
 const sounds = [];
@@ -4623,6 +4703,8 @@ state.respawnEvery = 50 + Math.floor(state.floor/2); // tweak pacing here
 
 // --- pickups ---
   let pickupCount = rand(4,8);
+  if (state.cursedFloor) pickupCount *= 2; // Cursed Descent: 2x Drops
+
   let tries=0;
   while(pickupCount>0 && tries<3000){
     tries++;
@@ -4915,7 +4997,20 @@ if (r < 0.12){
   // FIX: Pick a specific shield name instead of generic "1"
   const sTypes = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
   payload = sTypes[Math.floor(Math.random() * sTypes.length)];
-} else {
+} else if (r < 0.85){ 
+  // --- NEW: Trinket Drop Chance (4%) ---
+  kind = 'trinket';
+  // Buffed & Expanded Pool
+  const tPool = [
+    'Ring of Haste',   // +2 Stamina
+    'Amulet of Life',  // Regen HP
+    "Thief's Band",    // Gold +25%
+    "Warrior's Ring",  // +1 Dmg
+    "Stone Charm",     // +10% Armor
+    "Scholar's Lens"   // +15% XP
+  ];
+  payload = tPool[Math.floor(Math.random() * tPool.length)];
+}  else {
   kind = 'antidote';                    
   payload = 1;
 }
@@ -5287,7 +5382,13 @@ function goldFor(enemy){
   const [lo, hi]   = table[enemy.type] || [1,3];
   const depthBonus = Math.floor((state.floor|0)/3);
 
-  const base = rand(lo + depthBonus, hi + depthBonus);
+  let base = rand(lo + depthBonus, hi + depthBonus);
+  // Trinket: Thief's Band (+30% Gold)
+  if (state.player.trinket?.name === "Thief's Band") { base = Math.ceil(base * 1.30); }
+  
+  // --- NEW: Idol of Greed (+50% Gold) ---
+  if (state.inventory.idols?.['Idol of Greed']) { base = Math.ceil(base * 1.50); }
+
   if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
     return Math.max(1, Math.round(base * 1.35));
   }
@@ -5315,10 +5416,21 @@ function damageAfterDR(raw){
   }
 
   // Cleric Blessing: +20% Damage Reduction
-  if (state.player.blessTicks > 0) { dr += 0.20; }
+if (state.player.blessTicks > 0) { dr += 0.20; }
+// Trinket: Stone Charm (+10% DR)
+  if (state.player.trinket?.name === "Stone Charm") { dr += 0.10; }
+  
+  // --- NEW: Idol of Stone (+15% DR) ---
+  if (state.inventory.idols?.['Idol of Stone']) { dr += 0.15; }
 
-dr = Math.min(dr, 0.80);                 // cap total DR at 80%
+  dr = Math.min(dr, 0.80);                 // cap total DR at 80%
+
   let dmg = Math.ceil(raw * (1 - dr));
+
+  // --- NEW: Idol of Greed (+50% Damage Taken) ---
+  if (state.inventory.idols?.['Idol of Greed']) { 
+      dmg = Math.ceil(dmg * 1.5); 
+  }
 
   // Frailty Curse: You take +2 damage from everything
   if (state.player.weapon?.curseType === 'frailty' && dmg > 0) {
@@ -5444,7 +5556,10 @@ function recomputeWeapon(){
 }
 
 function awardKill(type,amount){
-  incrementMetaStat('kills_' + type); 
+  // If killed by infighting, grant NO XP and do NOT count stats
+  if (type === 'infighting') return;
+
+  incrementMetaStat('kills_' + type);
 
   // --- XP Multiplier based on Effect Count ---
   let count = 0;
@@ -5461,7 +5576,10 @@ function awardKill(type,amount){
   if (state.gameMode !== 'classic' && isEffectActive('Bloodhunt')){
     amount = Math.max(1, Math.round(amount * 1.35));
   }
-
+  // Trinket: Scholar's Lens (+15% XP)
+  if (state.player.trinket?.name === "Scholar's Lens") {
+    amount = Math.ceil(amount * 1.15);
+  }
   state.player.xp += amount;
   let leveled=false;
   while(state.player.xp>=state.player.next){
@@ -6229,6 +6347,54 @@ function drawMadKingPixel(ctx, x, y, tile){
 }
 
 
+function drawReaperPixel(ctx, x, y, tile){
+  const { s, R } = gridN(ctx, x, y, tile, 12);
+  
+  // Palette
+  const hood = '#0f172a';   // Deep dark blue-grey
+  const shadow = '#000000'; // Pure void
+  const cloak = '#1e293b';  // Lighter slate for body
+  const bone = '#e5e5e5';   // White bone
+  const glow = '#ef4444';   // Red eyes
+  const wood = '#451a03';   // Scythe handle
+  const steel = '#94a3b8';  // Scythe blade
+  const shine = '#cbd5e1';  // Blade highlight
+
+  // --- Scythe (Draw first so it's behind/held) ---
+  R(10, 1, 1, 11, wood);    // Long handle
+  R(5, 1, 5, 1, steel);     // Blade Top
+  R(4, 2, 1, 1, steel);     // Blade Curve
+  R(4, 3, 1, 2, shine);     // Blade Tip (shiny)
+  R(5, 4, 1, 1, steel);     // Blade Connection
+
+  // --- Hood & Head ---
+  R(3, 0, 6, 4, hood);      // Main Hood Shape
+  R(4, 1, 4, 3, shadow);    // Face Void
+  
+  // Eyes
+  R(4, 2, 1, 1, glow);
+  R(7, 2, 1, 1, glow);
+
+  // --- Cloak / Body ---
+  R(2, 4, 8, 2, cloak);     // Shoulders/Mantle
+  R(3, 6, 6, 5, cloak);     // Central body
+  
+  // Arms / Sides (Darker to simulate folds)
+  R(2, 6, 1, 4, hood);      // Left side
+  R(9, 6, 1, 4, hood);      // Right side
+
+  // Skeletal Hand Reaching Out
+  R(9, 6, 2, 1, bone); 
+
+  // --- Tattered Hem (Ragged bottom) ---
+  R(2, 10, 1, 1, cloak);
+  R(3, 11, 1, 1, cloak);
+  R(5, 11, 1, 1, cloak);
+  R(7, 11, 1, 1, cloak);
+  R(8, 11, 1, 1, cloak);
+  R(9, 10, 1, 1, cloak);
+}
+
 function drawSkeletonPixel(ctx, x, y, tile){
   const { s, R } = gridN(ctx, x, y, tile, 12);
   const bone='#e6e6e6', dark='#0b141d';
@@ -6293,8 +6459,11 @@ if (enemy._flashColor && enemy._flashTime > Date.now()) {
     if (t.includes('mad') && t.includes('king')) { drawMadKingPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('hood'))                     { drawHoodedPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
   if (t.includes('shadow'))                   { drawShadowPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
-if (t.includes('heartless')) { drawHeartlessPixel(ctx, x, y, sizePx); ctx.restore(); return; } // <--- NEW
-  if (t.includes('rat'))       { drawRatPixel(ctx, x, y, sizePx); ctx.restore(); return; }
+// --- NEW: Link Reaper ---
+  if (t.includes('reaper'))    { drawReaperPixel(ctx, x, y, sizePx);    ctx.restore(); return; }
+
+  if (t.includes('heartless')) { drawHeartlessPixel(ctx, x, y, sizePx); ctx.restore(); return; }
+  if (t.includes('rat'))       { drawRatPixel(ctx, x, y, sizePx);       ctx.restore(); return; }
   if (t.includes('bat'))       { drawBatPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('spider'))    { drawSpiderPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('goblin'))    { drawGoblinPixel(ctx, x, y, sizePx); ctx.restore(); return; }
@@ -6433,10 +6602,20 @@ function drawPickupPixel(ctx, item, px, py, tile){
     P(4,8,grey,6,1);
     return;
   }
-if (kind === 'key'){ // big horizontal key
-    P(3,4,gold,3,3);               // bow
-    P(6,5,gold,5,1);               // shaft
-    P(9,6,gold,1,1); P(10,6,gold,1,1); // teeth
+if (kind === 'key'){
+    // big horizontal key
+    P(3,4,gold,3,3); // bow
+    P(6,5,gold,4,1); // shaft
+    P(8,6,gold,1,2); // tooth
+    return;
+  }
+  if (kind === 'trinket'){
+    // Gold Ring with Gem
+    P(4,3,gold,4,1);  // top ring
+    P(3,4,gold,1,4);  // left
+    P(8,4,gold,1,4);  // right
+    P(4,8,gold,4,1);  // bottom
+    P(5,2,blue,2,2);  // gem
     return;
   }
 
@@ -7110,23 +7289,45 @@ function draw(){
       // ------------------------------------
       // --- NEW: Render Spikes (Tile 7) ---
       if (t===7) {
-        drawSpikePixel(ctx, px, py, tile);
-      }
+            drawSpikePixel(ctx, px, py, tile);
+          }
+          
+          // --- NEW: Timed Spikes (Tile 9) ---
+          if (t===9){
+            // Active if (turn / 3) is odd (e.g., 0-2 OFF, 3-5 ON)
+            const isActive = Math.floor((state.gameTurn||0) / 3) % 2 !== 0;
+            if (isActive) {
+              drawSpikePixel(ctx, px, py, tile); // Draw Up (Danger)
+            } else {
+              // Draw Down (Safe/Darker)
+              ctx.save();
+              ctx.globalAlpha = 0.3;
+              ctx.filter = 'grayscale(1)';
+              drawSpikePixel(ctx, px, py, tile);
+              ctx.restore();
+            }
+          }
       // -----------------------------------
       
 if (t===2){
   const locked = state.lockedDoors?.has(kxy);
   drawDoorPixel(ctx, px, py, tile, !!locked);
-}
-else if (t===3){
-  drawChestPixel(ctx, px, py, tile);
-}
-else if (t===4){
-  drawStairsPixel(ctx, px, py, tile);
-}
-
-
-else if (t===5){
+} else if (t===3){
+        // Check if this specific chest is a Red Challenge Chest
+        if (state.redChests && state.redChests.has(kxy)) {
+          drawRedChestPixel(ctx, px, py, tile);
+        } else {
+          drawChestPixel(ctx, px, py, tile);
+        }
+      } else if (t===4){
+        drawStairsPixel(ctx, px, py, tile);
+      } else if (t===10){
+        // Cursed Stairs: Red tint
+        ctx.save();
+        ctx.filter = 'sepia(1) saturate(5) hue-rotate(-50deg) contrast(1.2)';
+        drawStairsPixel(ctx, px, py, tile);
+        ctx.restore();
+      } else if (t===5){
   const it = state.pickups[kxy];
   if (it){ + drawPickupPixel(ctx, it, px, py, tile); }
 }
@@ -7517,6 +7718,23 @@ ctx.fillStyle = grad;
       ctx.globalAlpha = 1.0;
     });
   }
+
+// --- REAPER OVERRIDE: Always draw (Glowing) on top of fog ---
+  const _reaper = state.enemies.find(e => e.type === 'Reaper');
+  if (_reaper) {
+      const _rx = (_reaper.x - ox) * tile;
+      const _ry = (_reaper.y - oy) * tile;
+      // Draw if on screen
+      if (_rx > -tile*2 && _rx < canvas.width && _ry > -tile*2 && _ry < canvas.height) {
+          ctx.save();
+          ctx.shadowColor = '#ef4444'; // Red glow
+          ctx.shadowBlur = 20;         // Strong glow radius
+          // Use the standard enemy drawer (which calls drawReaperPixel)
+          if (typeof drawEnemyPixel === 'function') drawEnemyPixel(ctx, _reaper, _rx, _ry, tile);
+          ctx.restore();
+      }
+  }
+
 
   // Smart Loop: Run if effects active OR player is still sliding
   const isMoving = (Math.abs(state.player.x - state.player.rx) > 0.01 || Math.abs(state.player.y - state.player.ry) > 0.01);
@@ -8265,6 +8483,37 @@ function getStaminaCost(base){
 }
 
 function enemyStep(){
+  // --- REAPER MECHANIC ---
+  if (!state.gameOver && !state._inputLocked && !state._descending) {
+      state.gameTurn = (state.gameTurn || 0) + 1;
+      
+      // 1. Detect Stairs Visibility
+      if (!state.stairsFoundTurn) {
+        for (let y=0; y<state.size.h; y++) {
+          for (let x=0; x<state.size.w; x++) {
+            if (state.tiles[y][x] === 4 && state.seen.has(x+','+y)) {
+               state.stairsFoundTurn = state.gameTurn;
+               log("The stairs are revealed... you feel a cold presence.");
+            }
+          }
+        }
+      }
+      // 2. Spawn Reaper (e.g., 50 turns after finding stairs)
+      if (state.stairsFoundTurn && !state.reaperSpawned && (state.gameTurn - state.stairsFoundTurn > 50)) {
+         state.reaperSpawned = true;
+         // Try to spawn far from player
+         let spawn = findFreeFloorTile(15) || {x:1, y:1};
+         state.enemies.push({
+           type: 'Reaper', x: spawn.x, y: spawn.y,
+           hp: 999, hpMax: 999, atk: [999,999], xp: 0,
+           invincible: true
+         });
+         showBanner("THE REAPER HAS AWOKEN", 4000);
+         SFX.descend(); // Reuse descend sound for spooky effect
+      }
+  }
+  // -----------------------
+
   // --- NEW: Stamina Regen ---
   if (state._skipStaminaRegen) {
     state._skipStaminaRegen = false; 
@@ -8281,6 +8530,20 @@ function enemyStep(){
   }
 
   // (Passive MP Regen REMOVED)
+
+  // --- NEW: Idol of Rot (Aura Damage) ---
+  // Deals 1 damage to all enemies within 3 tiles every turn
+  if (state.inventory.idols?.['Idol of Rot']) {
+      state.enemies.forEach(e => {
+          if (dist(state.player.x, state.player.y, e.x, e.y) <= 3) { 
+              e.hp -= 1;
+              spawnFloatText("Rot", e.x, e.y, '#5f2e86'); 
+              if (e.hp <= 0) handleEnemyDeath(e, 'rot');
+          }
+      });
+      // Cleanup dead
+      state.enemies = state.enemies.filter(e => e.hp > 0);
+  }
 
   // --- NEW: Cursed Weapon Tick ---
   const cw = state.player.weapon;
@@ -8320,6 +8583,19 @@ function enemyStep(){
   // -------------------------
 
 // === player status that ticks once per enemy phase ===
+  // Trinket: Amulet of Life (1 HP per 50 turns)
+  if (state.player.trinket?.name === 'Amulet of Life') {
+    state.player.regenTicker = (state.player.regenTicker || 0) + 1;
+    if (state.player.regenTicker >= 20) { // Buffed: 50 -> 20 turns
+      state.player.regenTicker = 0;
+      if (state.player.hp < state.player.hpMax) {
+        state.player.hp++;
+        updateBars();
+        log("Amulet of Life restores 1 HP.");
+      }
+    }
+  }
+
   // --- NEW: Cleric Blessing Tick ---
   if (state.player.blessTicks > 0) {
     state.player.blessTicks--;
@@ -8414,9 +8690,91 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
 
 // === each enemy acts ===
   for (const e of state.enemies){
+    // --- NEW: Reaper Logic ---
+    if (e.type === 'Reaper') {
+  // Move logic: Tick counter (set % 1 to move every turn)
+  e._tick = (e._tick || 0) + 1;
+  if (e._tick % 1 !== 0) continue; 
+  
+  // Ignore walls: Simply step towards player
+  if (Math.abs(state.player.x - e.x) > Math.abs(state.player.y - e.y)) {
+    e.x += Math.sign(state.player.x - e.x);
+  } else {
+    e.y += Math.sign(state.player.y - e.y);
+  }
+
+  // Kill if ON TOP (0) or ADJACENT (1)
+  const dist = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
+  if (dist <= 1) {
+    state.player.hp = 0;
+    triggerGameOver();
+    log("The Reaper claims your soul.");
+  }
+  continue; // Skip standard logic
+}
+    // -------------------------
 
     // 1. FIXED: Calculate distance inline (Math.abs) and use unique name (d2p) to avoid errors
     const d2p = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
+
+    // --- NEW: Aggro/Vision Check ---
+    // If enemy is far away (8+ tiles) and healthy, they stay idle.
+    // (Exceptions: Bosses, Elites, or if they've been damaged)
+    const AGGRO_RANGE = 8;
+    if (d2p > AGGRO_RANGE && !e.boss && !e.elite && e.hp >= e.hpMax) {
+      continue; // Skip turn (Idle)
+    }
+
+    // --- NEW: Lazy Init HP Max (Ensures healing works for standard mobs) ---
+    if (!e.hpMax) e.hpMax = e.hp;
+
+    // --- NEW: Mage Heals Allies ---
+    if (e.type === 'Mage' && !e.recovering && !e.stunTicks && !e.sleep && !e.charging) {
+      // Find injured ally within range 4
+      const ally = state.enemies.find(a => 
+        a !== e && 
+        (Math.abs(a.x - e.x) + Math.abs(a.y - e.y) <= 4) && 
+        a.hp < a.hpMax
+      );
+
+      if (ally) {
+        const amt = rand(3, 6);
+        ally.hp = Math.min(ally.hp + amt, ally.hpMax);
+        spawnFloatText("+" + amt, ally.x, ally.y, '#4ade80');
+        flashEnemy(ally, 'green');
+
+        if (state.seen.has(key(e.x, e.y))) {
+          log(`The Mage heals the ${ally.type}!`);
+          spawnProjectileEffect({
+            kind: 'magic', color: '#4ade80',
+            fromX: e.x, fromY: e.y, toX: ally.x, toY: ally.y,
+            speed: 0.15, onDone: ()=>{}
+          });
+        }
+        continue; // Skip the rest of the Mage's turn
+      }
+    }
+
+    // --- NEW: Reaper Logic ---
+    if (e.type === 'Reaper') {
+       // Move only on even turns (Slow)
+       if ((state.gameTurn % 2) !== 0) continue; 
+       
+       // Ignore walls: Simply step towards player
+       if (Math.abs(state.player.x - e.x) > Math.abs(state.player.y - e.y)) {
+          e.x += Math.sign(state.player.x - e.x);
+       } else {
+          e.y += Math.sign(state.player.y - e.y);
+       }
+       
+       // Kill on touch
+       if (e.x === state.player.x && e.y === state.player.y) {
+          state.player.hp = 0;
+          triggerGameOver();
+          log("The Reaper claims your soul.");
+       }
+       continue; // Skip standard logic
+    }
 
     // --- NEW: Shadow / Clone Logic ---
     if (e.type === 'Clone' || e.type === 'Shadow') {
@@ -8632,11 +8990,34 @@ if (eRange > 1 && distToPlayer <= eRange && distToPlayer > 1) {
 
 
     // helper that respects 2×2 bodies AND ignores the mover itself
-const canEnterPoint = (x, y) => {
-  return (s > 1)
-    ? enemyCanEnterSize(x, y, s, e)   // ← pass e so 2×2 doesn’t collide with itself
-    : enemyCanEnter(x, y);
-};
+    const canEnterPoint = (x, y) => {
+      return (s > 1) ? enemyCanEnterSize(x, y, s, e) // ← pass e so 2×2 doesn’t collide with itself
+                     : enemyCanEnter(x, y);
+    };
+
+    // --- FEAR MECHANIC: Run Away ---
+    if (e.fearTicks > 0) {
+      e.fearTicks--;
+      // Emoji removed here. Logic remains.
+      
+      // Find the neighbor furthest from the player
+      let bestAway = null;
+      let maxDist = dist(e.x, e.y, state.player.x, state.player.y);
+      const nbs = [[0,-1], [0,1], [-1,0], [1,0]];
+      
+      for(const [dx, dy] of nbs) {
+        const nx = e.x + dx, ny = e.y + dy;
+        if (canEnterPoint(nx, ny)) {
+          const d = dist(nx, ny, state.player.x, state.player.y);
+          if (d > maxDist) {
+            maxDist = d;
+            bestAway = {x:nx, y:ny};
+          }
+        }
+      }
+      if (bestAway) { e.x = bestAway.x; e.y = bestAway.y; }
+      continue; // Skip Attack/Chase Logic
+    }
 
     // Mage: if straight LOS and in range, cast instead of moving
 const manhattan = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
@@ -8676,18 +9057,26 @@ if (adjacent){
   const accuracy = (e.boss || e.elite) ? 0.95 : 0.85;
   
   if (Math.random() > accuracy) {
-     spawnFloatText("Miss", state.player.x, state.player.y, '#9ca3af');
-     log(`The ${e.type} attacks but misses you.`);
-     continue; // Skip the rest of the attack logic
-  }
-  // ---------------------------------
+        spawnFloatText("Miss", state.player.x, state.player.y, '#9ca3af');
+        log(`The ${e.type} attacks but misses you.`);
+        continue; // Skip the rest of the attack logic
+      }
+      // ---------------------------------
+      let dmgRoll = rand(e.atk[0], e.atk[1]);
+        
+        // Cursed Descent: +50% Enemy Damage
+        if (state.cursedFloor) {
+           dmgRoll = Math.ceil(dmgRoll * 1.5);
+        }
 
-  let dmgRoll = rand(e.atk[0], e.atk[1]);
-  if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
-    dmgRoll = Math.max(1, Math.round(dmgRoll * 1.20));
-  }
+        // Pack Tactics: +2 damage if another enemy of the same type is adjacent to player
+        const hasPack = state.enemies.some(other => other !== e && other.type === e.type && (Math.abs(other.x - state.player.x) + Math.abs(other.y - state.player.y) === 1) );
+        if (hasPack) dmgRoll += 2;
 
-  const dmg = damageAfterDR(dmgRoll);
+        if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
+          dmgRoll = Math.max(1, Math.round(dmgRoll * 1.20));
+        }
+      const dmg = damageAfterDR(dmgRoll);
   state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
   flashDamage();
   SFX.enemyHit?.();
@@ -8755,8 +9144,9 @@ if (adjacent){
     }
 
 
-// Not adjacent → try to move up to `moves` steps using greedy→BFS (size-aware)
-for (let step = 0; step < moves; step++){
+
+    // Not adjacent → try to move up to `moves` steps using greedy→BFS (size-aware)
+    for (let step = 0; step < moves; step++){
   // 1) quick greedy step
   const g = greedyStepToward?.(e);
   if (g && canEnterPoint(g.x, g.y)) { e.x = g.x; e.y = g.y; continue; }
@@ -9150,11 +9540,23 @@ function collectIfPickup(){
         SFX.pickup();    
       state.inventory.tonics++; log('Picked up a tonic.');
 }else if(it.kind==='antidote'){
-        SFX.pickup();    
-      state.inventory.antidotes++; log('Picked up an antidote.');
-    
-    // --- NEW: Consumable Pickup Logic ---
-    }else if(it.kind==='bomb'){
+      SFX.pickup();
+      state.inventory.antidotes++;
+      log('Picked up an antidote.');
+    }else if(it.kind==='trinket'){
+  SFX.pickup();
+  state.inventory.trinkets = state.inventory.trinkets || {};
+  state.inventory.trinkets[it.payload] = (state.inventory.trinkets[it.payload]||0) + 1;
+  unlockCodex(it.payload, true); // <--- Updates Codex count & seen status
+  log(`Picked up ${it.payload}.`);
+}else if(it.kind==='idol'){ // --- NEW: Idol Pickup ---
+  SFX.pickup();
+  state.inventory.idols = state.inventory.idols || {};
+  state.inventory.idols[it.payload] = (state.inventory.idols[it.payload]||0) + 1;
+  unlockCodex(it.payload, true); // <--- Updates Codex count & seen status
+  log(`Picked up ${it.payload}. You feel a heavy burden...`);
+  // --- NEW: Consumable Pickup Logic ---
+}else if(it.kind==='bomb'){
       SFX.pickup();
       state.inventory.bombs = (state.inventory.bombs|0) + (it.payload||1);
       log(`Picked up ${it.payload||1} Bomb(s).`);
@@ -9264,8 +9666,21 @@ function collectIfPickup(){
 }
 
 function tryMove(dx,dy){
-    if (state.gameOver) return;
-    if (state._inputLocked || state._descending) return;
+  if (state.gameOver) return;
+  if (state._inputLocked || state._descending) return;
+
+  // (Empty - I removed the Idol of Stone block from here)
+
+  // --- NEW: Idol of Rot (Self Damage on Move) ---
+  if (state.inventory.idols?.['Idol of Rot']) {
+      if (Math.random() < 0.20) { // 20% chance per step to take damage
+          state.player.hp--; 
+          spawnFloatText("-1", state.player.x, state.player.y, '#5f2e86'); // Purple
+          if(state.player.hp<=0) { triggerGameOver(); return; }
+          updateBars();
+      }
+  }
+
   const nx=state.player.x+dx, ny=state.player.y+dy;
   if(!inBounds(nx,ny)) return;
   const t=state.tiles[ny][nx];
@@ -9387,9 +9802,27 @@ function tryMove(dx,dy){
   }
   // -----------------------------------------------------
 
-  state.player.x = nx; 
+  state.player.x = nx;
   state.player.y = ny;
   SFX.step();
+
+  // --- NEW: Advance Turn & Check Toggle Spikes ---
+  state.gameTurn = (state.gameTurn || 0) + 1;
+  const spikesActive = Math.floor(state.gameTurn / 3) % 2 !== 0;
+  
+  // Check if we stepped onto a tile that is now active (Tile 9)
+  if (state.tiles[ny][nx] === 9 && spikesActive) {
+      const dmg = Math.max(5, Math.floor(state.player.hpMax * 0.15));
+      const finalDmg = damageAfterDR(dmg);
+      state.player.hp = clamp(state.player.hp - finalDmg, 0, state.player.hpMax);
+      flashDamage();
+      SFX.weaponBreak();
+      log(`Timed spikes impale you for ${finalDmg}!`);
+      spawnFloatText(finalDmg, nx, ny, '#ff0000');
+      updateBars();
+      if(state.player.hp <= 0) { triggerGameOver(); return; }
+  }
+  // -----------------------------------------------
 
   // (leave the rest of your function as-is)
 
@@ -9947,7 +10380,9 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
     say("The stairs appear! Step onto them to finish the tutorial.");
   }
 
+  // Normal Stairs
   if (state.tiles[state.player.y][state.player.x] === 4){
+    state.nextFloorCursed = false; // Clear curse
     // In the tutorial, stepping on the stairs sends you back to the main menu.
     if (state.gameMode === 'tutorial') {
       // optional: mark run over / stop timer if you use one
@@ -9960,6 +10395,15 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
       // Normal behavior for Classic / Endless
       doDescend();
     }
+    return;
+  }
+
+  // Red Cursed Stairs
+  if (state.tiles[state.player.y][state.player.x] === 10){
+    state.nextFloorCursed = true;
+    spawnFloatText("CURSED!", state.player.x, state.player.y, '#ef4444');
+    SFX.bossDown(); 
+    doDescend();
     return;
   }
 
@@ -10104,6 +10548,61 @@ function scaleNonWeaponWeights(base){
 function openChest(x,y){
   const k = `${x},${y}`;
 
+  // --- NEW: Red Chest Event ---
+  const rc = state.redChests?.get(k);
+  if (rc) {
+    if (rc.active) { log("The chest is sealed by bloodlust! Defeat the waves!"); return; }
+    if (!rc.cleared) {
+        // Start Event
+        rc.active = true; rc.wave = 1; rc.killsReq = 3; rc.tempWalls = new Set();
+        state.redChestEvent = rc; 
+        
+        const r = rc.room;
+
+        // NEW: Instantly kill any existing enemies inside the room
+        for (let i = state.enemies.length - 1; i >= 0; i--) {
+            const e = state.enemies[i];
+            if (e.x > r.x && e.x < r.x + r.w && e.y > r.y && e.y < r.y + r.h) {
+                state.enemies.splice(i, 1);
+                spawnParticles(e.x, e.y, '#555', 8);
+            }
+        }
+        
+        // Lock Exits: Turn perimeter open tiles into WALLS (0)
+        for(let py=r.y; py<r.y+r.h; py++) for(let px=r.x; px<r.x+r.w; px++) {
+            if (px===r.x || px===r.x+r.w-1 || py===r.y || py===r.y+r.h-1) {
+                if (state.tiles[py][px]===1 || state.tiles[py][px]===2) {
+                    state.tiles[py][px] = 0; // Wall
+                    rc.tempWalls.add(`${px},${py}`); 
+                    spawnParticles(px, py, '#555', 4); 
+                }
+            }
+        }
+        
+        // Visuals & Spawn
+        const cvs = document.getElementById('view');
+        if(cvs) { cvs.style.filter = "grayscale(1) contrast(1.2) brightness(0.8)"; setTimeout(()=>cvs.style.filter="none", 600); }
+        showBanner("AMBUSH! SURVIVE 3 WAVES!", 4000);
+        spawnRedChestWave(3, r, false); 
+        return;
+    }
+    // Reward for clearing
+    state.inventory.gold += 500;
+    state.inventory.potions += 3;
+    state.inventory.tonics = (state.inventory.tonics||0) + 3;
+    state.inventory.antidotes = (state.inventory.antidotes||0) + 3;
+    state.inventory.bombs = (state.inventory.bombs||0) + 3;
+    log("The seal breaks! Found 500 Gold, 3 Potions, 3 Tonics, 3 Antidotes, 3 Bombs.");
+    
+    // Remove Chest from Map
+    state.tiles[y][x] = 1; // Turn chest (3) into floor (1)
+    SFX.openChest();
+    state.redChests.delete(k); // Clear from registry
+    spawnParticles(x, y, '#facc15', 10);
+    
+    return; 
+  }
+
   // --- Mimic trap remains the same ---
   if (state.mimicChests && state.mimicChests.has(k)) {
     state.mimicChests.delete(k);
@@ -10158,10 +10657,21 @@ function openChest(x,y){
   // --- Weapon roll (starter always, others scaled by depth) ---
   const f = state.floor | 0;
   const weaponChance = Math.min(
-    CHEST_WEAPON_MAX,
+    CHEST_WEAPON_MAX, 
     CHEST_WEAPON_BASE + CHEST_WEAPON_FLOOR_BONUS * Math.max(0, f - 1)
   );
-  if (isStarterChest || Math.random() < weaponChance){
+
+  // --- NEW: Cursed Idol Chance (5%) ---
+  if (!isStarterChest && Math.random() < 0.05) {
+      // Expanded Pool
+      const iPool = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
+      const pick = iPool[Math.floor(Math.random() * iPool.length)];
+      
+      state.tiles[y][x] = 5; // Turn chest into pickup
+      state.pickups[kxy] = { kind:'idol', payload:pick };
+      lootMsg.push(`A cursed object...`);
+  } 
+  else if (isStarterChest || Math.random() < weaponChance){
     const w = randomWeapon();
     
     // --- NEW: Check Inventory Limit ---
@@ -10721,8 +11231,16 @@ function attack(){
       log('No enemy adjacent.'); return; 
     }
   const w = state.player.weapon;
-if (!rollHitFor(w.type)){
-  spawnFloatText("Miss", target.x, target.y, '#9ca3af'); // <--- ADDED
+    
+    // Reaper Invincibility
+    if (target.type === 'Reaper') {
+      log("Your weapon passes harmlessly through the spectre!");
+      SFX.miss();
+      return;
+    }
+
+    if (!rollHitFor(w.type)){
+      spawnFloatText("Miss", target.x, target.y, '#9ca3af'); // <--- ADDED
   log(`You miss the ${target.type}.`); SFX.miss(); enemyStep(); draw(); return;
 }
 
@@ -10730,12 +11248,14 @@ SFX.swingFor(w.type);
   // base swing (Check Insta Kill Debug)
   let dmg = (window._instaKill) ? 99999 : rand(w.min, w.max);
 
-// --- NEW: Cleric Blessing Buff ---
+  // --- NEW: Idol of War (+20% Damage) ---
+  if (state.inventory.idols?.['Idol of War']) dmg = Math.ceil(dmg * 1.20);
+
+  // --- NEW: Cleric Blessing Buff ---
 if (state.player.blessTicks > 0) {
   dmg += 2; // Flat +2 Damage
 }
 // --------------------------------
-
 // --- NEW: Floor Effect Modifiers ---
 if (isEffectActive('AntiMagic')) {
   dmg = Math.ceil(dmg * 1.5); // Melee buff
@@ -10750,11 +11270,19 @@ if (isEffectActive('ArcaneFlux')) { // Note: Removed 'else' to allow stacking if
   let isCrit = false;
 
   // Two-handed: critical (double the rolled damage)
-  if (w.type === 'two' && proc(quirkChance('two'))){
-    dmg *= 2;
-    note = " (CRITICAL!)";
-    isCrit = true;
-  }
+      if (w.type === 'two' && proc(quirkChance('two'))){
+        dmg *= 2;
+        note = " (CRITICAL!)";
+        isCrit = true;
+        
+        // Trigger Fear on Crit
+        state.enemies.forEach(en => {
+          if (en !== target && dist(en.x, en.y, state.player.x, state.player.y) <= 5) {
+            en.fearTicks = 3;
+            spawnFloatText("FEAR", en.x, en.y, '#9ca3af');
+          }
+        });
+      }
 
   target.hp -= dmg;
   if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); 
@@ -12084,16 +12612,43 @@ window.openCartographer = function openCartographer(){
   }
 
 window.openCleric = function(){
-    if (!modal) return;
-    unlockCodex('Cleric'); 
-    unlockCodex('Cleric_Bless', true);
-    
-    // Play Hello
-    playNpcDialogue(NPC_DIALOGUE_URLS.cleric.interact);
+  if (!modal) return;
+  unlockCodex('Cleric');
+  unlockCodex('Cleric_Bless', true);
+  playNpcDialogue(NPC_DIALOGUE_URLS.cleric.interact);
+  if (goldNow) goldNow.textContent = state.inventory.gold|0;
 
-    if (goldNow) goldNow.textContent = state.inventory.gold|0;
-    
-    const w = state.player.weapon;
+  // --- NEW: Purge Idols Button ---
+  const hasIdols = state.inventory.idols && Object.keys(state.inventory.idols).some(k => state.inventory.idols[k] > 0);
+
+  if (hasIdols) {
+      msg.textContent = "You carry cursed idols. I can cleanse them for 100 gold.";
+      buyBtn.disabled = false;
+      buyBtn.textContent = "Purge Idols (100g)";
+      buyBtn.onclick = () => {
+          if ((state.inventory.gold|0) < 100) {
+              msg.textContent = "You lack the gold for this ritual.";
+              return;
+          }
+          state.inventory.gold -= 100;
+          state.inventory.idols = {}; // Wipe all idols
+          SFX.spell();
+          log("The Cleric destroys the cursed idols.");
+          playNpcDialogue(NPC_DIALOGUE_URLS.cleric.purify);
+          if (goldNow) goldNow.textContent = state.inventory.gold;
+          msg.textContent = "Be clean, traveler.";
+          buyBtn.disabled = true;
+          buyBtn.textContent = "Cleansed";
+          updateInvBody(); // Refresh inventory view
+      };
+      modal.style.display = 'flex';
+      state._inputLocked = true;
+      setMobileControlsVisible?.(false);
+      return; // Exit function so we don't apply weapon/blessing logic
+  }
+  // -------------------------------
+
+  const w = state.player.weapon;
     
     // --- NEW: Check for Cursed Weapon ---
     if (w && w.cursed) {
@@ -12404,14 +12959,69 @@ function updateInvBody(){
   // Tabs header
   b.innerHTML = `
     <div class="row" style="gap:6px; margin-bottom:8px;">
-      <button class="btn" id="tabItems"   ${tab==='items'   ? 'disabled':''}>Items</button>
-      <button class="btn" id="tabShield"  ${tab==='shield'  ? 'disabled':''}>Shield</button>
+      <button class="btn" id="tabItems" ${tab==='items' ? 'disabled':''}>Items</button>
+      <button class="btn" id="tabTrinkets" ${tab==='trinkets' ? 'disabled':''}>Trinkets</button>
+      <button class="btn" id="tabShield" ${tab==='shield' ? 'disabled':''}>Shields</button>
       <button class="btn" id="tabWeapons" ${tab==='weapons' ? 'disabled':''}>Weapons</button>
     </div>
     <div id="invSection"></div>
   `;
-
   const sec = b.querySelector('#invSection');
+
+  // ---- Trinkets tab ----
+  function renderTrinkets(){
+    sec.innerHTML = '';
+    // 1. Equipped
+    if(state.player.trinket){
+      const t = state.player.trinket;
+      const row = document.createElement('div');
+      row.className = 'row'; row.style.justifyContent = 'space-between';
+      row.innerHTML = `<span style="color:#facc15; font-weight:bold;">${t.name}</span> (Equipped)`;
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Unequip';
+      btn.onclick=()=>{
+        // Revert stats
+        if(t.name==='Ring of Haste'){ state.player.staminaMax--; state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax); updateBars(); }
+        // Return to inv
+        state.inventory.trinkets = state.inventory.trinkets||{};
+        state.inventory.trinkets[t.name] = (state.inventory.trinkets[t.name]||0)+1;
+        state.player.trinket = null;
+        updateInvBody();
+      };
+      row.appendChild(btn); sec.appendChild(row);
+    }
+    // 2. Inventory
+    const list = state.inventory.trinkets||{};
+    for(const [name,count] of Object.entries(list)){
+      if(count<=0) continue;
+      const row = document.createElement('div');
+      row.className = 'row'; row.style.justifyContent = 'space-between';
+      row.innerHTML = `${name} x${count}`;
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Equip';
+      btn.onclick=()=>{
+        // 1. Swap: Auto-Unequip current if exists
+        if(state.player.trinket){
+          const old = state.player.trinket;
+          // Revert stats of the OLD item
+          if(old.name==='Ring of Haste'){ state.player.staminaMax--; state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax); updateBars(); }
+          // Return OLD to inventory
+          state.inventory.trinkets[old.name] = (state.inventory.trinkets[old.name]||0)+1;
+        }
+
+        // 2. Equip the NEW item
+        state.inventory.trinkets[name]--;
+        state.player.trinket = {name};
+        
+        // Apply stats of the NEW item
+        if(name==='Ring of Haste'){ state.player.staminaMax+=2; state.player.stamina+=2; updateBars(); }
+        if(name==="Warrior's Ring"){ state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus||0) + 1; recomputeWeapon(); }
+        
+        log(`Equipped ${name}.`);
+        updateInvBody();
+      };
+      row.appendChild(btn); sec.appendChild(row);
+    }
+    if(sec.innerHTML==='') sec.innerHTML = '<div>(none)</div>';
+  }
 
   // ---- Items tab ----
   function renderItems(){
@@ -12436,6 +13046,22 @@ function updateInvBody(){
   // Wire new buttons
   sec.querySelector('#btnUseBomb')?.addEventListener('click', useBomb);
   sec.querySelector('#btnUseWarp')?.addEventListener('click', useWarpStone);
+
+  // --- NEW: Render Cursed Idols ---
+  if (state.inventory.idols) {
+      const d = document.createElement('div');
+      d.style.cssText = 'margin-top:10px; padding-top:8px; border-top:1px solid var(--chipBorder); font-size:12px; font-weight:800; color:#ef4444;';
+      d.textContent = 'CURSED IDOLS';
+      sec.appendChild(d);
+      for(const [name, count] of Object.entries(state.inventory.idols)){
+          if(count > 0){
+              const r = document.createElement('div');
+              r.style.cssText = 'display:flex; justify-content:space-between; margin-top:4px; font-size:13px;';
+              r.innerHTML = `<span>${name}</span> <span style="opacity:0.7">x${count}</span>`;
+              sec.appendChild(r);
+          }
+      }
+  }
 }
 
 
@@ -12733,6 +13359,9 @@ left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${
   b.querySelector('#tabItems')  ?.addEventListener('click', ()=>{ state.ui.invTab='items';   updateInvBody(); });
   b.querySelector('#tabShield') ?.addEventListener('click', ()=>{ state.ui.invTab='shield';  updateInvBody(); });
   b.querySelector('#tabWeapons')?.addEventListener('click', ()=>{ state.ui.invTab='weapons'; updateInvBody(); });
+  b.querySelector('#tabTrinkets')?.addEventListener('click', ()=>{ state.ui.invTab='trinkets'; updateInvBody(); });
+
+  if (tab==='trinkets') renderTrinkets();
 }
 
 
@@ -12875,6 +13504,11 @@ function useWarpStone(){
 
 // (Original Potion function remains, just ensuring we sit next to it)
 function usePotion(){
+  // --- NEW: Idol of War Curse ---
+  if (state.inventory.idols?.['Idol of War']) {
+      log("Idol of War forbids healing!");
+      return;
+  }
   if (state.inventory.potions > 0) {
     state.inventory.potions--;
     const before = state.player.hp|0;
@@ -14121,10 +14755,24 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 1){
 }
 
 // --- normal controls (Updated for Sprint) ---
-if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arrowleft' || k === 'a' || k === 'arrowright'|| k === 'd') {
-  
-  let dx = 0, dy = 0;
-  if (k === 'arrowup'   || k === 'w') dy = -1;
+  if (k === 'arrowup' || k === 'w' || k === 'arrowdown' || k === 's' || k === 'arrowleft' || k === 'a' || k === 'arrowright'|| k === 'd') {
+    
+    // --- NEW: Idol of Stone (Slow) - Applies to Walk AND Sprint ---
+    if (state.inventory.idols?.['Idol of Stone']) {
+        // Toggle the skip flag
+        state._stoneSkip = !state._stoneSkip;
+        
+        // If it's a skip turn, process enemies and STOP.
+        if (state._stoneSkip) {
+            spawnFloatText("Slow...", state.player.x, state.player.y, '#9ca3af');
+            enemyStep(); // Enemies take their turn
+            draw();      // Update screen
+            return;      // BLOCK PLAYER INPUT
+        }
+    }
+
+    let dx = 0, dy = 0;
+    if (k === 'arrowup' || k === 'w') dy = -1;
   if (k === 'arrowdown' || k === 's') dy = 1;
   if (k === 'arrowleft' || k === 'a') dx = -1;
   if (k === 'arrowright'|| k === 'd') dx = 1;
@@ -14817,12 +15465,14 @@ function doRestart(className){
     hpMax:20, mpMax:10,
     hp:20, mp:10,
     stamina:10, staminaMax:10,
-    poisoned:false, poisonTicks:0,
-    facing:'down',
-    bow:{ range:5, loaded:0 },
-    artCooldown: 0,
-    shield: null
-  };
+  poisoned:false, poisonTicks:0,
+  facing:'down',
+  bow:{ range:5, loaded:0 },
+  artCooldown: 0,
+  shield: null,
+  trinket: null,  // NEW: Slot for passive gear
+  regenTicker: 0  // NEW: Counter for HP regen effects
+};
 
   // --- Apply Class Stats Modifiers ---
   // Adjusted for thematic attunement
@@ -15533,8 +16183,16 @@ function handleEnemyDeath(e, source) {
   // --- FIX: Mini-Boss Omen Trigger (Priority) ---
   // We handle this FIRST to ensure it never gets blocked by other logic.
   if (e.miniBoss && state.gameMode === 'endless') {
-    log("The Warlord falls! A dark power calls to you...");
-    spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+      log("The Warlord falls! A dark power calls to you...");
+      spawnFloatText("OMEN!", e.x, e.y, '#a78bfa');
+
+      // Trigger Fear on nearby enemies
+      state.enemies.forEach(en => {
+        if (en !== e && dist(en.x, en.y, state.player.x, state.player.y) <= 8) {
+          en.fearTicks = 3;
+          spawnFloatText("FEAR", en.x, en.y, '#9ca3af');
+        }
+      });
     
     // Trigger with delay, but check for conflicts (Level Up)
     setTimeout(() => {
@@ -15610,7 +16268,39 @@ function handleEnemyDeath(e, source) {
   // 7. Cleanup & Stats (MOVED UP)
   state.enemies = state.enemies.filter(x => x !== e);
   state.run.kills++;
-  awardKill(source, Math.max(1, e.xp|0)); // <--- This triggers Level Up Modal if needed
+  awardKill(source, Math.max(1, e.xp|0));
+
+  // --- NEW: Red Chest Wave Logic ---
+  if (state.redChestEvent && state.redChestEvent.active) {
+      state.redChestEvent.killsReq--;
+      if (state.redChestEvent.killsReq <= 0) {
+          state.redChestEvent.wave++;
+          const r = state.redChestEvent.room;
+          if (state.redChestEvent.wave === 2) {
+              spawnFloatText("WAVE 2", state.player.x, state.player.y, '#ef4444');
+              state.redChestEvent.killsReq = 5;
+              spawnRedChestWave(5, r, false); 
+          } else if (state.redChestEvent.wave === 3) {
+              spawnFloatText("ELITE WAVE", state.player.x, state.player.y, '#ef4444');
+              state.redChestEvent.killsReq = 2;
+              spawnRedChestWave(2, r, true); 
+          } else {
+              // Victory
+              showBanner("VICTORY!", 3000);
+              state.redChestEvent.active = false;
+              state.redChestEvent.cleared = true;
+              // Revert Temporary Walls to Floors
+              if (state.redChestEvent.tempWalls) {
+                  for (const key of state.redChestEvent.tempWalls) {
+                      const [wx, wy] = key.split(',').map(Number);
+                      state.tiles[wy][wx] = 1; // Open Floor
+                      spawnParticles(wx, wy, '#888', 4);
+                  }
+              }
+              state.redChestEvent = null;
+          }
+      }
+  }
   SFX.kill();
   unlockCodex(e.displayName || e.type, true);
   log(`${e.displayName || e.type} falls.`);
@@ -15854,6 +16544,48 @@ function getFacingEnemy(){
     const [dx,dy] = dirs[state.player.facing||'down'];
     return enemyAt(state.player.x+dx, state.player.y+dy);
 }
+
+// NEW: Custom Sprite for Red Chest
+function drawRedChestPixel(ctx, x, y, tile){
+  const { R } = gridN(ctx, x, y, tile, 12);
+  const body = '#7f1d1d'; // Dark Crimson
+  const trim = '#000000'; // Black Iron
+  const light = '#ef4444'; // Bright Red Highlight
+  const eye = '#facc15';  // Yellow "Eye" Lock
+  
+  // Outline
+  R(0,3,1,8,trim); R(11,3,1,8,trim); R(0,10,12,1,trim);
+  // Main Body
+  R(1,3,10,8,body);
+  // Lid separation line
+  R(1,4,10,1,trim); 
+  // Vertical Iron Bands
+  R(3,3,1,8,trim); R(8,3,1,8,trim); 
+  // Glowing Lock
+  R(5,5,2,2,eye); 
+  // Top corner highlights
+  R(1,3,2,1,light); R(9,3,2,1,light); 
+}
+
+// NEW: Spawner Helper
+function spawnRedChestWave(count, r, elite){
+    const kinds = floorEnemyKinds();
+    for(let i=0; i<count; i++){
+        const k = kinds[Math.floor(Math.random()*kinds.length)];
+        // Spawn strictly inside room (padded by 1)
+        const x = rand(r.x+1, r.x+r.w-2);
+        const y = rand(r.y+1, r.y+r.h-2);
+        const e = { x,y, size:1, type:k.type, hp:k.hp, atk:[...k.atk], xp:k.xp };
+        if (elite) {
+            e.elite = true; e.tint = randomBossTint();
+            e.hp = Math.floor(e.hp*1.5); e.hpMax = e.hp;
+            e.atk[0]+=2; e.atk[1]+=2;
+        }
+        state.enemies.push(e);
+        spawnParticles(x, y, '#ef4444', 12);
+    }
+}
+
 
 </script>
 
@@ -16168,6 +16900,47 @@ if (spawnBtn) spawnBtn.addEventListener('click', ()=>{
 
   log('[debug] Dropped a shield one tile below you.');
 });
+
+// --- NEW: Extra Trinket Wiring ---
+  ['dbgTrinket4', 'dbgTrinket5', 'dbgTrinket6'].forEach((id, idx) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', () => {
+          // 0=Warrior, 1=Stone, 2=Scholar (matching the HTML order added above)
+          const names = ["Warrior's Ring", "Stone Charm", "Scholar's Lens"];
+          const px = state.player.x, py = state.player.y + 1;
+          
+          if (!inBounds(px, py) || (state.tiles[py][px] !== 1 && state.tiles[py][px] !== 5)) {
+              log('[debug] Cannot spawn Trinket: invalid tile below.');
+              return;
+          }
+          state.pickups = state.pickups || {};
+          state.tiles[py][px] = 5;
+          state.pickups[key(px, py)] = { kind: 'trinket', payload: names[idx] };
+          draw?.();
+          hideDebug?.();
+          log(`[debug] Spawned ${names[idx]} below you.`);
+      });
+  });
+
+  // --- NEW: Idol Debug Wiring ---
+  ['dbgIdol1', 'dbgIdol2', 'dbgIdol3', 'dbgIdol4'].forEach((id, idx) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', () => {
+          const names = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
+          const px = state.player.x, py = state.player.y + 1;
+          if (!inBounds(px, py) || (state.tiles[py][px] !== 1 && state.tiles[py][px] !== 5)) {
+              log('[debug] Cannot spawn Idol: invalid tile below.');
+              return;
+          }
+          state.pickups = state.pickups || {};
+          state.tiles[py][px] = 5;
+          state.pickups[key(px, py)] = { kind: 'idol', payload: names[idx] };
+          draw?.();
+          hideDebug?.();
+          log(`[debug] Spawned ${names[idx]} below you.`);
+      });
+  });
+
 const clayBtn = document.getElementById('dbgGiveClaymore');
 if (clayBtn) clayBtn.addEventListener('click', ()=>{
   // ensure weapon inventory exists
@@ -16471,8 +17244,30 @@ if (stairsBtn) stairsBtn.addEventListener('click', ()=>{
   hideDebug?.();
   log('[debug] Placed stairs one tile below you.');
 });
-const shrineBtn = document.getElementById('dbgSpawnShrine');
-if (shrineBtn) shrineBtn.addEventListener('click', ()=>{
+// --- Trinket Debug Wiring ---
+  ['dbgTrinket1', 'dbgTrinket2', 'dbgTrinket3'].forEach((id, idx) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', () => {
+      const names = ['Ring of Haste', 'Amulet of Life', "Thief's Band"];
+      const px = state.player.x, py = state.player.y + 1;
+      
+      // Basic validation (bounds check + ensuring floor or pickup tile)
+      if (!inBounds(px, py) || (state.tiles[py][px] !== 1 && state.tiles[py][px] !== 5)) {
+        log('[debug] Cannot spawn trinket: invalid tile below.'); return;
+      }
+
+      state.pickups = state.pickups || {};
+      state.tiles[py][px] = 5; // Mark as pickup tile
+      state.pickups[key(px, py)] = { kind: 'trinket', payload: names[idx] };
+      
+      draw?.();
+      hideDebug?.();
+      log(`[debug] Spawned ${names[idx]} below you.`);
+    });
+  });
+
+  const shrineBtn = document.getElementById('dbgSpawnShrine');
+  if (shrineBtn) shrineBtn.addEventListener('click', ()=>{
   // Tile ID 6 is used for Shrine (inferred from interact logic)
   const px = state.player.x;
   const py = state.player.y + 1;
@@ -16587,6 +17382,20 @@ Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Ma
   Art_Backstab: { name:'Art: Backstab', desc:'(Sword) Teleports behind a foe for a critical strike.', seen:false, activated:0 },
   Art_Flurry:   { name:'Art: Flurry',   desc:'(Fists) Unleashes three rapid strikes.', seen:false, activated:0 },
   Art_Overload: { name:'Art: Overload', desc:'(Staff) Unleashes a massive wave of raw magic.', seen:false, activated:0 },
+
+  // --- NEW: Trinkets ---
+  'Ring of Haste':  { name:'Ring of Haste',  desc:'Increases Max Stamina by 2.', picked:0, seen:false },
+  'Amulet of Life': { name:'Amulet of Life', desc:'Slowly regenerates HP over time.', picked:0, seen:false },
+  "Thief's Band":   { name:"Thief's Band",   desc:'Increases Gold found by 30%.', picked:0, seen:false },
+  "Warrior's Ring": { name:"Warrior's Ring", desc:'Adds +1 Flat Damage to all attacks.', picked:0, seen:false },
+  "Stone Charm":    { name:"Stone Charm",    desc:'Increases Damage Reduction by 10%.', picked:0, seen:false },
+  "Scholar's Lens": { name:"Scholar's Lens", desc:'Increases XP gain by 15%.', picked:0, seen:false },
+
+  // --- NEW: Cursed Idols ---
+  'Idol of War':   { name:'Idol of War',   desc:'+20% Damage, but you cannot Heal.', picked:0, seen:false },
+  'Idol of Stone': { name:'Idol of Stone', desc:'+15% Damage Reduction, but you move at half speed.', picked:0, seen:false },
+  'Idol of Greed': { name:'Idol of Greed', desc:'+50% Gold found, but you take +50% Damage.', picked:0, seen:false },
+  'Idol of Rot':   { name:'Idol of Rot',   desc:'Deals damage to nearby enemies, but hurts you when moving.', picked:0, seen:false },
 };
 if (typeof PICK2_POOL !== 'undefined') {
   PICK2_POOL.forEach(p => {
@@ -16676,10 +17485,11 @@ function renderCodexUI(){
     { title: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Hurl','Art_Pierce', 'Art_Backstab', 'Art_Flurry', 'Art_Overload'] },
 
     { title: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
-    { title: 'Active Curses', keys: ['Curse_Blood', 'Curse_Greed', 'Curse_Rust', 'Curse_Frailty'] },
-    
-    { title: 'Omens', keys: (typeof PICK2_POOL !== 'undefined' ? PICK2_POOL.map(p => p.id) : []) }
-  ];
+  { title: 'Trinkets', keys: ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"] },
+  { title: 'Cursed Idols', keys: ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'] },
+  { title: 'Active Curses', keys: ['Curse_Blood', 'Curse_Greed', 'Curse_Rust', 'Curse_Frailty'] },
+  { title: 'Omens', keys: (typeof PICK2_POOL !== 'undefined' ? PICK2_POOL.map(p => p.id) : []) }
+];
 
   cats.forEach(cat => {
     const h = document.createElement('div');
