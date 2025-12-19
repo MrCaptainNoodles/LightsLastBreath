@@ -1332,19 +1332,20 @@ function randomBossTint(){
   return BOSS_TINTS[rand(0, BOSS_TINTS.length - 1)];
 }
 
-function showBanner(text, ms = 2500){
+function showBanner(text, ms = 2500, color = null){
   const el = document.getElementById('banner');
   if (!el) return;
 
   // NEW: queue banners so they don’t overwrite each other
   if (!el._queue) el._queue = [];
   if (el._busy){
-    el._queue.push({ text, ms });
+    el._queue.push({ text, ms, color });
     return;
   }
   el._busy = true;
 
   el.textContent = text;
+  el.style.color = color || '#d9e7f5'; // Use custom color or default
   el.style.display = 'block';
   // start slightly lower, fade in, slide up a touch
   el.style.opacity = '0';
@@ -1367,7 +1368,7 @@ function showBanner(text, ms = 2500){
     // NEW: advance the queue
     el._busy = false;
     const next = el._queue.shift();
-    if (next) showBanner(next.text, next.ms);
+    if (next) showBanner(next.text, next.ms, next.color);
   }, ms + 260);
 }
 
@@ -10661,8 +10662,8 @@ function openChest(x,y){
     CHEST_WEAPON_BASE + CHEST_WEAPON_FLOOR_BONUS * Math.max(0, f - 1)
   );
 
-  // --- NEW: Cursed Idol Chance (15%) ---
-    if (!isStarterChest && state.gameMode === 'endless' && Math.random() < 0.15) {
+  // --- NEW: Cursed Idol Chance (10%) ---
+    if (!isStarterChest && state.gameMode === 'endless' && Math.random() < 0.10) {
       // Expanded Pool
       const iPool = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
       const pick = iPool[Math.floor(Math.random() * iPool.length)];
@@ -10672,7 +10673,8 @@ function openChest(x,y){
       state.inventory.idols[pick] = (state.inventory.idols[pick]||0) + 1;
       unlockCodex(pick, true);
       
-      lootMsg.push(`${pick} (Cursed object added!)`);
+      // Show RED banner immediately (and don't push to lootMsg)
+      showBanner(`${pick} (Cursed object added!)`, 4000, '#ef4444');
     } else if (isStarterChest || Math.random() < weaponChance){
     const w = randomWeapon();
     
@@ -16270,7 +16272,11 @@ function handleEnemyDeath(e, source) {
   // 7. Cleanup & Stats (MOVED UP)
   state.enemies = state.enemies.filter(x => x !== e);
   state.run.kills++;
-  awardKill(source, Math.max(1, e.xp|0));
+  
+  // Double XP on Cursed Floors
+  let finalXp = Math.max(1, e.xp|0);
+  if (state.cursedFloor) finalXp *= 2;
+  awardKill(source, finalXp);
 
   // --- NEW: Red Chest Wave Logic ---
   if (state.redChestEvent && state.redChestEvent.active) {
