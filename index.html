@@ -5284,14 +5284,16 @@ function getSpellStats(name){
   const rngBonus = Math.min(MAX_SPELL_BONUS, up.range|0);
 
   // New: Heal uses percentage instead of flat values
-  if (name === 'Heal'){
-    const pct = Math.max(0, HEAL_PCT_BASE + (t - 1) * HEAL_PCT_PER_TIER);
-    return {
-      cost:  base.cost,   // still scales +1 MP per tier via baseForTier
-      pct,                 // e.g., 0.20, 0.26, 0.32...
-      range: 0
-    };
-  }
+    if (name === 'Heal'){
+      // Scale with Magic Skill: +2% Heal per magic bonus point (approx +1% per level)
+      const mag = (typeof magicPowerBonus === 'function' ? magicPowerBonus() : 0) * 0.02;
+      const pct = Math.max(0, HEAL_PCT_BASE + (t - 1) * HEAL_PCT_PER_TIER + mag);
+      return {
+        cost: base.cost, // still scales +1 MP per tier via baseForTier
+        pct,             // e.g., 0.20, 0.26, 0.32...
+        range: 0
+      };
+    }
 
 // Offensive spells: shards + Magic level both boost damage
 const pow = magicPowerBonus();  // +1 power every 2 Magic levels
