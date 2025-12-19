@@ -10661,7 +10661,7 @@ function openChest(x,y){
     CHEST_WEAPON_BASE + CHEST_WEAPON_FLOOR_BONUS * Math.max(0, f - 1)
   );
 
-  // --- NEW: Cursed Idol Chance (5%) ---
+  // --- NEW: Cursed Idol Chance (15%) ---
   if (!isStarterChest && state.gameMode === 'endless' && Math.random() < 0.15) {
     // Expanded Pool
     const iPool = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
