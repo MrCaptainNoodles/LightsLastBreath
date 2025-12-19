@@ -5177,7 +5177,7 @@ const pool=[
     const roll = Math.random();
     
     // --- NEW: Cursed Weapons (5% chance within affix roll) ---
-    if (roll < 0.05) { // Ultra Rare
+    if (roll < 0.15) { // Ultra Rare (Increased from 5% to 15%)
       const cTypes = ['blood', 'greed', 'rust', 'frailty'];
       const type = cTypes[Math.floor(Math.random() * cTypes.length)];
       const niceType = type.charAt(0).toUpperCase() + type.slice(1); // Capitalize
@@ -10662,9 +10662,9 @@ function openChest(x,y){
   );
 
   // --- NEW: Cursed Idol Chance (5%) ---
-  if (!isStarterChest && Math.random() < 0.05) {
-      // Expanded Pool
-      const iPool = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
+  if (!isStarterChest && state.gameMode === 'endless' && Math.random() < 0.15) {
+    // Expanded Pool
+    const iPool = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
       const pick = iPool[Math.floor(Math.random() * iPool.length)];
       
       state.tiles[y][x] = 5; // Turn chest into pickup
