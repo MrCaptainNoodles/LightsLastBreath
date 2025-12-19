@@ -4968,42 +4968,39 @@ if (typeof isClericTile === 'function' && isClericTile(spot.x, spot.y)) continue
     
          // already something here
 
-    // simple, stable distribution; tweak as you like
-    // NEW: wider pool so weapons (and a few others) can appear
 // simple, stable distribution; tweak as you like
-// simple, stable distribution; tweak as you like
-let kind, payload;
-const r = Math.random();
+    let kind, payload;
+    const r = Math.random();
 
-if (r < 0.12){
-  kind = 'weapon';                      // ~12%
-  payload = randomWeapon();
-} else if (r < 0.18){
-  kind = 'spell';                       // +6%
-  payload = randomSpell();
-} else if (r < 0.24){
-  kind = 'arrows';                      // +6%
-  payload = rand(2, 6);
-} else if (r < 0.27){                   // --- NEW: 3% Chance for Bomb
-  kind = 'bomb';
-  payload = 1;
-} else if (r < 0.29){                   // --- NEW: 2% Chance for Warp Stone
-  kind = 'warp';
-  payload = 1;
-} else if (r < 0.52){                   // Adjusted thresholds to fit
-  kind = 'potion';                      
-  payload = 1;
-} else if (r < 0.75){
-  kind = 'tonic';                       
-  payload = 1;
-} else if (r < 0.81){
-  kind = 'shield';
-  // FIX: Pick a specific shield name instead of generic "1"
-  const sTypes = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
-  payload = sTypes[Math.floor(Math.random() * sTypes.length)];
-} else if (r < 0.85){ 
-  // --- NEW: Trinket Drop Chance (4%) ---
-  kind = 'trinket';
+    if (r < 0.12){
+      kind = 'weapon';                      // ~12%
+      payload = randomWeapon();
+    } else if (r < 0.18){
+      kind = 'spell';                       // +6%
+      payload = randomSpell();
+    } else if (r < 0.24){
+      kind = 'arrows';                      // +6%
+      payload = rand(2, 6);
+    } else if (r < 0.27){                   // --- NEW: 3% Chance for Bomb
+      kind = 'bomb';
+      payload = 1;
+    } else if (r < 0.29){                   // --- NEW: 2% Chance for Warp Stone
+      kind = 'warp';
+      payload = 1;
+    } else if (r < 0.44){                   // Adjusted: 15% Potion (was 23%)
+      kind = 'potion';                      
+      payload = 1;
+    } else if (r < 0.59){                   // Adjusted: 15% Tonic (was 23%)
+      kind = 'tonic';                       
+      payload = 1;
+    } else if (r < 0.65){                   // Shifted down (maintains ~6% Shield)
+      kind = 'shield';
+      // FIX: Pick a specific shield name instead of generic "1"
+      const sTypes = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
+      payload = sTypes[Math.floor(Math.random() * sTypes.length)];
+    } else if (r < 0.69){                   // Shifted down (maintains ~4% Trinket)
+      // --- NEW: Trinket Drop Chance (4%) ---
+      kind = 'trinket';
   // Buffed & Expanded Pool
   const tPool = [
     'Ring of Haste',   // +2 Stamina
@@ -10531,8 +10528,8 @@ function pickWeighted(weights){
 
 // Base weights for non-weapon chest items (relative, not %)
 const NON_WEAPON_BASE = {
-  potion: 34,
-  tonic: 24,
+  potion: 20,    // Reduced (was 34)
+  tonic: 15,     // Reduced (was 24)
   antidote: 18,
   arrows: 16,
   lockpicks: 8,
