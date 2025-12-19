@@ -17470,75 +17470,135 @@ function renderCodexUI(){
   const list = document.getElementById('codexContent');
   if (!list) return;
   list.innerHTML = '';
-  const c = loadCodex();
+  // Force flex column to override the CSS Grid layout
+  list.style.display = 'flex';
+  list.style.flexDirection = 'column';
   
-// === UPDATE THIS LIST ===
+  const c = loadCodex();
+
+  // 1. Define Categories (Clustered with Sub-groups)
   const cats = [
-    { title: 'Enemies', keys: ['Rat','Bat','Spider','Slime','Goblin','Skeleton','Mage','Mimic'] },
-{ title: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] },
-    // Added 'Cleric' to the list
-    { title: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer','Cleric'] },
-    { title: 'Discoveries', keys: ['Shrine', 'Gold_Well'] },
-    
-    // Updated List:
-    { title: 'Floor Effects', keys: [
-        'MiasmaChamber','ShadowLabyrinth','Bloodhunt',
-        'GlacialFreeze','VolatileAether','AntiMagic','ArcaneFlux'
-    ]},
-    
-    { title: 'Shrine Outcomes', keys: ['Shrine_Mimic','Shrine_Heal','Shrine_XP','Shrine_Teleport','Shrine_Blood','Shrine_Midas'] },
-    { title: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map','Cleric_Bless'] },
-    
-    // 1. ADDED: Weapon Arts Category
-    { title: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Hurl','Art_Pierce', 'Art_Backstab', 'Art_Flurry', 'Art_Overload'] },
+    { 
+      title: 'Bestiary', 
+      groups: [
+        { subtitle: 'Enemies', keys: ['Rat','Bat','Spider','Slime','Goblin','Skeleton','Mage','Mimic'] },
+        { subtitle: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] }
+      ]
+    },
+    { 
+      title: 'World & NPCs', 
+      groups: [
+        { subtitle: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer','Cleric'] },
+        { subtitle: 'Discoveries', keys: ['Shrine', 'Gold_Well'] },
+        { subtitle: 'Floor Effects', keys: ['MiasmaChamber','ShadowLabyrinth','Bloodhunt','GlacialFreeze','VolatileAether','AntiMagic','ArcaneFlux'] },
+        { subtitle: 'Shrine Outcomes', keys: ['Shrine_Mimic','Shrine_Heal','Shrine_XP','Shrine_Teleport','Shrine_Blood','Shrine_Midas'] },
+        { subtitle: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map','Cleric_Bless'] }
+      ]
+    },
+    { 
+      title: 'Collection', 
+      groups: [
+        { subtitle: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Hurl','Art_Pierce', 'Art_Backstab', 'Art_Flurry', 'Art_Overload'] },
+        { subtitle: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
+        { subtitle: 'Trinkets', keys: ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"] },
+        { subtitle: 'Cursed Idols', keys: ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'] }
+      ]
+    }
+  ];
 
-    { title: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
-  { title: 'Trinkets', keys: ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"] },
-  { title: 'Cursed Idols', keys: ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'] },
-  { title: 'Active Curses', keys: ['Curse_Blood', 'Curse_Greed', 'Curse_Rust', 'Curse_Frailty'] },
-  { title: 'Omens', keys: (typeof PICK2_POOL !== 'undefined' ? PICK2_POOL.map(p => p.id) : []) }
-];
+  // Dynamic Omens (Added as a sub-group to Collection)
+  if (typeof PICK2_POOL !== 'undefined') {
+     const omenKeys = PICK2_POOL.map(p => p.id);
+     cats[2].groups.push({ subtitle: 'Omens', keys: omenKeys });
+  }
 
-  cats.forEach(cat => {
-    const h = document.createElement('div');
-    h.style.cssText = 'font-weight:900; font-size:22px; color:#f9d65c; margin-top:20px; border-bottom:1px solid #444; padding-bottom:4px;';
-    h.textContent = cat.title;
-    list.appendChild(h);
+  // 2. Create Scrollable Tab Row
+  const tabRow = document.createElement('div');
+  tabRow.style.cssText = "display:flex; gap:8px; overflow-x:auto; padding:4px 4px 12px 4px; border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:10px; flex-shrink:0;";
+  list.appendChild(tabRow);
 
-    cat.keys.forEach(k => {
-      const data = c[k];
-      const row = document.createElement('div');
-      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(255,255,255,0.06); border-radius:8px; border:1px solid rgba(255,255,255,0.1);';
+  // 3. Create Content Container
+  const contentBody = document.createElement('div');
+  contentBody.style.cssText = "flex:1; overflow-y:auto; padding-right:4px; max-height:60vh;"; 
+  list.appendChild(contentBody);
+
+  // 4. Render Logic (Updated to handle Groups)
+  const renderTab = (cat, activeBtn) => {
+     // Reset all tab styles
+     Array.from(tabRow.children).forEach(b => {
+         b.style.background = 'transparent';
+         b.style.color = '#9ca3af';
+         b.style.borderColor = 'rgba(255,255,255,0.2)';
+     });
+     // Highlight active
+     activeBtn.style.background = '#1b2a3a';
+     activeBtn.style.color = '#f9d65c';
+     activeBtn.style.borderColor = '#f9d65c';
+
+     contentBody.innerHTML = '';
+     
+     // Loop through groups instead of flat keys
+     cat.groups.forEach(group => {
+         // Render Section Header if subtitle exists
+         if(group.subtitle){
+             const sub = document.createElement('div');
+             sub.style.cssText = "font-size:13px; color:#f9d65c; margin:15px 0 8px 0; text-transform:uppercase; letter-spacing:1px; font-weight:700; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:4px; opacity:0.9;";
+             sub.textContent = group.subtitle;
+             contentBody.appendChild(sub);
+         }
+
+         group.keys.forEach(k => {
+             const data = c[k];
+             const row = document.createElement('div');
+             row.className = 'card';
+             row.style.marginBottom = '10px';
+             row.style.padding = '10px';
+             row.style.background = 'rgba(255,255,255,0.03)';
+
+             if (data && data.seen) {
+                 let statHtml = '';
+                 if (data.kills !== undefined) statHtml = `<div style="font-size:12px; color:#ef4444; font-weight:700;">Kills: ${data.kills}</div>`;
+                 else if (data.picked !== undefined) statHtml = `<div style="font-size:12px; color:#60a5fa; font-weight:700;">Picked: ${data.picked}</div>`;
+                 else if (data.activated !== undefined) {
+                     const label = (k === 'Gold_Well') ? 'Donated' : 'Activated';
+                     statHtml = `<div style="font-size:12px; color:#7df9ff; font-weight:700;">${label}: ${data.activated}</div>`;
+                 }
+                 else if (data.interactions !== undefined) statHtml = `<div style="font-size:12px; color:#f6d66a; font-weight:700;">Count: ${data.interactions}</div>`;
+
+                 row.innerHTML = `
+                   <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                     <div>
+                       <div style="font-weight:800; font-size:16px; color:#d9e7f5;">${data.name}</div>
+                       <div style="font-size:13px; opacity:0.8; margin-top:4px; line-height:1.4;">${data.desc}</div>
+                     </div>
+                     <div style="text-align:right; min-width:60px;">${statHtml}</div>
+                   </div>
+                 `;
+             } else {
+                 row.innerHTML = `<div style="opacity:0.4; font-style:italic;">??? (Undiscovered)</div>`;
+             }
+             contentBody.appendChild(row);
+         });
+     });
+
+     if(contentBody.innerHTML === '') {
+        contentBody.innerHTML = '<div style="opacity:0.5; font-style:italic; padding:10px;">Nothing here yet.</div>';
+     }
+  };
+
+  // 5. Initialize Tabs
+  cats.forEach((cat, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = cat.title;
+      // Button styling
+      btn.style.cssText = "padding:6px 10px; font-size:13px; white-space:nowrap; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:transparent; color:#9ca3af; cursor:pointer;";
       
-      if (data && data.seen) {
-           let statHtml = '';
-           if (data.kills !== undefined) {
-             statHtml = `<div style="font-size:12px; color:#ef4444; font-weight:700;">Kills: ${data.kills}</div>`;
-           } else if (data.picked !== undefined) {
-             statHtml = `<div style="font-size:12px; color:#60a5fa; font-weight:700;">Picked: ${data.picked}</div>`;
-           }
-           // NEW STATS DISPLAY LOGIC
-           else if (data.activated !== undefined) {
-             // Custom label for Gold Well vs Shrines
-             const label = (k === 'Gold_Well') ? 'Donated' : 'Activated';
-             statHtml = `<div style="font-size:12px; color:#7df9ff; font-weight:700;">${label}: ${data.activated}</div>`;
-           } 
-           else if (data.interactions !== undefined) {
-             statHtml = `<div style="font-size:12px; color:#f6d66a; font-weight:700;">Count: ${data.interactions}</div>`;
-           }
+      btn.onclick = () => renderTab(cat, btn);
+      tabRow.appendChild(btn);
 
-         row.innerHTML = `
-           <div>
-             <div style="font-weight:800; font-size:16px; color:#d9e7f5;">${data.name}</div>
-             <div style="font-size:14px; opacity:0.8; margin-top:2px;">${data.desc}</div>
-           </div>
-           <div style="text-align:right; margin-left:12px;">${statHtml}</div>
-         `;
-      } else {
-         row.innerHTML = `<div style="opacity:0.3; font-style:italic; font-weight:600;">???</div>`;
-      }
-      list.appendChild(row);
-    });
+      // Auto-select the first tab
+      if (idx === 0) renderTab(cat, btn);
   });
 }
 
