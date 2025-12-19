@@ -13646,9 +13646,11 @@ function updateSpellBody(){
       const pct = Math.round((st.pct || 0) * 100);
       // Heal is usually unaffected by damage flux, but blocked by AntiMagic
       if (state.floorEffect === 'AntiMagic') {
-         left.innerHTML = `${s.name} Lv${s.tier||1} — <span style="${sStyle}">SILENCED</span>`;
+        left.innerHTML = `${s.name} Lv${s.tier||1} — <span style="${sStyle}">SILENCED</span>`;
       } else {
-         left.textContent = `${s.name} Lv${s.tier||1} — ${st.cost} MP — heals ${pct}% of Max HP`;
+        // Calculate flat amount for clarity
+        const flat = Math.round(state.player.hpMax * (st.pct || 0));
+        left.textContent = `${s.name} Lv${s.tier||1} — ${st.cost} MP — Heals ${pct}% (${flat} HP)`;
       }
     } else {
       left.innerHTML = `${s.name} Lv${s.tier||1} — ${st.cost} MP — <span style="${sStyle}">${sMin}–${sMax} DMG${sNote}</span> — Range ${st.range}`;
