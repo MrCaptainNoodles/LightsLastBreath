@@ -9805,14 +9805,14 @@ function tryMove(dx,dy){
   // -----------------------------------------------------
 
   state.player.x = nx;
-  state.player.y = ny;
+      state.player.y = ny;
+      
+      // FIX: Snap visuals if animation loop isn't active (fixes Tutorial movement freeze)
+      if (!state._animating) { state.player.rx = nx; state.player.ry = ny; draw(); }
 
-  // FIX: Snap visuals if animation loop isn't active (fixes Tutorial movement freeze)
-  if (!state._animating) { state.player.rx = nx; state.player.ry = ny; }
+      SFX.step();
 
-  SFX.step();
-
-  // --- NEW: Advance Turn & Check Toggle Spikes ---
+      // --- NEW: Advance Turn & Check Toggle Spikes ---
   state.gameTurn = (state.gameTurn || 0) + 1;
   const spikesActive = Math.floor(state.gameTurn / 3) % 2 !== 0;
   
