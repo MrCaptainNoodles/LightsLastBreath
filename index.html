@@ -8735,13 +8735,9 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     if (!e.hpMax) e.hpMax = e.hp;
 
     // --- NEW: Mage Heals Allies ---
-    if (e.type === 'Mage' && !e.recovering && !e.stunTicks && !e.sleep && !e.charging) {
+    if (e.type === 'Mage' && e.hp > 0 && !e.recovering && !e.stunTicks && !e.sleep && !e.charging) {
       // Find injured ally within range 4
-      const ally = state.enemies.find(a => 
-        a !== e && 
-        (Math.abs(a.x - e.x) + Math.abs(a.y - e.y) <= 4) && 
-        a.hp < a.hpMax
-      );
+      const ally = state.enemies.find(a => a !== e && (Math.abs(a.x - e.x) + Math.abs(a.y - e.y)) <= 4 && a.hp < a.hpMax);
 
       if (ally) {
         const amt = rand(3, 6);
@@ -9810,6 +9806,10 @@ function tryMove(dx,dy){
 
   state.player.x = nx;
   state.player.y = ny;
+
+  // FIX: Snap visuals if animation loop isn't active (fixes Tutorial movement freeze)
+  if (!state._animating) { state.player.rx = nx; state.player.ry = ny; }
+
   SFX.step();
 
   // --- NEW: Advance Turn & Check Toggle Spikes ---
@@ -9846,16 +9846,17 @@ if (isEffectActive('MiasmaChamber')){ // FIX: Use isEffectActive
     flashDamage();
     log(`The miasma burns you for ${p}.`);
     updateBars();
-    if (state.player.hp <= 0){ triggerGameOver(); return; }
+    if (state.player.hp <= 0){
+        triggerGameOver();
+        return;
+      }
+    }
   }
-}
-// --- END: MIASMA step tick ---
+  // --- END: MIASMA step tick ---
 
-collectIfPickup();
-enemyStep();
-draw();
-
-
+  collectIfPickup();
+  enemyStep();
+  draw();
 }
 
 // ====== Mobile Joystick — continuous movement while held ======
