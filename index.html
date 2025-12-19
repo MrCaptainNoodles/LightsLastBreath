@@ -4111,21 +4111,6 @@ state.tiles[sy][sx] = 4;
 // remember the room that contains the stairs (for spawn exclusions)
 state._stairsRoom = rr;
 
-// Cursed Descent: Chance to spawn Red Stairs (Tile 10) in a different room
-// Only on non-boss floors (floors ending in 0 are boss floors)
-if (state.floor % 10 !== 0 && state.rooms.length > 2 && Math.random() < 0.4) {
-  // FIX: Use slice(1) to strictly exclude startRoom (index 0), same as NPCs
-  const candidates = state.rooms.slice(1).filter(r => r !== rr);
-  if (candidates.length > 0) {
-    const redRoom = candidates[rand(0, candidates.length - 1)];
-    const rsx = Math.floor(redRoom.x + redRoom.w/2);
-    const rsy = Math.floor(redRoom.y + redRoom.h/2);
-    // Ensure tile is floor before placing
-    if (state.tiles[rsy][rsx] === 1) {
-      state.tiles[rsy][rsx] = 10; // Tile 10 = Red Cursed Stairs
-    }
-  }
-}
 
 
 // --- starter chest only on floor 1 adjacent ---
@@ -4450,28 +4435,41 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.
   }
   // ------------------------------------------------------
 
-  // --- NEW: Red Chest Room (Moved Here) ---
-  if ((state.gameMode === 'classic' || state.gameMode === 'endless') && Math.random() < 0.15) { 
-    // Identify all "Busy" rooms (NPCs, Stairs, Wells, Shrines)
-    const busy = new Set([state.startRoom, state._stairsRoom]);
-    if (state.merchant?.room) busy.add(state.merchant.room);
-    if (state.blacksmith?.room) busy.add(state.blacksmith.room);
-    if (state.jester?.room) busy.add(state.jester.room);
-    if (state.cartographer?.room) busy.add(state.cartographer.room);
-    if (state.cleric?.room) busy.add(state.cleric.room); // Now checks state.cleric correctly!
-    if (state.goldWell?.room) busy.add(state.goldWell.room);
-    if (state.shrines) state.shrines.forEach(s => busy.add(s.room));
+  // --- NEW: Cursed Spawns (Stairs & Red Chest) ---
+  // We handle both here, AFTER NPCs spawn, to ensure they don't overlap.
+  
+  // 1. Build "Busy" Set (Start + Stairs + NPCs + Wells + Shrines)
+  const busy = new Set([state.startRoom, state._stairsRoom]);
+  if (state.merchant?.room) busy.add(state.merchant.room);
+  if (state.blacksmith?.room) busy.add(state.blacksmith.room);
+  if (state.jester?.room) busy.add(state.jester.room);
+  if (state.cartographer?.room) busy.add(state.cartographer.room);
+  if (state.cleric?.room) busy.add(state.cleric.room);
+  if (state.goldWell?.room) busy.add(state.goldWell.room);
+  if (state.shrines) state.shrines.forEach(s => busy.add(s.room));
 
-    // Filter candidates avoiding busy rooms
-    // FIX: Use slice(1) to strictly exclude startRoom
+  // 2. Cursed Stairs (Moved from earlier)
+  if (state.floor % 10 !== 0 && state.rooms.length > 2 && Math.random() < 0.4) {
     const cands = state.rooms.slice(1).filter(r => !busy.has(r));
+    if (cands.length > 0) {
+      const r = cands[rand(0, cands.length - 1)];
+      const rsx = Math.floor(r.x + r.w/2);
+      const rsy = Math.floor(r.y + r.h/2);
+      if (state.tiles[rsy][rsx] === 1) {
+        state.tiles[rsy][rsx] = 10; // Tile 10 = Red Cursed Stairs
+        busy.add(r); // Mark this room as busy so Red Chest doesn't use it
+      }
+    }
+  }
 
+  // 3. Red Chest Room
+  if ((state.gameMode === 'classic' || state.gameMode === 'endless') && Math.random() < 0.15) { 
+    const cands = state.rooms.slice(1).filter(r => !busy.has(r));
     if (cands.length > 0) {
       const r = cands[rand(0, cands.length - 1)];
       state.redChestRoom = r;
       // Clear room interior (remove props/traps)
       for(let y=r.y+1; y<r.y+r.h-1; y++) for(let x=r.x+1; x<r.x+r.w-1; x++) state.tiles[y][x] = 1;
-      // Place Red Chest in center
       const cx = Math.floor(r.x + r.w/2), cy = Math.floor(r.y + r.h/2);
       state.tiles[cy][cx] = 3;
       state.redChests.set(`${cx},${cy}`, { room:r, active:false, cleared:false, wave:0 });
@@ -10600,7 +10598,7 @@ function openChest(x,y){
     state.inventory.tonics = (state.inventory.tonics||0) + 3;
     state.inventory.antidotes = (state.inventory.antidotes||0) + 3;
     state.inventory.bombs = (state.inventory.bombs||0) + 3;
-    log("The seal breaks! Found 500 Gold, 3 Potions, 3 Tonics, 3 Antidotes, 3 Bombs.");
+    log("The seal breaks! Found 250 Gold, 3 Potions, 3 Tonics, 3 Antidotes, 3 Bombs.");
     
     // Remove Chest from Map
     state.tiles[y][x] = 1; // Turn chest (3) into floor (1)
