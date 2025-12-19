@@ -11714,11 +11714,13 @@ function useWeaponArt(){
     SFX.levelUp(); 
     
     let hitCount = 0;
-    // Hit ALL enemies in vision
-    state.enemies.forEach(e => {
-        if (state.seen.has(key(e.x, e.y))) {
-            const bonus = Math.floor((state.skills.magic?.lvl||1));
-            const dmg = rand(10, 15) + bonus; // Massive Base Damage
+      // Hit ALL enemies in vision
+      state.enemies.forEach(e => {
+        // CHANGED: Added range check (Max 3 tiles away)
+        const dist = Math.max(Math.abs(e.x - state.player.x), Math.abs(e.y - state.player.y));
+        if (state.seen.has(key(e.x, e.y)) && dist <= 3) {
+          const bonus = Math.floor((state.skills.magic?.lvl||1));
+          const dmg = rand(10, 15) + bonus; // Massive Base Damage
             
             e.hp -= dmg;
             spawnFloatText(dmg, e.x, e.y, '#a78bfa');
