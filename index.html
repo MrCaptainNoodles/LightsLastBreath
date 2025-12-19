@@ -9569,18 +9569,17 @@ function collectIfPickup(){
         SFX.pickup();    
       state.inventory.lockpicks += it.payload; log(`Picked up ${it.payload} lockpick(s).`);
     } else if (it.kind === 'arrows'){
-  SFX.pickup();
-  state.inventory.arrows = (state.inventory.arrows | 0) + (it.payload | 0);
-  log(`Picked up ${it.payload} arrows.`);
+      SFX.pickup();
+      state.inventory.arrows = (state.inventory.arrows | 0) + (it.payload | 0);
+      log(`Picked up ${it.payload} arrows.`);
 
-  
-
-
-
-
-
-
-        } else if (it.kind === 'shield'){
+      // FIX: Auto-load bow if empty
+      if (state.player.bow && state.player.bow.loaded === 0 && state.inventory.arrows > 0) {
+        state.player.bow.loaded = 1;
+        state.inventory.arrows--;
+        if (typeof updateEquipUI === 'function') updateEquipUI();
+      }
+    } else if (it.kind === 'shield'){
   SFX.pickup();
   // FIX: Use the name from payload (fallback to Buckler if old save data)
   const sName = (typeof it.payload === 'string') ? it.payload : 'Buckler';
@@ -9661,6 +9660,9 @@ function collectIfPickup(){
     state.tiles[state.player.y][state.player.x]=1;
     updateInvBody();
     updateEquipUI();
+
+    // FIX: Force immediate redraw so sprite vanishes now, not next turn
+    if (typeof draw === 'function') draw();
   }
 }
 
