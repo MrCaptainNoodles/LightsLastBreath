@@ -1102,6 +1102,7 @@ input[type=range].custom-slider::-webkit-slider-thumb {
     <div class="row" style="flex-direction:column; gap:10px; align-items:stretch; margin-top:4px;">
       <button class="btn" id="btnPauseResume">Resume</button>
       <button class="btn" id="btnPauseHelp">Help</button>
+      <button class="btn" id="btnPauseCodex">Codex</button>
       <button class="btn" id="btnPauseSettings">Settings</button>
       <button class="btn" id="btnPauseQuit">Quit</button>
     </div>
@@ -14629,10 +14630,22 @@ function closePauseMenu(){
   const modal       = document.getElementById('pauseModal');
   if (!modal) return;
 
-  const btnResume   = document.getElementById('btnPauseResume');
-  const btnHelp     = document.getElementById('btnPauseHelp');
+  const btnResume = document.getElementById('btnPauseResume');
+  const btnHelp = document.getElementById('btnPauseHelp');
+  const btnCodex = document.getElementById('btnPauseCodex');
   const btnSettings = document.getElementById('btnPauseSettings');
-  const btnQuit     = document.getElementById('btnPauseQuit');
+  const btnQuit = document.getElementById('btnPauseQuit');
+
+  if (btnCodex) {
+    btnCodex.addEventListener('click', () => {
+      if (typeof renderCodexUI === 'function') renderCodexUI();
+      const m = document.getElementById('codexOverlay');
+      if (m) {
+        m.style.zIndex = '10001'; // Ensure it sits above the pause menu
+        m.style.display = 'flex';
+      }
+    });
+  }
 
   if (btnResume){
     btnResume.addEventListener('click', () => {
