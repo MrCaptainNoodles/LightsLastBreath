@@ -5283,14 +5283,14 @@ function getSpellStats(name){
   const dmgBonus = Math.min(MAX_SPELL_BONUS, up.dmg|0);
   const rngBonus = Math.min(MAX_SPELL_BONUS, up.range|0);
 
-  // New: Heal uses percentage instead of flat values
+// New: Heal uses percentage instead of flat values
     if (name === 'Heal'){
       // Scale with Magic Skill: +2% Heal per magic bonus point (approx +1% per level)
       const mag = (typeof magicPowerBonus === 'function' ? magicPowerBonus() : 0) * 0.02;
       const pct = Math.max(0, HEAL_PCT_BASE + (t - 1) * HEAL_PCT_PER_TIER + mag);
       return {
-        cost: base.cost, // still scales +1 MP per tier via baseForTier
-        pct,             // e.g., 0.20, 0.26, 0.32...
+        cost:  base.cost,   // still scales +1 MP per tier via baseForTier
+        pct,                 // e.g., 0.20, 0.26, 0.32...
         range: 0
       };
     }
@@ -13646,12 +13646,12 @@ function updateSpellBody(){
       const pct = Math.round((st.pct || 0) * 100);
       // Heal is usually unaffected by damage flux, but blocked by AntiMagic
       if (state.floorEffect === 'AntiMagic') {
-        left.innerHTML = `${s.name} Lv${s.tier||1} — <span style="${sStyle}">SILENCED</span>`;
-      } else {
-        // Calculate flat amount for clarity
-        const flat = Math.round(state.player.hpMax * (st.pct || 0));
-        left.textContent = `${s.name} Lv${s.tier||1} — ${st.cost} MP — Heals ${pct}% (${flat} HP)`;
-      }
+          left.innerHTML = `${s.name} Lv${s.tier||1} — <span style="${sStyle}">SILENCED</span>`;
+        } else {
+          // Calculate flat amount for clarity
+          const flat = Math.round(state.player.hpMax * (st.pct || 0));
+          left.textContent = `${s.name} Lv${s.tier||1} — ${st.cost} MP — Heals ${pct}% (${flat} HP)`;
+        }
     } else {
       left.innerHTML = `${s.name} Lv${s.tier||1} — ${st.cost} MP — <span style="${sStyle}">${sMin}–${sMax} DMG${sNote}</span> — Range ${st.range}`;
     }
