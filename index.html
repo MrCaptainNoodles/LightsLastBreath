@@ -4425,7 +4425,7 @@ ensureCartographerAudio();
   // --- NEW: Cleric Spawn (15% chance, non-boss floors) ---
   state.cleric = null; // Reset
   // RESTRICTED: Endless Mode only
-if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.15) { 
+if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.20) { 
      // Added check for state.goldWell?.room
      const rooms5 = state.rooms.slice(1).filter(r => 
         r !== state._stairsRoom && 
