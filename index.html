@@ -3864,8 +3864,8 @@ return;
 
 
   // --- rooms with occasional corner notch ---
-  // Scale rooms slightly with floor depth (min 12, max 18)
-  const roomCount = 8 + Math.min(17, Math.floor(state.floor / 5)); // Max rooms capped at 25
+  // Scale rooms slightly with floor depth (min 8, max 25)
+  const roomCount = 8 + Math.min(17, Math.floor(state.floor / 2)); // Max rooms capped at 25
   let attempts=0;
   while(state.rooms.length<roomCount && attempts<1000){ // Increased attempts to 1000
     attempts++;
