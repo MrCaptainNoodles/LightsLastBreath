@@ -10989,7 +10989,8 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
 
 
 function isShieldAllowedFor(t){
-  // allow shield with one-handed weapons or bare hands
+  // STRICT: Only 'one' (One-Handed) and 'hand' (Fists/Claws) can use shields.
+  // !t implies no weapon equipped (Fists), which is also allowed.
   return t === 'one' || t === 'hand' || !t;
 }
 function isShieldAllowed(){
@@ -12340,9 +12341,13 @@ function refreshBsUI(){
 
   let name, dur, max;
   if (bsTarget === 'shield'){
-    name = SHIELD_NAME;
-    dur  = (sh?.dur|0);
-    max  = SHIELD_DUR;
+    name = sh ? (sh.name || SHIELD_NAME) : 'No Shield';
+    dur = (sh?.dur|0);
+    // FIX: Dynamic Max Durability for new shield types
+    max = 20;
+    if (name.includes('Buckler')) max = 15;
+    else if (name.includes('Tower')) max = 35;
+    else if (name.includes('Ancient')) max = 25;
   } else {
     name = w.name || '—';
     dur  = (w.dur|0);
@@ -12380,20 +12385,31 @@ function doRepair(points){
   let itemName = '';
   
   if (usingShield){
-    const sh = state.player.shield; if (!sh) return;
-    const need = Math.max(0, SHIELD_DUR - (sh.dur|0));
+    const sh = state.player.shield;
+    if (!sh) return;
+
+    // FIX: Calculate correct Max for calculation
+    let max = 20;
+    const n = sh.name || SHIELD_NAME;
+    if (n.includes('Buckler')) max = 15;
+    else if (n.includes('Tower')) max = 35;
+    else if (n.includes('Ancient')) max = 25;
+
+    const need = Math.max(0, max - (sh.dur|0));
     if (need <= 0) return;
-    const amt  = Math.max(1, Math.min(points, need));
-    const costPerPoint = Math.ceil(2 + (state.floor * 0.5)); 
+    const amt = Math.max(1, Math.min(points, need));
+    const costPerPoint = Math.ceil(2 + (state.floor * 0.5));
     const cost = amt * costPerPoint;
-    if ((state.inventory.gold|0) < cost){ log('Not enough gold.'); return; }
-    
+    if ((state.inventory.gold|0) < cost){
+      log('Not enough gold.');
+      return;
+    }
     // Perform Repair
     state.inventory.gold -= cost;
     sh.dur = (sh.dur|0) + amt;
-    repairedToFull = sh.dur >= SHIELD_DUR;
-    log(`Blacksmith repaired ${SHIELD_NAME} +${amt} for ${cost}g.`);
-    itemName = SHIELD_NAME;
+    repairedToFull = sh.dur >= max;
+    log(`Blacksmith repaired ${n} +${amt} for ${cost}g.`);
+    itemName = n;
   } else {
     const w = state.player.weapon || {};
     if (!w.durMax) return;
@@ -16462,6 +16478,13 @@ function useStaff(w) {
 
 function equipShield(variant = 'Standard'){
   if (typeof variant !== 'string') variant = 'Standard';
+
+  // --- FIX: Enforce Shield Rules (One-Handed / Fists Only) ---
+  if (!isShieldAllowed()) {
+    log('Shields can only be used with One-Handed or Hand-to-Hand weapons.');
+    return;
+  }
+  // -----------------------------------------------------------
 
   // 1. Put away current shield (Swap Logic)
   if (state.player.shield) {
