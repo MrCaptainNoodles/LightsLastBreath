@@ -10662,16 +10662,18 @@ function openChest(x,y){
   );
 
   // --- NEW: Cursed Idol Chance (15%) ---
-  if (!isStarterChest && state.gameMode === 'endless' && Math.random() < 0.15) {
-    // Expanded Pool
-    const iPool = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
+    if (!isStarterChest && state.gameMode === 'endless' && Math.random() < 0.15) {
+      // Expanded Pool
+      const iPool = ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'];
       const pick = iPool[Math.floor(Math.random() * iPool.length)];
       
-      state.tiles[y][x] = 5; // Turn chest into pickup
-      state.pickups[kxy] = { kind:'idol', payload:pick };
-      lootMsg.push(`A cursed object...`);
-  } 
-  else if (isStarterChest || Math.random() < weaponChance){
+      // AUTO-ADD directly to inventory instead of dropping on floor
+      state.inventory.idols = state.inventory.idols || {};
+      state.inventory.idols[pick] = (state.inventory.idols[pick]||0) + 1;
+      unlockCodex(pick, true);
+      
+      lootMsg.push(`${pick} (Cursed object added!)`);
+    } else if (isStarterChest || Math.random() < weaponChance){
     const w = randomWeapon();
     
     // --- NEW: Check Inventory Limit ---
