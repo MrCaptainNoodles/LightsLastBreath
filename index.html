@@ -217,7 +217,7 @@
 /* ----------------------- */
 
 /* FIX: overflow:hidden removes the scrollbar */
-html,body{margin:0;height:100%;overflow:auto;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;overscroll-behavior:none;}
+html,body{margin:0;height:100%;overflow:auto;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;overscroll-behavior:none;font-size:14px}
 .app{max-width:800px;margin:0 auto;padding:10px 10px 40px;}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .chip{background:var(--chip);border:1px solid var(--chipBorder);padding:10px 14px;border-radius:14px;font-weight:600;font-size:14px;line-height:1;color:var(--text);}
@@ -256,7 +256,7 @@ button.skill{
 button.skill:focus-visible{ outline:2px solid #3b82f6; outline-offset:2px; }
 button.skill:disabled{ opacity:.6; cursor:not-allowed; }
 
-.log{background:var(--panel);border:1px solid var(--chipBorder);border-radius:16px;margin-top:10px;padding:12px;max-height:22vh;overflow:auto}
+.log{background:var(--panel);border:1px solid var(--chipBorder);border-radius:16px;margin-top:10px;padding:12px;max-height:22vh;overflow:hidden}
 /* Keep the modal header always reachable */
 .modal .sheet .row:first-child{
   position:sticky;
@@ -756,6 +756,7 @@ input[type=range].custom-slider::-webkit-slider-thumb {
 
       <div id="mm-play" style="display:none; flex-direction:column; gap:18px;">
         <a id="btnMenuBackPlay" class="menuLink" href="#" style="opacity:0.6; font-size:14px;">&lt; Back</a>
+        <a id="btnContinue" class="menuLink" href="#" style="display:none; color:#4ade80;">Continue Run</a>
         <a id="btnTutorial" class="menuLink" href="#">Tutorial Mode</a>
         <a id="btnClassic"  class="menuLink" href="#">Classic Mode</a>
         <span id="btnEndless" class="menuLink disabled" aria-disabled="true" title="Unlock after beating Classic">???</span>
@@ -1105,10 +1106,25 @@ input[type=range].custom-slider::-webkit-slider-thumb {
       <button class="btn" id="btnPauseCodex">Codex</button>
       <button class="btn" id="btnPauseSettings">Settings</button>
       <button class="btn" id="btnPauseQuit">Quit</button>
-    </div>
+</div>
   </div>
 </div>
 
+
+<!-- Quit Confirm Modal -->
+<div class="modal" id="quitConfirmModal" style="display:none; z-index:10002;">
+  <div class="sheet">
+    <div class="title" style="text-align:center; margin-bottom:10px;">Quit Game</div>
+    <div style="text-align:center; margin-bottom:15px; opacity:0.9;">Save your progress before quitting?</div>
+    <div class="row" style="gap:10px; justify-content:center;">
+      <button class="btn" id="btnQuitSave">Save & Quit</button>
+      <button class="btn" id="btnQuitNoSave" style="border-color:#ef4444; color:#fca5a5;">Just Quit</button>
+    </div>
+    <div class="row" style="margin-top:10px; justify-content:center;">
+      <button class="btn" id="btnQuitCancel" style="opacity:0.7;">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- Classic Mode Clear Modal -->
 <div class="modal" id="classicClearModal" style="display:none;">
@@ -3103,17 +3119,78 @@ function syncEndlessUnlockUI(){
 }
 
 
+// --- NEW: Save/Load System ---
+const SAVE_KEY = 'dc_save_v1';
+
+window.saveRun = function(){
+  if(state.gameOver) return;
+  const copy = { ...state };
+  // Serialize Sets/Maps
+  copy.seen = Array.from(state.seen||[]);
+  copy.corridor = Array.from(state.corridor||[]);
+  copy.lockedDoors = Array.from(state.lockedDoors||[]);
+  copy.mimicChests = Array.from(state.mimicChests||[]);
+  if(state.redChests) copy.redChests = Array.from(state.redChests.entries());
+  
+  // Clean heavy objects
+  delete copy.particles; delete copy.floatingText; delete copy.projectiles;
+  localStorage.setItem(SAVE_KEY, JSON.stringify(copy));
+  showBanner("Game Saved.", 2000);
+};
+
+window.loadRun = function(){
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    
+    // Restore Sets/Maps
+    d.seen = new Set(d.seen);
+    d.corridor = new Set(d.corridor);
+    d.lockedDoors = new Set(d.lockedDoors);
+    d.mimicChests = new Set(d.mimicChests);
+    if(d.redChests) d.redChests = new Map(d.redChests);
+
+    Object.assign(state, d);
+    
+    // --- FIX: Force Unlock Inputs & Visuals ---
+    state._inputLocked = false;   
+    state._pauseOpen = false;     
+    state.gameOver = false;       
+    
+    // Close any lingering modals (Pause, Inventory, etc.)
+    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+    
+    // Restore Visuals
+    enemyStep(); 
+    draw(); 
+    updateBars(); 
+    updateEquipUI(); 
+    renderSkills();
+    
+    // --- FIX: Force Music Restart ---
+    if(typeof initAudio === 'function') initAudio(); 
+    if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    
+    // Stop Menu Music & Start Game Music
+    if(typeof stopBgm === 'function') stopBgm();
+    setTimeout(() => {
+        if(typeof updateDynamicMusic === 'function') updateDynamicMusic();
+    }, 100); // Slight delay to ensure audio context is ready
+    
+    return true;
+  } catch(e){ console.error(e); return false; }
+};
+
 function goMenu(e){
   if (e?.preventDefault) e.preventDefault();
 
-  // FIX: Force clear any lingering banners (like Tutorial steps)
   const b = document.getElementById('banner');
-  if (b) b._queue = []; // Empty the queue so nothing else pops up
-  hideBanner();         // Hide the current text immediately
+  if (b) b._queue = []; 
+  hideBanner();         
 
   unlockAudioAndLoops();
 
-  // NEW: Use Title BGM for the menu (Seamless transition)
   if (typeof playTitleBgm === 'function') {
     playTitleBgm();
   }
@@ -3121,15 +3198,34 @@ function goMenu(e){
   if (title) title.style.display = 'none';
   if (menu)  menu.style.display  = 'flex';
 
-  // --- FIX: Reset Menu Layers ---
+  // Reset Submenus
   if(document.getElementById('mm-main')) document.getElementById('mm-main').style.display = 'flex';
   if(document.getElementById('mm-play')) document.getElementById('mm-play').style.display = 'none';
   if(document.getElementById('mm-stats')) document.getElementById('mm-stats').style.display = 'none';
-  // ------------------------------
 
   syncEndlessUnlockUI();
-  updateMainMenuShopLabel(); // <--- Refresh shard count
-  document.getElementById('btnMenuPlay')?.focus();
+  if(typeof updateMainMenuShopLabel === 'function') updateMainMenuShopLabel(); 
+
+// --- NEW: Check Save & Wire Continue Button ---
+  const hasSave = !!localStorage.getItem(SAVE_KEY);
+  const btnCont = document.getElementById('btnContinue');
+  
+  if(btnCont){
+    // Update: Button is now in the sub-menu, but logic is same
+    btnCont.style.display = hasSave ? 'block' : 'none';
+    
+    btnCont.onclick = (ev) => {
+      ev.preventDefault();
+      if(window.loadRun()){
+        // Hide Main Menu overlay
+        document.getElementById('mainMenu').style.display='none';
+        
+        // Ensure "Play" submenu resets for next time
+        document.getElementById('mm-main').style.display = 'flex';
+        document.getElementById('mm-play').style.display = 'none';
+      }
+    };
+  }
 }
 
 
@@ -4410,8 +4506,13 @@ ensureCartographerAudio();
 
   // --- NEW: Cleric Spawn (15% chance, non-boss floors) ---
   state.cleric = null; // Reset
+
+  // FIX: Boost spawn chance if player carries Cursed Idols
+  let cChance = 0.20;
+  if (state.inventory.idols && Object.keys(state.inventory.idols).length > 0) cChance = 0.60;
+
   // RESTRICTED: Endless Mode only
-if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < 0.20) { 
+if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < cChance) { 
      // Added check for state.goldWell?.room
      const rooms5 = state.rooms.slice(1).filter(r => 
         r !== state._stairsRoom && 
@@ -4626,9 +4727,9 @@ if (
                   type: randomSprite,     // Random visual base
                   displayName: 'Warlord', // Custom Name override
                   x: ex, y: ey,
-                  hp: 45 + (state.floor * 4), 
-                  hpMax: 45 + (state.floor * 4),
-                  atk: [8 + Math.floor(state.floor/3), 12 + Math.floor(state.floor/2)],
+                  hp: 25 + (state.floor * 4), 
+                  hpMax: 25 + (state.floor * 4),
+                  atk: [4 + Math.floor(state.floor/3), 7 + Math.floor(state.floor/2)],
                   xp: 100, 
                   miniBoss: true,         // Triggers Omen on death
                   size: 1,
@@ -5517,6 +5618,7 @@ function applySlow(e, ticks=SLOW_TICKS){
   e._skipMove = false; // used for every-other-turn slow
 }
 function applyStun(e, ticks=STUN_TICKS){
+  if (e.boss) return; // Bosses are immune
   e.stunTicks = Math.max(e.stunTicks|0, 0) + ticks;
 }
 
@@ -6556,232 +6658,138 @@ function drawDoorPixel(ctx, x, y, tile, variant='wood'){
 // Full-tile 12×12 pickup sprites (scaled to the tile with no padding)
 function drawPickupPixel(ctx, item, px, py, tile){
   const kind = item?.kind;
-  const u = (tile || 12) / 12;                   // exact scale (floats OK)
-  const P = (x,y,c,w=1,h=1)=>{                   // grid painter
-    ctx.fillStyle = c;
-    ctx.fillRect(px + x*u, py + y*u, w*u, h*u);
+  const pl = item?.payload; 
+  // Safety: handle payload being a number (potions) or object (weapons)
+  const name = (typeof pl === 'string' ? pl : (pl?.name || ''));
+
+  const u = (tile || 12) / 12; 
+  const P = (x,y,c,w=1,h=1)=>{ 
+    ctx.fillStyle = c; 
+    ctx.fillRect(px + x*u, py + y*u, w*u, h*u); 
   };
 
-  // palette
-  const steel='#9ca3af', edge='#e5e7eb', dark='#374151', grip='#8b5a2b', wood='#b45309';
-  const red='#ef4444', blue='#60a5fa', green='#10b981', grey='#9ca3af', white='#ffffff', black='#0b141d';
-  const gold='#f6d66a', bronze='#bfae86', purple='#7c3aed', brass='#d97706', shadow='#78350f';
+  // Palette
+  const wood='#855e42', woodD='#5c4033', steel='#94a3b8', iron='#475569';
+  const gold='#fbbf24', goldD='#b45309', red='#ef4444', blue='#3b82f6';
+  const green='#22c55e', gem='#a5f3fc', dark='#0f172a', fuse='#fca5a5';
 
-  // ===== Consumables / utility (now using the full 12×12 box) =====
-  if (kind === 'potion'){ // tall red bottle
-    P(5,1,grey,2,1); P(5,2,white,2,1);
-    P(3,3,red,6,6);                         // body fills width
-    P(3,9,red,1,1); P(8,9,red,1,1);
-    P(4,10,red,4,1);
+  if (kind === 'gold') {
+    P(2,9,gold,3,2); P(5,8,gold,3,3); P(8,9,gold,2,2); // Pile
+    P(3,9,'#fff',1,1); P(6,9,'#fff',1,1); // Sparkles
     return;
   }
-  if (kind === 'tonic'){ // tall blue bottle
-    P(5,1,grey,2,1); P(5,2,white,2,1);
-    P(3,3,blue,6,6);
-    P(3,9,blue,1,1); P(8,9,blue,1,1);
-    P(4,10,blue,4,1);
-    return;
+  
+  if (kind === 'potion') { // Red
+    P(5,2,'#fff',2,1); P(5,3,'#fff',2,2); // Cork/Neck
+    P(3,5,'#fff',6,6); P(4,6,red,4,4); // Glass/Liquid
+    P(5,6,'#fff',1,1); return;
   }
-  if (kind === 'antidote'){ // green vial w/ stopper
-    P(4,1,white,4,1); P(4,2,white,4,1);
-    P(3,3,green,6,5);
-    P(5,8,black,2,1);
-    return;
+  if (kind === 'tonic') { // Blue
+    P(5,2,'#fff',2,1); P(5,3,'#fff',2,2); 
+    P(3,5,'#fff',6,6); P(4,6,blue,4,4); 
+    P(5,6,'#fff',1,1); return;
   }
-  if (kind === 'arrows'){ // 3 long shafts that touch top/bottom
-    [2,6,10].forEach(x => { P(x,2,white,1,1); P(x,3,wood,1,7); P(x,10,dark,1,1); });
-    return;
+  if (kind === 'antidote') { // Green
+    P(5,2,'#fff',2,1); P(5,3,'#fff',2,2); 
+    P(3,5,'#fff',6,6); P(4,6,green,4,4); 
+    P(5,6,'#fff',1,1); return;
   }
-  if (kind === 'spell'){ // large scroll with rune
-    P(2,4,bronze,8,1); P(2,5,bronze,8,1);
-    P(1,6,bronze,1,1); P(10,6,bronze,1,1);
-    P(3,6,purple,6,1);
-    P(2,7,bronze,8,1);
-    return;
-  }
-  if (kind === 'lockpicks'){ // long picks across tile
-    P(2,4,grey,8,1);
-    P(3,6,grey,7,1);
-    P(4,8,grey,6,1);
-    return;
-  }
-if (kind === 'key'){
-    // big horizontal key
-    P(3,4,gold,3,3); // bow
-    P(6,5,gold,4,1); // shaft
-    P(8,6,gold,1,2); // tooth
-    return;
-  }
-  if (kind === 'trinket'){
-    // Gold Ring with Gem
-    P(4,3,gold,4,1);  // top ring
-    P(3,4,gold,1,4);  // left
-    P(8,4,gold,1,4);  // right
-    P(4,8,gold,4,1);  // bottom
-    P(5,2,blue,2,2);  // gem
+
+  if (kind === 'bomb') {
+    P(3,4,dark,6,6); // Body
+    P(4,3,iron,4,1); // Cap
+    P(6,1,fuse,1,2); // Fuse
+    P(6,0,red,1,1); // Spark
+    P(4,5,'#334155',2,2); // Shine
     return;
   }
 
-  // --- NEW: Consumable Sprites ---
-  if (kind === 'bomb'){
-    // Round black body
-    P(3,4,'#1f2937',6,6);
-    // Highlight
-    P(4,5,'#4b5563',2,2);
-    // Fuse cap
-    P(5,3,'#9ca3af',2,1);
-    // Fuse
-    P(6,1,'#d97706',1,2);
-    // Spark
-    P(6,0,'#ef4444',1,1); P(7,1,'#fbbf24',1,1);
-    return;
-  }
-  if (kind === 'warp'){
-    // Advanced Warp Rune
-    const core = '#22d3ee'; // Cyan
-    const dark = '#0c4a6e'; // Deep blue
-    const outer= '#0ea5e9'; // Sky blue
-    
-    // Outer diamond
-    P(6,2,outer,1,1); P(5,3,outer,1,1); P(7,3,outer,1,1);
-    P(4,4,outer,1,1); P(8,4,outer,1,1);
-    P(3,5,outer,1,1); P(9,5,outer,1,1);
-    P(6,10,outer,1,1); P(5,9,outer,1,1); P(7,9,outer,1,1);
-    P(4,8,outer,1,1); P(8,8,outer,1,1);
-    P(3,7,outer,1,1); P(9,7,outer,1,1);
-    
-    // Inner dark stone
-    P(4,5,dark,5,3);
-    
-    // Glowing rune symbol
-    P(6,5,core,1,3); P(5,6,core,3,1);
-    
-    // Pulse animation
-    const tick = Math.floor(Date.now() / 200);
-    if(tick % 2 === 0) P(2,2, '#fff',1,1); // Sparkle
+  if (kind === 'warp') {
+    P(3,3,gem,6,6); // Stone
+    P(4,4,'#fff',4,4); // Inner Glow
     return;
   }
 
+  if (kind === 'lockpicks') {
+    P(3,3,steel,1,6); P(3,9,steel,2,1); // Pick 1
+    P(6,2,steel,1,6); P(6,8,steel,2,1); // Pick 2
+    return;
+  }
 
+  if (kind === 'arrows') {
+    P(4,2,wood,4,8); // Quiver
+    P(4,2,dark,4,1); // Rim
+    P(5,0,'#fff',1,2); P(7,0,'#fff',1,2); // Fletching
+    return;
+  }
 
-// inside drawPickupPixel(ctx, item, px, py, tile) ...
-// Catch generic shields OR weapons that are actually shields
-const isShieldWeapon = (kind === 'weapon' && (item.payload?.type === 'shield' || (item.payload?.name && getWeaponType(item.payload.name) === 'shield')));
+  if (kind === 'spell') {
+    P(2,2,'#fef3c7',8,8); // Paper
+    P(3,3,dark,6,1); P(3,5,dark,5,1); P(3,7,dark,6,1); // Text
+    P(6,8,red,2,2); // Seal
+    return;
+  }
 
-if (kind === 'shield' || isShieldWeapon){ // round wood shield using full 12×12 grid
-  const rim = '#bd9245', wood = '#8a5a2e', edge = '#0b141d';
-  const boss = '#c7ced9', hl = '#eef3ff';
+  if (kind === 'shield') {
+    P(2,2,iron,8,8); // Base
+    P(3,3,steel,6,6); // Inner
+    P(5,5,gold,2,2); // Boss
+    return;
+  }
 
-  // helper: draw a filled circle on the 12×12 logical grid
-  const C = (r, color)=>{
-    ctx.fillStyle = color;
-    for (let dy = -r; dy <= r; dy++){
-      const hw = Math.floor(Math.sqrt(r*r - dy*dy));    // half-width at this scanline
-      // center at (6,6) and scale by u so it fills the tile
-      const x = 6 - hw, y = 6 + dy, w = 2*hw + 1, h = 1;
-      ctx.fillRect(px + x*u, py + y*u, w*u, h*u);
+  if (kind === 'trinket') {
+    if ((name||'').includes('Ring')) {
+      P(3,3,gold,6,6); P(4,4,dark,4,4); // Ring
+      P(5,2,red,2,2); // Gem
+    } else { // Amulet
+      P(5,1,'#fff',2,4); // String
+      P(4,5,gold,4,4); // Base
+      P(5,6,blue,2,2); // Gem
     }
-  };
+    return;
+  }
 
-  const MARGIN = 1;                 // tweak to taste (0..2 looks good)
-const rOuter = 6 - MARGIN;
-
-C(rOuter,     edge);              // now 1px in from the edge
-C(rOuter - 1, rim);
-C(rOuter - 2, wood);
-
-  // center boss + highlight
-  ctx.fillStyle = boss; ctx.fillRect(px + 5*u, py + 5*u, 2*u, 2*u);
-  ctx.fillStyle = hl;   ctx.fillRect(px + 6*u, py + 6*u, 1*u, 1*u);
-  return;
-}
-
-
-
-
-
-
-
-// ===== Weapons (payload.type: 'one'|'two'|'spear'|'axe'|future 'hand') =====
-  if (kind === 'weapon'){
-    // Fix: Capture the specific name for visual overrides, separate from the type
-    const nameStr = String(item?.payload?.name || '').toLowerCase();
-    const t = String((item?.payload?.type || item?.payload?.name || item?.payload || '')).toLowerCase();
-
-    // KINGDOM HEARTS REFERENCE (Visuals)
-    if (nameStr.includes('key of destiny') || t.includes('keyblade')) {
-      const yellow = '#facc15', blade = '#e5e7eb', grip = '#1f2937';
-      
-      // Guard (The yellow hand protection)
-      P(2,4, yellow, 1, 5); // Vertical guard bar
-      P(1,4, yellow, 2, 1); // Top guard hook
-      P(1,8, yellow, 2, 1); // Bottom guard hook
-      
-      // Grip (Dark handle inside guard)
-      P(0,6, grip, 2, 1); 
-
-      // Shaft (Long silver blade)
-      P(3,6, blade, 7, 1); 
-
-      // Teeth (The crown-shaped keys at the tip)
-      P(8,7, blade, 1, 2); 
-      P(9,7, blade, 1, 1);
-
-      
+  if (kind === 'weapon') {
+    if (name.includes('Bow')) {
+      P(2,2,wood,2,8); P(8,2,wood,2,8); // Limbs
+      P(4,5,wood,4,2); // Handle
+      P(2,2,'#fff',6,1); P(2,9,'#fff',6,1); // String
       return;
     }
-
-    // One-Handed Sword – long blade across tile
-    if (t === 'one' || t.includes('one-handed') || (t.includes('sword') && !t.includes('two'))){
-      P(2,6,grip,2,1);                   // hilt
-      P(4,4,dark,1,5);                   // crossguard
-      P(5,5,steel,5,3);                  // blade
-      P(10,5,edge,1,1); P(10,7,edge,1,1);// tip shine
+    if (name.includes('Staff') || name.includes('Wand')) {
+      P(5,2,wood,2,9); // Shaft
+      P(4,1,gold,4,3); // Head
+      const color = name.includes('Fire')?red : name.includes('Ice')?gem : blue;
+      P(5,2,color,2,1); // Gem
       return;
     }
-
-    // Two-Handed Sword – even wider blade + longer grip
-    if (t === 'two' || t.includes('two-handed') || t.includes('greatsword') || t.includes('2h')){
-      P(1,6,grip,3,1);                   // long grip
-      P(4,4,dark,1,5); P(4,3,dark,1,1);  // big guard
-      P(5,4,steel,5,4);                  // wide blade
-      P(10,4,edge,1,1); P(10,6,edge,1,1);
-      P(7,6,dark,1,1);                   // fuller hint
+    if (name.includes('Axe')) {
+      P(5,3,wood,2,8); // Handle
+      P(2,2,steel,3,4); P(7,2,steel,3,4); // Blades
       return;
     }
-
-    // Spear – full-length shaft with tall head
-    if (t === 'spear' || t.includes('spear') || t.includes('pike')){
-      P(2,6,wood,7,1);                   // shaft span
-      P(9,4,edge,2,1);                   // head top
-      P(9,5,steel,2,2);                  // head body
-      P(9,7,edge,2,1);                   // head bottom
+    if (name.includes('Spear') || name.includes('Halberd')) {
+      // Diagonal Shaft
+      P(2,9,wood,2,2); P(4,7,wood,2,2); P(6,5,wood,2,2); P(8,3,wood,2,2);
+      P(9,1,steel,3,3); // Tip
       return;
     }
-
-    // Axe – big head + long haft
-    if (t === 'axe' || t.includes('ax')){
-      P(4,8,wood,1,4);                   // haft to bottom
-      P(5,4,steel,4,3);                  // head
-      P(8,5,edge,1,1);                   // edge
+    if (name.includes('Hammer')) {
+      P(5,3,wood,2,8); // Handle
+      P(3,1,iron,6,3); // Head
       return;
     }
-
-    // Hand-to-Hand – full width knuckle/gauntlet plate
-    if (t === 'hand' || t.includes('hand-to-hand') || t.includes('gauntlet') || t.includes('knuckle') || t.includes('fist')){
-      P(3,6,brass,6,2);                  // bar
-      P(3,5,black,1,1); P(5,5,black,1,1); P(7,5,black,1,1); // finger holes
-      P(3,8,shadow,2,1); P(7,8,shadow,2,1);
-      return;
-    }
-
-    // Fallback mini blade (should rarely show)
-    P(3,6,grip,1,1); P(4,6,steel,6,1); P(10,6,edge,1,1);
+    // Default Sword
+    P(5,2,steel,2,7); // Blade
+    P(3,9,gold,6,1); // Guard
+    P(5,10,wood,2,2); // Hilt
     return;
   }
 
-  // unknown kind: small gold block centered
-  P(5,5,gold,2,2);
+  // Fallback Box
+  P(2,3,wood,8,6);
+  P(1,3,woodD,1,6); P(10,3,woodD,1,6);
+  P(2,2,woodD,8,1); P(2,9,woodD,8,1);
 }
 
 
@@ -7867,12 +7875,12 @@ if (es){
   const mp   = st.cost|0;
   
   // --- NEW: Calculate True Spell Damage ---
-  let sMsg = "";
-  if (es.name === 'Heal') {
-     sMsg = `${es.name} (${mp} MP)`;
-  } else if (state.floorEffect === 'AntiMagic') {
-     sMsg = `${es.name} (SILENCED)`;
-  } else {
+    let sMsg = "";
+    if (isEffectActive('AntiMagic')) {
+      sMsg = `${es.name} (SILENCED)`;
+    } else if (es.name === 'Heal') {
+      sMsg = `${es.name} (${mp} MP)`;
+    } else {
      let sMin = st.min, sMax = st.max;
      if (state.floorEffect === 'ArcaneFlux') {
        sMin = Math.ceil(sMin * 1.5);
@@ -8443,8 +8451,11 @@ if (state.safeRect){
 
 function triggerGameOver(){
   if (state.gameOver) return;
+
+  // --- FIX: Delete Save on Death ---
+  localStorage.removeItem('dc_save_v1');
+
   state.gameOver = true;
-  
   const m = document.getElementById('gameOverModal');
   if (m) {
     m.style.display = 'flex';
@@ -12265,6 +12276,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
       }
     }
 
+    // --- 3. Sell Trinkets ---
+    for (const [tName, count] of Object.entries(state.inventory.trinkets || {})) {
+      if (count > 0) {
+        hasItems = true;
+        // Trinkets sell for 40g (flat rate)
+        addSellItem(`${tName} x${count}`, 40, () => {
+          state.inventory.trinkets[tName]--;
+          if (state.inventory.trinkets[tName] <= 0) delete state.inventory.trinkets[tName];
+        });
+      }
+    }
+
     if (!hasItems) {
       listDiv.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">You have nothing to sell.</div>';
     }
@@ -14691,14 +14714,40 @@ function closePauseMenu(){
     });
   }
 
-  if (btnQuit){
+if (btnQuit) {
     btnQuit.addEventListener('click', () => {
-      // Close pause & go back to main menu
-      closePauseMenu();
-      if (typeof goMenu === 'function') {
-        goMenu();
-      }
+      // Open the new confirmation modal instead of quitting immediately
+      const qm = document.getElementById('quitConfirmModal');
+      if(qm) qm.style.display = 'flex';
     });
+  }
+
+  // --- NEW: Quit Confirmation Wiring ---
+  const btnQSave   = document.getElementById('btnQuitSave');
+  const btnQNoSave = document.getElementById('btnQuitNoSave');
+  const btnQCancel = document.getElementById('btnQuitCancel');
+  const qModal     = document.getElementById('quitConfirmModal');
+
+  if(btnQSave) {
+    btnQSave.onclick = () => {
+      if(typeof window.saveRun === 'function') window.saveRun(); // Save
+      qModal.style.display = 'none';
+      closePauseMenu();
+      goMenu();
+    };
+  }
+  if(btnQNoSave) {
+    btnQNoSave.onclick = () => {
+      // Don't save, just leave
+      qModal.style.display = 'none';
+      closePauseMenu();
+      goMenu();
+    };
+  }
+  if(btnQCancel) {
+    btnQCancel.onclick = () => {
+      qModal.style.display = 'none'; // Go back to pause menu
+    };
   }
 
   // Optional: clicking the dark backdrop also resumes
@@ -15372,6 +15421,10 @@ function stopRunTimerFreeze(){
 
 
 function doRestart(className){
+  // --- FIX: Wipe old save immediately on new run setup ---
+  // We do this at the very top so ANY call to restart (menu or actual start) kills the old save.
+  localStorage.removeItem('dc_save_v1');
+
   // --- FIX: Toggle UI Bars ---
   // Hide bars if in menu (no className), Show them if starting run (has className)
   const uiBars = document.querySelector('.bars');
@@ -16477,6 +16530,7 @@ function useStaff(w) {
 
 function equipShield(variant = 'Standard'){
   if (typeof variant !== 'string') variant = 'Standard';
+  if (variant === 'Standard Shield') variant = 'Standard';
 
   // --- FIX: Enforce Shield Rules (One-Handed / Fists Only) ---
   if (!isShieldAllowed()) {
