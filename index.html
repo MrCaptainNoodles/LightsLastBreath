@@ -217,10 +217,10 @@
 /* ----------------------- */
 
 /* FIX: overflow:hidden removes the scrollbar */
-html,body{margin:0;height:100%;overflow:auto;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;overscroll-behavior:none;font-size:14px}
+html,body{margin:0;height:100%;overflow:auto;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;overscroll-behavior:none;font-size:12px}
 .app{max-width:800px;margin:0 auto;padding:10px 10px 40px;}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.chip{background:var(--chip);border:1px solid var(--chipBorder);padding:10px 14px;border-radius:14px;font-weight:600;font-size:14px;line-height:1;color:var(--text);}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{background:var(--chip);border:1px solid var(--chipBorder);padding:8px 12px;border-radius:12px;font-weight:600;font-size:12px;line-height:1;color:var(--text);}
 .chip.button{cursor:pointer;user-select:none}
 .level{margin-left:auto}
 .card{background:var(--panel);border:1px solid var(--chipBorder);border-radius:16px;padding:12px;margin-top:10px}
@@ -239,10 +239,10 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;touch-acti
 .skill{
   background:var(--chip);
   border:1px solid var(--chipBorder);
-  padding:10px 14px;
-  border-radius:12px;
+  padding:8px 12px;
+  border-radius:10px;
   font-weight:600;
-  font-size:14px;
+  font-size:12px;
   color:var(--text);            /* ← add this line */
 }
 button.skill{
