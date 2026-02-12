@@ -3130,13 +3130,13 @@ window.saveRun = function(){
   const copy = { ...state };
 
   // --- FIX: Freeze Timer for Save ---
-  // Store the exact total time played so far into the save file
-  // This prevents "losing" the time spent in the current session
   if (state.run && typeof currentRunMs === 'function') {
       copy.run.elapsedMs = currentRunMs(); 
-      copy.run.startAt = 0; // Clear start time so it doesn't count time while saved
+      copy.run.startAt = 0;
   }
-  // ---------------------------------
+  
+  // Explicitly ensure floorEffect is preserved in the copy
+  copy.floorEffect = state.floorEffect;
 
   // Serialize Sets/Maps
   copy.seen = Array.from(state.seen||[]);
@@ -3165,17 +3165,30 @@ window.loadRun = function(){
     if(d.redChests) d.redChests = new Map(d.redChests);
 
     Object.assign(state, d);
+
+    // --- FIX: Refresh Floor Effect Visuals (Tint) ---
+    const tintEl = document.getElementById('floorTint');
+    if (tintEl) {
+        // Handle both single strings and arrays (Endless Mode)
+        const active = Array.isArray(state.floorEffect) ? state.floorEffect[0] : state.floorEffect;
+        let c = 'rgba(0,0,0,0)';
+        if (active === 'MiasmaChamber') c = 'rgba(34,197,94,0.18)';
+        else if (active === 'Bloodhunt') c = 'rgba(190,24,93,0.14)';
+        else if (active === 'GlacialFreeze') c = 'rgba(165,243,252,0.15)';
+        else if (active === 'VolatileAether') c = 'rgba(234, 88, 12, 0.15)';
+        else if (active === 'AntiMagic') c = 'rgba(100, 100, 100, 0.25)';
+        else if (active === 'ArcaneFlux') c = 'rgba(147, 51, 234, 0.15)';
+        else if (active === 'StaminaDrain') c = 'rgba(234, 234, 234, 0.15)';
+        tintEl.style.background = c;
+    }
     
     // --- FIX: Resume Timer ---
-    // Set new start time to NOW, so the timer continues from the saved elapsedMs
     if (state.run) {
         state.run.startAt = Date.now();
         state.run.endAt = 0;
-        // Restart the UI ticker
         if (typeof __runTimerIvl !== 'undefined' && __runTimerIvl) clearInterval(__runTimerIvl);
         if (typeof updateRunTimerNow === 'function') {
             updateRunTimerNow();
-            // Assign to window to ensure global scope access if defined there
             window.__runTimerIvl = setInterval(updateRunTimerNow, 100);
         }
     }
