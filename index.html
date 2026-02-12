@@ -3560,9 +3560,9 @@ const HEAL_PCT_BASE     = 0.20; // Lv1 Heal = 20% of Max HP
 const HEAL_PCT_PER_TIER = 0.075; // +7.5% per tier (Lv2=26%, Lv3=32%, etc.)
 // === Magic config ===
 // MP cost increment per tier (Lv1 is baseline)
-const SPELL_COST_STEP_PER_TIER = 5;  // was 1
-const SPELL_DMG_STEP_PER_TIER_MIN = 6;  // +1 to min per tier
-const SPELL_DMG_STEP_PER_TIER_MAX = 6;  // +1 to max per tier
+const SPELL_COST_STEP_PER_TIER = 8;  // Increased: High level spells drain MP fast
+const SPELL_DMG_STEP_PER_TIER_MIN = 4;  // Reduced: Slower power creep
+const SPELL_DMG_STEP_PER_TIER_MAX = 4;  // Reduced: Slower power creep
 
 
 
@@ -6524,13 +6524,19 @@ function drawReaperPixel(ctx, x, y, tile){
   R(9, 10, 1, 1, cloak);
 }
 
-function drawSkeletonPixel(ctx, x, y, tile){
+function drawSkeletonPixel(ctx, x, y, tile, enemy){
   const { R } = gridN(ctx, x, y, tile, 12);
-  const bone='#f1f5f9', shadow='#94a3b8', dark='#0f172a';
+  // ELITE VARIANT: Dark bones, Red eyes
+  const isElite = enemy && (enemy.elite || enemy.boss);
+  const bone   = isElite ? '#57534e' : '#f1f5f9'; // Warm Grey vs White
+  const shadow = isElite ? '#292524' : '#94a3b8';
+  const eyes   = isElite ? '#ef4444' : '#0f172a'; // Red vs Dark
+  const dark   = '#0f172a';
+
   // Skull
   R(4,1,4,3,bone); R(4,2,4,1,bone); // Forehead
   R(4,2,1,1,dark); R(7,2,1,1,dark); // Eyes
-  R(5,3,2,1,dark); // Nose hole
+  R(5,3,2,1,eyes); // Nose hole
   // Ribcage (Detailed)
   R(3,5,6,1,bone); R(4,5,4,1,shadow); // Top Rib
   R(3,6,6,1,dark); // Gap
@@ -6602,7 +6608,7 @@ if (enemy._flashColor && enemy._flashTime > Date.now()) {
   if (t.includes('spider'))    { drawSpiderPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('goblin'))    { drawGoblinPixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('slime'))     { drawSlimePixel(ctx, x, y, sizePx); ctx.restore(); return; }
-  if (t.includes('skeleton'))  { drawSkeletonPixel(ctx, x, y, sizePx); ctx.restore(); return; }
+  if (t.includes('skeleton')) { drawSkeletonPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
   if (t.includes('mage'))      { drawMagePixel(ctx, x, y, sizePx); ctx.restore(); return; }
   if (t.includes('mimic')) { drawMimicPixel(ctx, x, y, sizePx); ctx.restore(); return; } // Added ctx.restore()
   if (t.includes('clone') || t.includes('mirror')){
@@ -13851,28 +13857,27 @@ function dangerFactor() {
 }
 
 function levelHpGain() {
-  const L = state.player.level;   // current level (pre-gain)
-  const F = state.floor;
-  const raw = 4 + 0.6 * L + 0.5 * F;
-  return Math.max(3, Math.round(raw * dangerFactor()));
+  const L = state.player.level; // current level (pre-gain)
+  // FIX: Removed floor multiplier and dangerFactor to prevent exponential scaling
+  const raw = 5 + 0.2 * L; 
+  return Math.max(3, Math.round(raw));
 }
 
 function levelMpGain() {
   const L = state.player.level;
-  const F = state.floor;
   const magicLvl = (state.skills?.magic?.lvl || 1);
-  const casterBias = Math.min(2, Math.floor(magicLvl / 3)) * 0.5; // up to +1
-  const raw = 2 + 0.35 * L + 0.3 * F + casterBias;
-  return Math.max(2, Math.round(raw * dangerFactor())); // <--- Added dangerFactor()
+  const casterBias = Math.min(2, Math.floor(magicLvl / 3)) * 0.5; 
+  // FIX: Flattened scaling
+  const raw = 5 + 0.2 * L + casterBias;
+  return Math.max(2, Math.round(raw)); 
 }
 
 // --- NEW: Stamina Scaling ---
 function levelStamGain() {
   const L = state.player.level;
-  const F = state.floor;
-  // Base 3 + (Level/5) + (Floor/10). Multiplied by dangerFactor (boss floors give more).
-  const raw = 3 + 0.20 * L + 0.10 * F; 
-  return Math.max(3, Math.round(raw * dangerFactor()));
+  // FIX: Constant small growth
+  const raw = 5 + 0.2 * L;
+  return Math.max(2, Math.round(raw));
 }
 
 
@@ -16151,6 +16156,8 @@ window.openGoldWell = function(){
 const MAX_WEAPON_CAT = 5;
 
 function getWeaponType(name) {
+  // FIX: Force anything containing "Shield" to be type 'shield' before checking stats
+  if (name.includes('Shield')) return 'shield';
   // Reliance on weaponStatsFor ensures a single source of truth
   const st = weaponStatsFor(name);
   return st ? st.type : 'hand';
@@ -16608,10 +16615,11 @@ function useStaff(w) {
                 let dmg = 0;
                 
                 if (isMatch) {
-                    // Synergy: Use Spell Damage + Staff Bonus (+3)
-                    dmg = rand(spellStats.min, spellStats.max) + 3;
-                    spawnFloatText("SYNERGY!", state.player.x, state.player.y, color); 
-                } else {
+          // FIX: Use Weapon Damage + Bonus (so high-tier staves don't get nerfed by low-tier spells)
+          // Was: rand(spellStats.min, spellStats.max) + 3
+          dmg = rand(w.min, w.max) + 3; 
+          spawnFloatText("SYNERGY!", state.player.x, state.player.y, color);
+        } else {
                     // Basic Attack: Weak Staff Damage + Skill Bonus
                     const skillBonus = Math.floor((state.skills.magic?.lvl||1)/2);
                     dmg = rand(w.min, w.max) + skillBonus;
