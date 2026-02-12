@@ -1294,12 +1294,14 @@ input[type=range].custom-slider::-webkit-slider-thumb {
       <input id="dbgFloor" type="number" min="1" value="1" 
              style="width:100px; padding:8px; background:#1b2a3a; color:#d9e7f5; border:1px solid var(--chipBorder); border-radius:8px;">
       <button class="btn" id="dbgGo">Go</button>
-<div class="row" style="margin-top:12px; justify-content:flex-start">
+<div class="row" style="margin-top:12px; justify-content:flex-start; gap:8px;">
+  <button class="btn" id="dbgSpawnAllWeapons">Spawn All Weapons</button> 
+  <button class="btn" id="dbgSpawnLoot">Spawn All Floor Loot</button>
+  <button class="btn" id="dbgSpawnEnemies">Spawn New Enemies</button>
   <button class="btn" id="dbgSpawnShield">Spawn Shield Below</button>
   <button class="btn" id="dbgSpawnHeal">Spawn Heal Scroll Below</button>
-  <button class="btn" id="dbgSpawnPebble">Spawn Pebble Scroll Below</button>
-  <button class="btn" id="dbgSpawnStairs">Spawn Stairs Below</button>
   <button class="btn" id="dbgSpawnShrine">Spawn Shrine</button>
+  <button class="btn" id="dbgSpawnStairs">Spawn Stairs</button>
  <button class="btn" id="dbgGiveClaymore">Give Claymore</button>
   <button class="btn" id="dbgUnlockEndless">Unlock Endless</button>
 <button class="btn" id="dbgGiveBomb">Give 5 Bombs</button>
@@ -1525,7 +1527,8 @@ function cartographerRevealFloor(){
   cartographerFindStairs(); // cache target for arrow
 }
 function drawCartographerStairsArrow(ctx, ox, oy, tile){
-  if (!state.cartographerMapActive) return;
+  // Show if map is bought OR if boss stairs have spawned
+  if (!state.cartographerMapActive && !state._bossStairsSpawned) return;
   const s = cartographerFindStairs();
   if (!s) return;
 
@@ -6271,148 +6274,131 @@ function drawMimicPixel(ctx, x, y, tile){
 }
 
 function drawBatPixel(ctx, x, y, tile){
-  const { s, R } = gridN(ctx, x, y, tile, 12);
-  const dark = '#0b141d', body = '#4b3d44', wing = '#2a2328', eye = '#ef4444';
+  const { R } = gridN(ctx, x, y, tile, 12);
+  const dark='#0f172a', membrane='#4c1d95', bone='#1e1b4b';
 
-  // Wings: Wider M-shape silhouette
-  // Left Wing
-  R(1,3,1,2,wing); // tip
-  R(2,2,1,4,wing); // arch
-  R(3,3,1,3,wing); // mid
-  R(4,4,1,2,wing); // connector
-
-  // Right Wing
-  R(10,3,1,2,wing); // tip
-  R(9,2,1,4,wing);  // arch
-  R(8,3,1,3,wing);  // mid
-  R(7,4,1,2,wing);  // connector
-
-  // Body
-  R(5,4,2,4,body);
-
-  // Ears (Tall and pointy)
-  R(4,2,1,2,body); R(7,2,1,2,body);
-
-  // Eyes (Glowing Red)
-  R(5,5,1,1,eye); R(6,5,1,1,eye);
+  // Wings (Scalloped "M" shape, not bird-like)
+  // Top Ridge (Bone)
+  R(1,2,1,1,bone); R(2,1,3,1,bone); // Left Wing Top
+  R(10,2,1,1,bone); R(7,1,3,1,bone); // Right Wing Top
   
-  // Feet
-  R(5,8,1,1,dark); R(6,8,1,1,dark);
+  // Membrane (Webbing hanging down)
+  R(1,3,1,3,membrane); R(2,2,2,3,membrane); // Left
+  R(10,3,1,3,membrane); R(8,2,2,3,membrane); // Right
+  
+  // Body (Small, centered, furry)
+  R(5,3,2,3,dark);     // Torso
+  R(5,2,2,1,dark);     // Head
+  R(4,1,1,2,dark); R(7,1,1,2,dark); // Large pointed ears
+  R(5,3,1,1,'#facc15'); R(6,3,1,1,'#facc15'); // Glowing yellow eyes
+  
+  // Feet (Hanging)
+  R(5,6,1,1,'#78350f'); R(6,6,1,1,'#78350f');
 }
 
 function drawSpiderPixel(ctx, x, y, tile){
-  // Arachnophobia Mode Override
-  if (window._arachnophobiaMode) {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x, y, tile, tile);
-    
-    ctx.fillStyle = '#000000';
-    ctx.font = 'bold ' + Math.floor(tile/3.5) + 'px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('SPIDER', x + tile/2, y + tile/2);
-    return;
+  // 1. Arachnophobia Mode (Centered Text)
+  if (window._arachnophobiaMode) { 
+    ctx.fillStyle = '#fff'; 
+    ctx.fillRect(x, y, tile, tile); 
+    ctx.fillStyle = '#000'; 
+    ctx.font = 'bold ' + (tile/3.5) + 'px sans-serif'; 
+    ctx.textAlign = 'center'; 
+    ctx.textBaseline = 'middle'; 
+    ctx.fillText('SPIDER', x + tile/2, y + tile/2); 
+    return; 
   }
 
-  const { s, R } = gridN(ctx, x, y, tile, 12);
-  const dark = '#0b141d', body = '#27272a', leg = '#3f3f46', eye = '#ef4444', mark = '#ef4444';
+  const { R } = gridN(ctx, x, y, tile, 12);
+  // Color Palette - Legs are now pure BLACK (#000000)
+  const leg='#000000', body='#1e293b', ab='#020617', shine='#334155', red='#ef4444';
 
-  // Legs (8 total, 4 per side)
-  // Left legs
-  R(1,3,1,1,leg); R(2,4,1,1,leg); R(3,5,1,1,leg);
-  R(0,6,2,1,leg); R(2,6,1,1,leg);
-  R(0,8,2,1,leg); R(2,7,1,1,leg);
-  R(1,10,1,1,leg); R(2,9,1,1,leg); R(3,8,1,1,leg);
-
-  // Right legs (mirror)
-  R(10,3,1,1,leg); R(9,4,1,1,leg); R(8,5,1,1,leg);
-  R(10,6,2,1,leg); R(9,6,1,1,leg);
-  R(10,8,2,1,leg); R(9,7,1,1,leg);
-  R(10,10,1,1,leg); R(9,9,1,1,leg); R(8,8,1,1,leg);
-
-  // Abdomen (rear)
-  R(4,6,4,4,body);
-  // Red hourglass/mark
-  R(5,7,2,2,mark);
-
-  // Cephalothorax (head)
-  R(5,4,2,2,body);
+  // --- LEGS (All set to 'leg' color) ---
   
-  // Eyes
-  R(5,4,1,1,eye); R(6,4,1,1,eye);
+  // Front Legs (Reaching forward)
+  R(1,4,1,1,leg); R(2,3,1,1,leg); R(3,4,1,1,leg); // Front-Left
+  R(10,4,1,1,leg); R(9,3,1,1,leg); R(8,4,1,1,leg); // Front-Right
+  
+  // Mid Legs (Sprawled wide)
+  R(0,7,1,1,leg); R(1,6,1,1,leg); R(3,6,1,1,leg); // Mid-Left
+  R(11,7,1,1,leg); R(10,6,1,1,leg); R(8,6,1,1,leg); // Mid-Right
+
+  // Back Legs (Dragging behind)
+  R(2,9,1,1,leg); R(3,8,1,1,leg); // Back-Left
+  R(9,9,1,1,leg); R(8,8,1,1,leg); // Back-Right
+
+  // --- BODY ---
+  
+  // Abdomen (Large, Bulbous)
+  R(4,5,4,5,ab);        // Main dark mass
+  R(3,6,1,3,ab); R(8,6,1,3,ab); // Rounding sides
+  R(4,6,1,2,shine);     // Wet Highlight
+  
+  // Hourglass
+  R(5,7,2,2,red);       
+  R(5,7,1,1,'#fca5a5'); // Glint
+
+  // Cephalothorax (Head)
+  R(5,4,2,2,body); 
+  R(4,5,1,1,red); R(7,5,1,1,red); // Fangs
+  R(5,4,2,1,red); // Eyes
 }
 
 // Updated drawRatPixel (original lines ~4358–4370) – added outline pixels for body and tail
 function drawRatPixel(ctx, x, y, tile){
-  const { s, R } = gridN(ctx, x, y, tile, 12);
-  const fur = '#6b5444', shade = '#4b382c', ear = '#e7b4b4', nose = '#cc6b6b', eye = '#0b141d', tail = '#c99586';
-  const dark = '#0b141d';
-
-  // body (brown fur) and outline on edges
-  R(2,7,9,3,fur); R(9,7,2,3,shade);
-  R(0,7,1,1,dark); R(11,7,1,1,dark);
-
-  // head and ear
-  R(1,6,1,1,ear);
-  R(1,7,2,2,fur);
-  R(0,6,1,1,dark); R(2,6,1,1,dark); // outline around ear
-  R(0,7,1,1,dark); // left side outline at head
-
-  // face (eye and nose) with outline
-  R(2,7,1,1,eye); R(1,8,1,1,nose);
-  R(0,8,1,1,dark); R(11,8,1,1,dark);
-  R(1,9,1,1,dark); R(11,9,1,1,dark);
-
-  // tail (extends to right edge) with corner outlines
-  R(10,7,1,1,tail); R(10,8,1,1,tail);
-  R(9,9,1,1,tail); R(8,10,2,1,tail);
-  R(7,10,1,1,dark); R(10,10,1,1,dark);
+  const { R } = gridN(ctx, x, y, tile, 12);
+  const fur='#5d4037', furL='#8d6e63', skin='#ffab91', dark='#0f172a';
+  // Silhouette / Outline
+  R(1,6,3,1,dark); R(0,7,1,2,dark); R(1,9,2,1,dark); // Head outline
+  R(3,5,6,1,dark); R(9,6,2,1,dark); // Back outline
+  R(11,7,1,2,dark); R(3,10,8,1,dark); // Rump/Belly outline
+  // Body Gradient
+  R(2,6,7,4,fur); R(3,5,5,1,fur);
+  R(4,6,4,1,furL); // Top highlight
+  // Head Details
+  R(1,7,2,2,furL); 
+  R(0,8,1,1,skin); // Nose
+  R(2,5,2,2,skin); // Big Ear
+  R(2,7,1,1,'#ef4444'); // Red Eye
+  // Tail (Sinuous curve)
+  R(11,8,1,1,skin); R(10,9,1,1,skin); R(9,9,1,1,skin); R(8,10,1,1,skin);
+  // Paws
+  R(3,11,2,1,skin); R(8,11,2,1,skin);
 }
 
 // Updated drawGoblinPixel (original lines ~4373–4388) – added outline pixels for head/ears
 function drawGoblinPixel(ctx, x, y, tile){
-  const { s, R } = gridN(ctx, x, y, tile, 12);
-  const skin = '#2f7e37', shade = '#205a26', eye = '#e8f0ff', pupil = '#0b141d', tooth = '#f4f4f4';
-  const dark = '#0b141d';
-
-  // big head (green) with black outline
-  R(2,2,8,8,skin);
-  R(1,2,1,1,dark); R(10,2,1,1,dark); // outline left/top & right/top
-  R(1,3,1,1,dark); R(10,3,1,1,dark);
-  R(1,4,1,1,dark); R(10,4,1,1,dark);
-
-  // ears (same green color) and outline to border
-  R(1,5,1,3,skin); R(10,5,1,3,skin);
-  R(0,5,1,1,dark); R(11,5,1,1,dark); // outline at ear top
-  R(0,6,1,1,dark); R(11,6,1,1,dark); // outline at ear middle
-  R(0,7,1,1,dark); R(11,7,1,1,dark); // outline at ear bottom
-
-  // brow/jaw shadow stripe
-  R(2,2,8,1,shade); R(2,9,8,1,shade);
-
-  // eyes and pupils
-  R(3,6,2,1,eye); R(7,6,2,1,eye);
-  R(4,6,1,1,pupil); R(8,6,1,1,pupil);
-
-  // tooth (white)
-  R(6,10,1,1,tooth);
+  const { R } = gridN(ctx, x, y, tile, 12);
+  const skin='#15803d', skinL='#4ade80', leather='#854d0e', metal='#cbd5e1';
+  // Head (Big w/ Ears)
+  R(3,2,6,5,skin);
+  R(1,3,2,1,skin); R(9,3,2,1,skin); // Ears
+  R(4,3,1,1,'#ef4444'); R(7,3,1,1,'#ef4444'); // Eyes
+  R(5,4,2,2,skinL); // Nose Highlight
+  // Body (Tunics)
+  R(4,7,4,4,leather); R(4,8,4,1,'#a16207'); // Belt
+  // Arms
+  R(2,8,2,2,skin); R(8,8,2,2,skin);
+  // Weapon (Rusty Shiv)
+  R(9,6,1,3,metal); R(8,9,3,1,'#78350f'); // Handle
+  // Feet
+  R(3,11,2,1,'#5c4033'); R(7,11,2,1,'#5c4033');
 }
 
 function drawSlimePixel(ctx, x, y, tile){
-  const { s, R } = gridN(ctx, x, y, tile, 12);
-  const body='#3fcf7a', body2='#2ea664', shine='#9ff3c9', dark='#0b141d';
-
-  // big blob touching sides
-  R(1,8,10,3,body);
-  R(2,5,8,3,body);
-  R(1,10,10,1,body2);
-
-  // face
-  R(4,8,1,1,dark); R(7,8,1,1,dark);
-  R(5,9,2,1,dark);
-
-  // gloss
-  R(3,6,3,1,shine); R(4,7,2,1,shine);
+  const { R } = gridN(ctx, x, y, tile, 12);
+  const gel='#22c55e', gelD='#14532d', shine='#86efac', core='#15803d';
+  // Outline (Dark Green)
+  R(2,5,8,6,gelD); R(3,4,6,1,gelD); R(1,9,10,2,gelD);
+  // Main Body
+  R(3,5,6,5,gel); R(2,9,8,2,gel);
+  // Inner Core (Floating Skull/Bone hint)
+  R(5,6,2,2,core);
+  // Specular Highlights (Jelly look)
+  R(3,5,2,1,shine); R(3,6,1,2,shine);
+  R(8,5,1,1,shine);
+  // Drips
+  R(2,11,1,1,gel); R(9,11,1,1,gel);
 }
 
 function drawMadKingPixel(ctx, x, y, tile){
@@ -6501,38 +6487,43 @@ function drawReaperPixel(ctx, x, y, tile){
 }
 
 function drawSkeletonPixel(ctx, x, y, tile){
-  const { s, R } = gridN(ctx, x, y, tile, 12);
-  const bone='#e6e6e6', dark='#0b141d';
-
-  // skull big
-  R(2,1,8,4,bone);
-  R(3,2,2,1,dark); R(7,2,2,1,dark); // eyes
-  R(5,4,2,1,dark);                   // teeth slit
-
-  // ribs & spine occupying width
-  R(3,7,6,1,bone); R(3,8,6,1,bone);
-  R(6,7,1,3,bone);
-
-  // arms to edge
-  R(0,7,3,1,bone); R(9,7,3,1,bone);
-
-  // pelvis/legs
-  R(5,10,2,1,bone);
-  R(4,11,1,1,bone); R(7,11,1,1,bone);
+  const { R } = gridN(ctx, x, y, tile, 12);
+  const bone='#f1f5f9', shadow='#94a3b8', dark='#0f172a';
+  // Skull
+  R(4,1,4,3,bone); R(4,2,4,1,bone); // Forehead
+  R(4,2,1,1,dark); R(7,2,1,1,dark); // Eyes
+  R(5,3,2,1,dark); // Nose hole
+  // Ribcage (Detailed)
+  R(3,5,6,1,bone); R(4,5,4,1,shadow); // Top Rib
+  R(3,6,6,1,dark); // Gap
+  R(4,7,4,1,bone); // Bottom Rib
+  R(5,8,2,1,bone); // Spine
+  // Pelvis
+  R(4,9,4,1,bone);
+  // Limbs
+  R(2,5,1,3,bone); R(9,5,1,3,bone); // Arms
+  R(4,10,1,2,bone); R(7,10,1,2,bone); // Legs
+  // Weapon (Scimitar)
+  R(10,4,1,4,'#cbd5e1'); R(10,8,1,1,'#475569'); R(9,7,1,1,'#cbd5e1');
 }
 
 function drawMagePixel(ctx, x, y, tile){
-  const { s, R } = gridN(ctx, x, y, tile, 12);
-  const hood='#2f1b4d', robe='#5f2e86', sash='#8b55c3', face='#e8d9c0', staff='#a5793f', gem='#66d0ff', dark='#0b141d';
-
-  // hood fills upper
-  R(2,1,8,3,hood); R(4,2,4,1,dark); R(5,2,2,1,face);
-  // robe wide
-  R(2,4,8,7,robe); R(2,8,8,1,sash);
-  // staff to full height on right
-  R(10,1,1,10,staff); R(10,1,1,1,gem);
-  // glow hint
-  ctx.save(); ctx.globalAlpha=0.7; R(9,1,1,1,gem); ctx.restore();
+  const { R } = gridN(ctx, x, y, tile, 12);
+  const robe='#4c1d95', trim='#c084fc', skin='#fca5a5', dark='#0f172a';
+  // Robe Body
+  R(3,4,6,7,robe);
+  R(5,4,2,8,trim); // Central sash
+  // Hood (Dark interior)
+  R(3,1,6,3,robe);
+  R(4,2,4,2,dark); // Face shadow
+  R(5,3,1,1,'#fbbf24'); R(7,3,1,1,'#fbbf24'); // Glowing Eyes
+  // Staff (Right Hand)
+  R(9,2,1,10,'#78350f'); // Wood
+  R(8,1,3,2,'#facc15'); // Gold Head
+  R(9,1,1,1,'#ef4444'); // Ruby Gem
+  // Magic (Left Hand)
+  R(1,5,2,1,skin);
+  R(1,3,1,2,'#38bdf8'); R(2,4,1,1,'#38bdf8'); // Sparkles
 }
 
 
@@ -6673,118 +6664,206 @@ function drawPickupPixel(ctx, item, px, py, tile){
   const gold='#fbbf24', goldD='#b45309', red='#ef4444', blue='#3b82f6';
   const green='#22c55e', gem='#a5f3fc', dark='#0f172a', fuse='#fca5a5';
 
-  if (kind === 'gold') {
-    P(2,9,gold,3,2); P(5,8,gold,3,3); P(8,9,gold,2,2); // Pile
-    P(3,9,'#fff',1,1); P(6,9,'#fff',1,1); // Sparkles
-    return;
-  }
+      if (kind === 'weapon') {
+        const t = pl.type || 'one';
+        const n = (pl.name||'').toLowerCase();
+        
+        // High Detail Palette
+        const wD='#3f2e22', wM='#8d6e63', wL='#a18e84'; // Wood
+        const sD='#334155', sM='#94a3b8', sL='#f1f5f9'; // Steel
+        const gD='#b45309', gM='#f59e0b', gL='#fcd34d'; // Gold
+        const bD='#1e3a8a'; // Blue (for Key handle)
+
+        if(n.includes('key of destiny')) { 
+           // Kingdom Key (Vertical Alignment)
+           
+           // 1. The Guard (Gold Box Frame)
+           P(3,8,gL,6,1);  // Top bar of guard
+           P(4,11,gL,4,1); // Bottom bar of guard
+           P(3,9,gL,1,2);  // Left vertical
+           P(8,9,gL,1,2);  // Right vertical
+           
+           // 2. The Grip (Blue)
+           P(4,9,'#2563eb',4,2); // Royal Blue handle inside guard
+           
+           // 3. The Shaft (Silver)
+           P(5,2,sL,2,6); // Main silver rod
+           P(6,2,sM,1,6); // Rod shading
+           
+           // 4. The Teeth (Crown Shape)
+           P(7,2,sL,3,2); // The protruding bit
+           P(8,2,sD,1,2); // The negative space (notch) defining the crown teeth
+           
+           // 5. Keychain
+           P(5,11,sM,2,1); // Silver link at bottom
+        }
+        else if(t==='axe'){
+           P(5,4,wD,2,7); P(6,4,wM,1,7); // Handle with grain
+           P(5,11,sD,2,1); // Pommel
+           // Detailed Head
+           P(3,2,sD,6,3); // Dark center
+           P(2,2,sL,1,5); P(9,2,sL,1,5); // Sharp Edges
+           P(3,2,sM,1,2); P(8,2,sM,1,2); // Bevels
+           P(4,3,sL,1,1); P(7,3,sL,1,1); // Glint
+        } 
+        else if(t==='spear'){
+           // Long Pole with Grip
+           P(2,10,wD,2,2); P(4,8,wM,2,2); P(6,6,wD,2,2); P(8,4,wM,2,2);
+           P(9,3,gD,2,2); // Mounting
+           P(10,1,sL,2,3); // Spearhead main
+           P(11,2,sM,1,2); // Spearhead shadow
+           P(12,0,sL,1,1); // Tip sharpness
+        } 
+        else if(t==='two'){ // Claymore
+           P(4,10,wD,2,2); // Pommel
+           P(5,8,wM,2,2); // Grip
+           // V-Shape Guard
+           P(3,7,gD,6,1); P(2,6,gD,1,1); P(9,6,gD,1,1);
+           // Wide Blade
+           P(5,1,sM,2,6); // Mid ridge
+           P(4,1,sL,1,6); P(7,1,sL,1,6); // Edges
+           P(5,2,sD,2,2); // Fuller (groove)
+        } 
+        else if(t==='staff'){
+           P(6,4,wD,2,8); P(7,4,wM,1,8); // Staff shaft
+           // Colors
+           let gem = '#d946ef'; // Pink
+           let head = gD; // Gold mount
+           if (n.includes('fire')) { gem='#ef4444'; head='#7f1d1d'; }
+           else if (n.includes('ice')) { gem='#06b6d4'; head='#164e63'; }
+           else if (n.includes('lightning')) { gem='#facc15'; head='#854d0e'; }
+           else if (n.includes('poison')) { gem='#22c55e'; head='#14532d'; }
+           else if (n.includes('void')) { gem='#7e22ce'; head='#3b0764'; }
+           else if (n.includes('wind')) { gem='#f8fafc'; head='#94a3b8'; } // White/Silver
+           else if (n.includes('earth')) { gem='#92400e'; head='#451a03'; } // Brown/Dark Wood
+
+           // Ornate Head
+           P(5,1,head,4,3); // Casing
+           P(6,2,gem,2,2); // Big Gem
+           P(5,0,gem,1,1); P(8,0,gem,1,1); // Floating bits
+           P(4,2,head,1,1); P(9,2,head,1,1); // Side prongs
+        } 
+        else if(t==='hand'){ // Claws
+           // Grip
+           P(2,8,wD,8,2); P(3,8,wL,6,1);
+           // Triple Blades
+           P(2,4,sL,2,4); P(5,3,sL,2,5); P(8,4,sL,2,4); 
+           P(3,4,sM,1,4); P(6,3,sM,1,5); P(9,4,sM,1,4); // Blade shadows
+        } 
+        else { // Shortsword
+           P(2,9,wD,2,2); // Pommel
+           P(3,8,wM,2,1); // Grip
+           P(3,7,gM,4,1); // Guard
+           P(2,7,gD,1,1); P(7,7,gD,1,1); // Guard ends
+           P(4,6,sM,2,1); // Base
+           P(4,2,sL,2,4); // Blade
+           P(5,2,sD,1,4); // Ridge
+        }
+        return;
+      }
+
+      if (kind === 'gold') {
+          P(2,9,gold,3,2);
+          P(5,8,gold,3,3);
+          P(8,9,gold,2,2);
+          // Pile
+          P(3,9,'#fff',1,1);
+          P(6,9,'#fff',1,1); // Sparkles
+          return;
+      }
   
-  if (kind === 'potion') { // Red
-    P(5,2,'#fff',2,1); P(5,3,'#fff',2,2); // Cork/Neck
-    P(3,5,'#fff',6,6); P(4,6,red,4,4); // Glass/Liquid
-    P(5,6,'#fff',1,1); return;
-  }
-  if (kind === 'tonic') { // Blue
-    P(5,2,'#fff',2,1); P(5,3,'#fff',2,2); 
-    P(3,5,'#fff',6,6); P(4,6,blue,4,4); 
-    P(5,6,'#fff',1,1); return;
-  }
-  if (kind === 'antidote') { // Green
-    P(5,2,'#fff',2,1); P(5,3,'#fff',2,2); 
-    P(3,5,'#fff',6,6); P(4,6,green,4,4); 
-    P(5,6,'#fff',1,1); return;
-  }
+// Enhanced Palette for Loot
+    const sD='#334155', sM='#94a3b8', sL='#f1f5f9'; // Steel
+    const gD='#b45309', gM='#f59e0b', gL='#fcd34d'; // Gold
+    const pD='#4a0404', pL='#f87171'; // Potion Shading
 
-  if (kind === 'bomb') {
-    P(3,4,dark,6,6); // Body
-    P(4,3,iron,4,1); // Cap
-    P(6,1,fuse,1,2); // Fuse
-    P(6,0,red,1,1); // Spark
-    P(4,5,'#334155',2,2); // Shine
-    return;
-  }
-
-  if (kind === 'warp') {
-    P(3,3,gem,6,6); // Stone
-    P(4,4,'#fff',4,4); // Inner Glow
-    return;
-  }
-
-  if (kind === 'lockpicks') {
-    P(3,3,steel,1,6); P(3,9,steel,2,1); // Pick 1
-    P(6,2,steel,1,6); P(6,8,steel,2,1); // Pick 2
-    return;
-  }
-
-  if (kind === 'arrows') {
-    P(4,2,wood,4,8); // Quiver
-    P(4,2,dark,4,1); // Rim
-    P(5,0,'#fff',1,2); P(7,0,'#fff',1,2); // Fletching
-    return;
-  }
-
-  if (kind === 'spell') {
-    P(2,2,'#fef3c7',8,8); // Paper
-    P(3,3,dark,6,1); P(3,5,dark,5,1); P(3,7,dark,6,1); // Text
-    P(6,8,red,2,2); // Seal
-    return;
-  }
-
-  if (kind === 'shield') {
-    P(2,2,iron,8,8); // Base
-    P(3,3,steel,6,6); // Inner
-    P(5,5,gold,2,2); // Boss
-    return;
-  }
-
-  if (kind === 'trinket') {
-    if ((name||'').includes('Ring')) {
-      P(3,3,gold,6,6); P(4,4,dark,4,4); // Ring
-      P(5,2,red,2,2); // Gem
-    } else { // Amulet
-      P(5,1,'#fff',2,4); // String
-      P(4,5,gold,4,4); // Base
-      P(5,6,blue,2,2); // Gem
-    }
-    return;
-  }
-
-  if (kind === 'weapon') {
-    if (name.includes('Bow')) {
-      P(2,2,wood,2,8); P(8,2,wood,2,8); // Limbs
-      P(4,5,wood,4,2); // Handle
-      P(2,2,'#fff',6,1); P(2,9,'#fff',6,1); // String
+    if (kind === 'potion' || kind === 'tonic' || kind === 'antidote') {
+      const c = kind==='potion'?[red,pD,pL]:kind==='tonic'?[blue,'#1e3a8a','#60a5fa']:[green,'#064e3b','#4ade80'];
+      P(4,4,dark,4,8); P(3,5,dark,6,6); P(2,6,dark,8,4); // Rounder Bottle silhouette
+      P(4,5,c[1],4,6); P(3,6,c[1],6,4); // Liquid base shadow
+      P(4,6,c[0],3,4); P(3,7,c[0],5,2); // Liquid core
+      P(5,2,woodD,2,2); P(5,3,dark,2,1); // Cork & Rim
+      P(4,6,c[2],1,1); P(7,7,'#fff',1,1); // Refraction & Glint
       return;
     }
-    if (name.includes('Staff') || name.includes('Wand')) {
-      P(5,2,wood,2,9); // Shaft
-      P(4,1,gold,4,3); // Head
-      const color = name.includes('Fire')?red : name.includes('Ice')?gem : blue;
-      P(5,2,color,2,1); // Gem
+
+    if (kind === 'bomb') {
+      P(3,4,dark,6,7); P(2,5,dark,8,5); P(4,3,dark,4,2); // Round Iron body
+      P(4,5,iron,4,5); P(3,6,iron,6,3); // Metal texture
+      P(5,1,fuse,1,3); P(6,0,gL,1,1); P(4,1,gM,1,1); // Burning Fuse
+      P(4,6,sL,1,1); P(7,6,sM,1,1); // Specular metal highlights
       return;
     }
-    if (name.includes('Axe')) {
-      P(5,3,wood,2,8); // Handle
-      P(2,2,steel,3,4); P(7,2,steel,3,4); // Blades
+
+    if (kind === 'warp') {
+      P(4,1,dark,4,10); P(2,3,dark,8,6); // Jagged base
+      P(4,2,gem,4,8); P(3,4,gem,6,4); // Glowing body
+      P(5,3,'#fff',2,6); P(4,5,'#fff',4,2); // Core energy pulse
+      P(2,2,gem,1,1); P(9,9,gem,1,1); P(9,2,gem,1,1); // Floating particulates
       return;
     }
-    if (name.includes('Spear') || name.includes('Halberd')) {
-      // Diagonal Shaft
-      P(2,9,wood,2,2); P(4,7,wood,2,2); P(6,5,wood,2,2); P(8,3,wood,2,2);
-      P(9,1,steel,3,3); // Tip
+
+    if (kind === 'lockpicks') {
+      P(1,5,dark,10,3); P(2,6,iron,8,1); // Main leather roll
+      P(3,1,sM,1,5); P(3,1,sL,1,1); // Vertical pick 1 (hook)
+      P(5,2,sD,1,4); P(5,2,sM,1,1); // Vertical pick 2 (rake)
+      P(7,1,gM,1,5); // Tension tool (brass)
+      P(2,6,dark,1,1); P(9,6,dark,1,1); // Stitching detail
       return;
     }
-    if (name.includes('Hammer')) {
-      P(5,3,wood,2,8); // Handle
-      P(3,1,iron,6,3); // Head
+
+    if (kind === 'arrows') {
+      P(5,0,woodD,1,11); P(6,1,wood,1,9); // Shaded dual-tone shaft
+      P(4,0,sD,3,2); P(5,-1,sL,1,3); // Sharp Steel Broadhead
+      P(4,9,red,3,3); P(5,10,pD,1,2); // Fletching feathers with spine
       return;
     }
-    // Default Sword
-    P(5,2,steel,2,7); // Blade
-    P(3,9,gold,6,1); // Guard
-    P(5,10,wood,2,2); // Hilt
-    return;
-  }
+
+   if (kind === 'spell') {
+      // Wooden Spindles (Top and Bottom)
+      P(2,1,woodD,8,2); P(2,9,woodD,8,2); // Dark wood base
+      P(1,1,wood,1,2); P(10,1,wood,1,2);  // Left/Right spindle caps top
+      P(1,9,wood,1,2); P(10,9,wood,1,2); // Left/Right spindle caps bottom
+      
+      // Parchment Body (Rolled Look)
+      P(3,2,dark,6,8);         // Background silhouette
+      P(3,3,'#fef3c7',6,6);    // Main paper surface
+      P(3,3,'#f5e6ab',6,1);    // Top shadow under spindle
+      P(3,8,'#d4c38d',6,1);    // Bottom shadow near roll
+      
+      // Detailed Ink and Seal
+      P(4,5,dark,4,1); P(4,7,dark,3,1); // Runic scribbles
+      P(7,6,red,2,2);          // Wax Seal
+      P(8,6,'#f87171',1,1);    // Seal highlight
+      
+      // Lighting
+      P(4,3,'#fff',1,1);       // Paper glint
+      return;
+    }
+
+    if (kind === 'shield') {
+      // Rounded Buckler Silhouette
+      P(3,1,dark,6,10); P(2,2,dark,8,8); P(1,3,dark,10,6); 
+      // Beveled Rim
+      P(3,2,iron,6,8); P(2,3,iron,8,6);
+      // Inner Face
+      P(4,3,steel,4,6); P(3,4,steel,6,4);
+      // Golden Center Boss (with highlight)
+      P(5,5,gM,2,2); P(5,5,gL,1,1);
+      // Rim Studs/Rivets
+      P(3,3,sL,1,1); P(8,3,sL,1,1); P(3,8,sL,1,1); P(8,8,sL,1,1);
+      return;
+    }
+
+    if (kind === 'trinket') {
+      P(3,3,gD,6,6); P(4,4,gM,4,4); // Golden locket frame
+      P(5,5,gem,2,2); P(5,5,'#fff',1,1); // Faceted gemstone center
+      P(4,3,gL,3,1); P(3,4,gL,1,3); // Polished rim glint
+      P(5,1,sM,2,2); // Silver chain loop
+      return;
+    }
+
+  
 
   // Fallback Box
   P(2,3,wood,8,6);
@@ -9847,9 +9926,8 @@ function tryMove(dx,dy){
 if (isEffectActive('MiasmaChamber')){ // FIX: Use isEffectActive
   state._miasmaSteps = (state._miasmaSteps|0) + 1;
   if (state._miasmaSteps % 3 === 0){
-    // Scale: 1 dmg base + 1 per 15 floors
-    const damage = 1 + Math.floor(state.floor/15);
-
+    // Scale: 1 dmg base + 1 per 10 floors (Increased scaling)
+    const damage = 1 + Math.floor(state.floor/5);
     // Player Damage
     const p = damageAfterDR(damage);
     state.player.hp = clamp(state.player.hp - p, 0, state.player.hpMax);
@@ -16980,12 +17058,108 @@ if (restartBtn) {
       });
     }
 
-    const spawnBtn = document.getElementById('dbgSpawnShield');
-if (spawnBtn) spawnBtn.addEventListener('click', ()=>{
-  // ensure pickup dict exists
-  state.pickups ||= {};
+// --- NEW: Spawn All Floor Loot (Potions, Bombs, etc.) ---
+const lootBtn = document.getElementById('dbgSpawnLoot');
+if (lootBtn) lootBtn.addEventListener('click', () => {
+  const items = [
+    { kind: 'potion', payload: 1 },
+    { kind: 'tonic', payload: 1 },
+    { kind: 'antidote', payload: 1 },
+    { kind: 'bomb', payload: 1 },
+    { kind: 'warp', payload: 1 },
+    { kind: 'lockpicks', payload: 3 },
+    { kind: 'arrows', payload: 10 },
+    { kind: 'spell', payload: { name: 'Spark', cost: 1, tier: 1 } },
+    { kind: 'shield', payload: 'Kite Shield' },
+    { kind: 'trinket', payload: 'Ring of Haste' }
+  ];
+  let idx = 0;
+  // Spiral out 3 tiles from player to drop items
+  for (let r = 1; r <= 3; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (idx >= items.length) break;
+        const tx = state.player.x + dx, ty = state.player.y + dy;
+        if (!inBounds(tx, ty) || state.tiles[ty][tx] !== 1 || enemyAt(tx, ty) || state.pickups[key(tx, ty)]) continue;
+        state.tiles[ty][tx] = 5;
+        state.pickups[key(tx, ty)] = items[idx++];
+      }
+    }
+  }
+  if (typeof draw === 'function') draw();
+  hideDebug();
+  log('[debug] Spawned detailed floor loot around you.');
+});
 
-  const px = state.player.x;
+// --- NEW: Spawn New Enemies ---
+  const enemyBtn = document.getElementById('dbgSpawnEnemies');
+  if (enemyBtn) enemyBtn.addEventListener('click', () => {
+    const types = ['Rat', 'Bat', 'Spider', 'Goblin', 'Slime', 'Skeleton', 'Mage'];
+    
+    // Spawn them in a row 2 tiles below the player
+    types.forEach((t, i) => {
+        const tx = state.player.x + (i - 3); // Centered horizontally
+        const ty = state.player.y + 2;       // 2 tiles down
+        
+        if (inBounds(tx, ty) && state.tiles[ty][tx] === 1 && !enemyAt(tx, ty)) {
+            state.enemies.push({
+                type: t,
+                x: tx, y: ty,
+                hp: 20,              // Dummy HP
+                atk: [1, 2],         // Dummy Atk
+                xp: 10,
+                size: 1,
+                sleep: true          // Spawn asleep so they don't instantly mob you
+            });
+        }
+    });
+
+    if (typeof draw === 'function') draw();
+    hideDebug();
+    log('[debug] Spawned new enemies below you.');
+  });
+
+
+    // --- NEW: Spawn All Weapons ---
+  const allWepBtn = document.getElementById('dbgSpawnAllWeapons');
+  if (allWepBtn) allWepBtn.addEventListener('click', ()=>{
+      const pool = [
+        {name:'Shortsword', type:'one'}, {name:'Claymore', type:'two'},
+        {name:'Spear', type:'spear'}, {name:'Axe', type:'axe'},
+        {name:'Knuckle Duster', type:'hand'}, {name:'Warhammer', type:'two'},
+        {name:'Battleaxe', type:'axe'}, {name:'Halberd', type:'spear'},
+        {name:'Claws', type:'hand'}, {name:'Fire Staff', type:'staff'},
+        {name:'Ice Staff', type:'staff'}, {name:'Lightning Staff', type:'staff'},
+        {name:'Wind Staff', type:'staff'}, {name:'Earth Staff', type:'staff'},
+        {name:'Key of Destiny', type:'one'}
+      ];
+      let idx = 0;
+      // Spiral out from player to find empty spots
+      for (let r=1; r<8; r++) {
+          for (let y = state.player.y - r; y <= state.player.y + r; y++) {
+              for (let x = state.player.x - r; x <= state.player.x + r; x++) {
+                  if (idx >= pool.length) break;
+                  if (!inBounds(x,y)) continue;
+                  if (state.tiles[y][x] !== 1) continue; // Floor only
+                  const k = key(x,y);
+                  if (state.pickups[k] || enemyAt(x,y)) continue;
+
+                  state.tiles[y][x] = 5;
+                  state.pickups[k] = { kind: 'weapon', payload: { ...pool[idx], min:1, max:1 } };
+                  idx++;
+              }
+          }
+      }
+      draw?.();
+      hideDebug?.();
+      log('[debug] Spawned all weapons.');
+  });
+
+  const spawnBtn = document.getElementById('dbgSpawnShield');
+  if (spawnBtn) spawnBtn.addEventListener('click', ()=>{
+    // ensure pickup dict exists
+    state.pickups ||= {};
+    const px = state.player.x;
   const py = state.player.y + 1;
 
   if (!inBounds(px, py)) { log('[debug] Cannot spawn shield: out of bounds.'); return; }
