@@ -10205,15 +10205,20 @@ enemyStep(); draw?.(); updateBars(); updateEquipUI();
         };
 
         // 4. Generate Banner
-        if (active.length === 1) {
+          if (active.length === 1) {
             // Single Effect: Show full flavor text
             const info = TEXT_MAP[active[0]];
-            if (info) showBanner(info.long, 4000);
-        } else if (active.length > 1) {
+            if (info) {
+                showBanner(info.long, 4000);
+                log(info.long); // <--- ADDED: Log to history
+            }
+          } else if (active.length > 1) {
             // Combo Effect: Join short names (e.g. "CURSES: Miasma + Shadows + Fatigue")
             const names = active.map(e => TEXT_MAP[e] ? TEXT_MAP[e].short : e);
-            showBanner(`CURSES: ${names.join(" + ")}`, 5000);
-        }
+            const msg = `CURSES: ${names.join(" + ")}`;
+            showBanner(msg, 5000);
+            log(msg); // <--- ADDED: Log to history
+          }
         
         // --- END: floor-effect popup banner ---
 
