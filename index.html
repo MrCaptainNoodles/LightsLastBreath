@@ -3128,6 +3128,16 @@ const SAVE_KEY = 'dc_save_v1';
 window.saveRun = function(){
   if(state.gameOver) return;
   const copy = { ...state };
+
+  // --- FIX: Freeze Timer for Save ---
+  // Store the exact total time played so far into the save file
+  // This prevents "losing" the time spent in the current session
+  if (state.run && typeof currentRunMs === 'function') {
+      copy.run.elapsedMs = currentRunMs(); 
+      copy.run.startAt = 0; // Clear start time so it doesn't count time while saved
+  }
+  // ---------------------------------
+
   // Serialize Sets/Maps
   copy.seen = Array.from(state.seen||[]);
   copy.corridor = Array.from(state.corridor||[]);
@@ -3155,6 +3165,21 @@ window.loadRun = function(){
     if(d.redChests) d.redChests = new Map(d.redChests);
 
     Object.assign(state, d);
+    
+    // --- FIX: Resume Timer ---
+    // Set new start time to NOW, so the timer continues from the saved elapsedMs
+    if (state.run) {
+        state.run.startAt = Date.now();
+        state.run.endAt = 0;
+        // Restart the UI ticker
+        if (typeof __runTimerIvl !== 'undefined' && __runTimerIvl) clearInterval(__runTimerIvl);
+        if (typeof updateRunTimerNow === 'function') {
+            updateRunTimerNow();
+            // Assign to window to ensure global scope access if defined there
+            window.__runTimerIvl = setInterval(updateRunTimerNow, 100);
+        }
+    }
+    // -------------------------
     
     // --- FIX: Force Unlock Inputs & Visuals ---
     state._inputLocked = false;   
