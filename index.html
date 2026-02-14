@@ -4819,7 +4819,7 @@ while(propCount > 0 && propSafe < 1000){
   if (f <= 10) { // Sewers
     types = ['crate','barrel','rubble','slime puddle','pipe debris','rat nest','broken grate','toxic barrel'];
   } else if (f <= 20) { // Crypt
-    types = ['coffin','urn','bones','broken tomb','candle stand','gargoyle','spider web','skull pile'];
+    types = ['coffin','urn','bone','broken tomb','candle stand','gargoyle','spider web','skull pile'];
   } else if (f <= 30) { // Magma
     types = ['obsidian_shard','ash pile','magma rock','burnt cage','lava vent','iron chain','dragon bone'];
   } else if (f <= 40) { // Jungle/Ruins
@@ -6079,139 +6079,492 @@ function drawChestPixel(ctx, x, y, tile){
   R(6,6,1,1,lockC);
 }
 
-// --- NEW: Draw Scenery Props ---
 function drawPropPixel(ctx, type, px, py, tile){
   const { R } = gridN(ctx, px, py, tile, 12);
-  
-  if (type === 'crate') {
-    const wood = '#8b5a2b', dark = '#5c3a1e', nail = '#d7b46a';
-    R(1,2,10,9,wood);           // body
-    R(1,2,10,1,dark); R(1,10,10,1,dark); // top/bottom rim
-    R(1,2,1,9,dark);  R(10,2,1,9,dark);  // side rims
-    R(2,3,8,7,wood);            // inner
-    R(2,3,1,1,nail); R(9,3,1,1,nail); // nails
-    R(2,9,1,1,nail); R(9,9,1,1,nail);
-    // diagonal brace
-    R(3,4,1,1,dark); R(4,5,1,1,dark); R(5,6,2,1,dark); R(7,7,1,1,dark); R(8,8,1,1,dark);
-  } 
-  else if (type === 'barrel') {
-    const wood = '#a0522d', hoop = '#111827', top = '#6d3c1d';
-    R(2,3,8,8,wood);            // body
-    R(2,3,8,1,top);             // top lid
-    R(2,4,8,1,hoop);            // top hoop
-    R(2,9,8,1,hoop);            // bottom hoop
-    R(1,4,1,6,wood); R(10,4,1,6,wood); // bulge sides
-  }
-  else if (type === 'bones') {
-    const bone = '#e5e7eb', shadow = '#374151';
-    // skull
-    R(2,8,3,2,bone); R(2,9,1,1,shadow); R(4,9,1,1,shadow);
-    // rib
-    R(6,9,4,1,bone); R(7,8,1,2,bone);
-  }
-else if (type === 'rubble') {
-    const stone = '#6b7280', dust = '#9ca3af';
-    R(2,9,2,2,stone); R(5,10,1,1,dust); 
-    R(8,8,2,2,stone); R(9,7,1,1,dust);
-    R(4,5,1,1,dust);
-  }
-  // --- NEW: Pillar Visual ---
-else if (type === 'pillar') {
-    const marble = '#d1d5db', shadow = '#9ca3af', dark = '#4b5563';
-    // Tall vertical column
-    R(2,1,8,10,marble); R(3,1,1,10,shadow); R(9,1,1,10,shadow);
-    R(1,0,10,2,dark); R(1,10,10,2,dark);
-  }
-  // --- BIOME SPECIFIC PROPS ---
-  else if (['coffin','broken_tomb'].includes(type)) { // Crypt
-    R(3,2,6,8,'#4b5563'); R(4,3,4,6,'#1f2937'); // Stone box
-    if(type==='broken_tomb') R(3,5,6,1,'#000'); // Crack
-  }
-  else if (['urn','gold_vase'].includes(type)) { // Crypt/Gilded
-    const c = type==='gold_vase' ? '#fbbf24' : '#b45309';
-    R(4,7,4,4,c); R(3,5,6,2,c); R(4,4,4,1,c); // Pot shape
-  }
-  else if (['magma_rock','obsidian_shard'].includes(type)) { // Magma
-    R(2,8,8,3,'#1f2937'); R(3,7,2,2,'#1f2937');
-    if(type==='magma_rock') { R(4,9,1,1,'#ef4444'); R(7,9,1,1,'#f97316'); } // Glow
-  }
-  else if (['fern','vine_cluster'].includes(type)) { // Jungle
-    R(5,9,2,2,'#166534'); // Base
-    R(2,6,3,3,'#22c55e'); R(7,6,3,3,'#22c55e'); R(5,3,2,4,'#22c55e'); // Leaves
-  }
-else if (['crystal_shard','floating_rock'].includes(type)) { // Void
-    const c = type==='crystal_shard' ? '#a855f7' : '#4b5563';
-    R(5,4,2,6,c); R(4,6,1,2,c); R(7,6,1,2,c); // Spikey/Floaty
-  }
-  // --- NEW: Extended Prop Visuals ---
-  else if (type === 'rat_nest') { 
-    R(2,9,8,3,'#5c4033'); R(3,8,6,1,'#4a3728'); R(4,9,1,1,'#000'); // Messy pile
-  }
-  else if (type === 'broken_grate') {
-    R(2,2,8,8,'#374151'); R(3,3,6,6,'#111827'); // Frame + Hole
-    R(4,2,1,8,'#4b5563'); R(7,2,1,8,'#4b5563'); // Bars
-  }
-  else if (type === 'toxic_barrel') {
-    R(2,3,8,8,'#166534'); R(2,4,8,1,'#000'); R(2,9,8,1,'#000'); // Green barrel
-    R(5,5,2,2,'#a3e635'); // Ooze leak
-  }
-  else if (type === 'gargoyle') {
-    R(4,6,4,4,'#6b7280'); // Body
-    R(2,4,2,4,'#4b5563'); R(8,4,2,4,'#4b5563'); // Wings
-    R(5,5,1,1,'#ef4444'); R(6,5,1,1,'#ef4444'); // Eyes
-  }
-  else if (type === 'spider_web') {
-    ctx.globalAlpha = 0.4;
-    R(0,0,4,4,'#e5e7eb'); R(8,0,4,4,'#e5e7eb'); // Corners
+  const t = (type || '').toLowerCase(); // Safety check
+
+  // --- 1. LIQUIDS (Fix for Grey Squares) ---
+  if (t.includes('slime') || t.includes('puddle') || t.includes('acid')) {
+    ctx.save();
+    ctx.globalAlpha = 0.8; // Translucent
+    R(2,8,2,2,'#16a34a'); R(4,7,5,4,'#16a34a'); R(9,8,2,2,'#16a34a'); // Main pool
     ctx.globalAlpha = 1.0;
+    R(3,8,1,1,'#4ade80'); R(5,7,4,1,'#4ade80'); R(9,8,1,1,'#4ade80'); // Surface tension rim
+    R(6,5,1,1,'#dcfce7'); // Pop bubble
+    R(4,8,1,1,'#14532d'); R(7,9,1,1,'#14532d'); // Deep chunks
+    ctx.restore();
+    return;
   }
-  else if (type === 'skull_pile') {
-    R(4,9,4,3,'#e5e7eb'); R(2,10,3,2,'#d1d5db'); R(7,10,3,2,'#d1d5db'); // Pile
-    R(5,10,1,1,'#000'); R(7,10,1,1,'#000'); // Eyes
+  if (t.includes('blood')) {
+    R(3,8,6,3,'#991b1b'); R(2,9,2,1,'#991b1b'); // Dark red pool
+    R(4,8,1,1,'#ef4444'); R(7,9,1,1,'#ef4444'); // Fresh glint
+    return;
   }
-  else if (type === 'lava_vent') {
-    R(2,8,8,4,'#451a03'); // Mound
-    R(4,8,4,2,'#ef4444'); // Magma top
-    R(5,7,2,3,'#f97316'); // Plume
+
+  // --- 2. CONTAINERS ---
+  if (t === 'crate') {
+    const wD='#3e2723', wM='#5d4037', wL='#8d6e63';
+    R(1,1,10,10,wD); // Outline
+    R(2,2,8,8,wM);   // Base
+    R(2,2,8,1,wL); R(2,3,1,7,wL); // Top/Left Highlight
+    // Reinforced Corners & Center
+    R(2,2,1,2,wD); R(9,2,1,2,wD); R(2,8,1,2,wD); R(9,8,1,2,wD);
+    R(5,5,2,2,wD);
+    // Nails
+    R(2,2,1,1,'#d4d4d4'); R(9,2,1,1,'#d4d4d4'); R(9,9,1,1,'#d4d4d4');
+    return;
   }
-  else if (type === 'iron_chain') {
-    R(5,0,2,12,'#9ca3af'); // Vertical chain
+  if (t.includes('barrel')) {
+    const isTox = t.includes('toxic');
+    const b = isTox ? '#15803d' : '#854d0e';
+    const s = isTox ? '#14532d' : '#713f12';
+    // Rounded shape (cut corners)
+    R(2,2,8,8,b); R(1,3,1,6,b); R(10,3,1,6,b);
+    R(2,3,2,6,s); R(9,3,2,6,s); // Cylindrical shading
+    R(1,3,10,2,'#1f2937'); R(1,7,10,2,'#1f2937'); // Iron bands
+    if(isTox){
+       R(4,2,4,1,'#14532d'); // Open lid
+       R(5,5,2,4,'#bef264'); // Leak
+    } else {
+       R(5,5,2,2,'#2a1d17'); // Bung
+    }
+    return;
   }
-  else if (type === 'giant_flower') {
-    R(5,8,2,4,'#166534'); // Stalk
-    R(2,4,8,4,'#db2777'); // Petals
-    R(5,5,2,2,'#fdf4ff'); // Center
+
+  // --- 3. DUNGEON / STONE ---
+  if (t.includes('bone') || t.includes('skull')) {
+    const white='#f3f4f6', shadow='#d1d5db', dark='#171717';
+    
+    // A. Complex Skull Pile
+    if(t.includes('pile')){
+       R(1,9,10,3,'#78716c'); // Dark base
+       R(2,8,8,2,'#a8a29e');  // Mid-tone ash
+       R(4,5,4,3,white);      // Center Skull
+       R(4,6,1,1,dark); R(7,6,1,1,dark); // Eyes
+       R(5,7,2,1,white);      // Jaw
+       R(1,8,3,3,shadow); R(8,8,3,2,shadow); // Side skulls
+       R(2,4,1,3,white);      // Stray Rib vertical
+    } 
+    // B. Plain Scattered Bones (Ribcage + Limbs)
+    else if (t === 'bone') {
+       // Spine & Pelvis
+       R(6,3,1,6,white);      // Spine column
+       R(5,9,3,2,white);      // Pelvis bone
+       R(5,9,1,1,shadow); R(7,9,1,1,shadow); // Hip sockets
+
+       // Ribcage (Curved)
+       R(4,4,5,1,white);      // Top Rib
+       R(4,5,1,1,white); R(8,5,1,1,white); // Rib tips
+       R(4,6,5,1,white);      // Bottom Rib
+       R(5,5,3,1,dark);       // Hollow chest cavity
+
+       // Scattered Limbs
+       R(2,5,1,3,white);      // Left Arm
+       R(2,5,1,1,shadow);     // Shoulder joint
+       R(9,4,1,4,white);      // Right Femur lying nearby
+       R(9,8,1,1,shadow);     // Knee joint
+    }
+    // C. Single Skull (Fallback)
+    else {
+       R(4,7,4,3,white);      // Cranium
+       R(4,8,1,1,dark); R(7,8,1,1,dark); // Eyes
+       R(5,9,2,1,shadow);     // Teeth
+    }
+    return;
   }
-  else if (type === 'stone_idol') {
-    R(3,2,6,10,'#78716c'); // Head
-    R(4,4,1,1,'#000'); R(7,4,1,1,'#000'); // Eyes
-    R(4,8,4,1,'#000'); // Mouth
+  if (t === 'rubble' || t === 'debris') {
+    const sM='#57534e', sL='#a8a29e';
+    R(1,9,3,3,sM); R(1,9,2,1,sL); // Rock A
+    R(5,8,4,4,'#1c1917'); R(5,8,3,1,sM); R(6,9,1,1,sL); // Rock B (Darker)
+    R(9,10,2,2,sM); // Pebble
+    R(2,6,1,1,'#d6d3d1'); R(8,5,1,1,'#d6d3d1'); // Floating dust
+    return;
   }
-  else if (type === 'star_mote') {
-    R(5,5,2,2,'#f0abfc'); // Core
-    ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 10;
-    R(6,2,1,8,'#fae8ff'); R(2,6,8,1,'#fae8ff'); // Rays
-    ctx.shadowBlur = 0;
+  if (t === 'pillar') {
+    R(1,1,10,2,'#e5e7eb'); // Capital
+    R(2,3,8,1,'#9ca3af');  // Shadow
+    R(2,4,8,6,'#374151');  // Shaft Dark
+    R(3,4,1,6,'#e5e7eb'); R(5,4,1,6,'#e5e7eb'); R(7,4,1,6,'#e5e7eb'); // Fluting
+    R(1,10,10,2,'#9ca3af'); // Base
+    return;
   }
-  else if (type === 'dark_monolith') {
-    R(4,1,4,11,'#000'); // Black pillar
-    R(5,3,2,6,'#4c1d95'); // Rune glow
+if (t.includes('gargoyle')) { // Gargoyle Statue
+     R(4,6,4,4,'#57534e'); // Squat Body
+     R(5,5,2,2,'#78716c'); // Head
+     R(2,5,2,4,'#292524'); R(8,5,2,4,'#292524'); // Folded Wings
+     R(5,6,1,1,'#ef4444'); R(6,6,1,1,'#ef4444'); // Red Eyes
+     R(4,10,4,1,'#44403c'); // Base
+     return;
   }
-  else if (type === 'treasure_pile') {
-    R(2,9,8,3,'#eab308'); // Gold base
-    R(3,8,6,2,'#facc15'); // Mid
-    R(4,7,4,2,'#fef08a'); // Top
-    R(3,9,1,1,'#fff'); R(8,10,1,1,'#fff'); // Sparkles
+  // --- Floor Grates (Broken or Intact) ---
+  if (t.includes('grate')) {
+    const metal='#475569', dark='#1e293b', rust='#7f1d1d';
+    const pit='#020617';
+
+    // 1. The Pit (Deep Background)
+    R(1,1,10,10,pit); 
+
+    // 2. Outer Frame
+    R(1,1,10,1,metal); R(1,10,10,1,metal); // Top/Bottom
+    R(1,2,1,8,metal);  R(10,2,1,8,metal);  // Sides
+    R(1,1,1,1,rust);   R(10,10,1,1,rust);  // Rusted corners
+
+    // 3. Vertical Bars
+    // Left Bar: Broken top & bottom
+    R(3,1,2,3,metal);  R(3,3,2,1,dark); // Top segment stub
+    R(3,7,2,3,metal);  R(3,7,2,1,'#94a3b8'); // Bottom segment top (shiny break)
+    
+    // Center Bar: Intact but corroded
+    R(6,1,2,10,metal); 
+    R(6,2,1,8,'#94a3b8'); // Highlight
+    R(6,5,2,2,rust);      // Rust patch
+    
+    // Right Bar: Bent/Dark
+    R(9,1,1,10,dark);     // Shadowy bar
+    return;
   }
-  else if (type === 'red_carpet') {
-    R(2,0,8,12,'#991b1b'); // Red strip
-    R(1,0,1,12,'#facc15'); R(10,0,1,12,'#facc15'); // Gold trim
+
+  // --- 4. CRYPT / TREASURE ---
+  if (t.includes('coffin') || t.includes('tomb')) {
+    const stone = '#57534e', dark = '#292524', moss = '#4ade80';
+    R(3,2,6,10,stone);     // Slab
+    R(4,3,4,8,dark);       // Recess
+    
+    // Cross Relief (Only if not totally destroyed)
+    if(!t.includes('rubble')) { 
+      R(5,4,2,4,'#78716c'); R(4,5,4,2,'#78716c'); 
+    }
+
+    // Specific "Broken" Details
+    if(t.includes('broken')) {
+      R(2,6,8,2,dark);     // Large Crack across middle
+      R(3,7,2,1,dark);     // Crack variation
+      R(8,5,2,2,stone);    // Debris chunk on top
+      R(2,10,3,1,'#a8a29e'); // Dust at base
+      R(1,8,2,2,moss);     // Moss growing in crack
+    }
+    return;
   }
-  else {
-    // Default fallback (Rubbish pile)
-    R(3,9,6,2,'#4b5563'); R(4,8,4,1,'#6b7280');
+  if (t === 'urn' || t === 'vase') {
+    R(4,3,4,1,'#d97706'); // Rim
+    R(5,4,2,1,'#b45309'); // Neck
+    R(3,5,6,6,'#d97706'); // Body
+    R(3,5,1,6,'#92400e'); // Shadow
+    R(6,6,1,4,'#fcd34d'); // Vertical Shine
+    return;
   }
+  if (t === 'treasure_pile') {
+    R(1,9,10,3,'#b45309'); // Base Gold
+    R(2,8,8,2,'#fbbf24');  // Mid
+    R(4,6,4,2,'#fef3c7');  // Top
+    R(2,8,1,1,'#fff'); R(8,6,1,1,'#fff'); // Sparkles
+    R(5,7,2,2,'#dc2626');  // Ruby
+    return;
+  }
+
+  // --- 5. NATURE / SPECIAL ---
+if (t === 'rat_nest') {
+    R(2,8,8,4,'#5c4033'); // Nest Base
+    R(3,8,6,2,'#3e2723'); // Inner shadow
+    R(4,8,1,1,'#000'); R(6,8,1,1,'#000'); // Eyes
+    R(5,9,1,1,'#fca5a5'); // Pink Nose
+    R(2,9,1,1,'#d4d4d4'); // Bone fragment
+    R(8,9,1,1,'#fbbf24'); // Stolen coin (shiny)
+    return;
+  }
+if (t === 'fern' || t.includes('plant')) {
+    R(5,9,2,3,'#166534'); 
+    R(2,6,3,3,'#22c55e'); R(7,6,3,3,'#22c55e'); 
+    R(4,3,4,4,'#22c55e'); R(5,4,2,4,'#86efac'); 
+    return;
+  }
+// --- 5b. SPECIAL DECOR: Spiderweb (Pixel Art) ---
+  if (t.includes('web')) {
+     const web = 'rgba(255, 255, 255, 0.5)'; // Main thread
+     const dim = 'rgba(255, 255, 255, 0.2)'; // Faint spokes
+
+     // 1. Spokes (The Skeleton)
+     // Diagonals
+     R(0,0,1,1,dim); R(11,0,1,1,dim); R(0,11,1,1,dim); R(11,11,1,1,dim);
+     R(2,2,1,1,dim); R(9,2,1,1,dim); R(2,9,1,1,dim); R(9,9,1,1,dim);
+     // Cardinals (Cross)
+     R(6,1,1,2,dim); R(6,9,1,2,dim); // Vert
+     R(1,6,2,1,dim); R(9,6,2,1,dim); // Horz
+     
+     // 2. Inner Ring (The Trap)
+     R(4,4,1,1,web); R(7,4,1,1,web); R(4,7,1,1,web); R(7,7,1,1,web); // Corners
+     R(5,3,2,1,web); R(5,8,2,1,web); // Top/Bot
+     R(3,5,1,2,web); R(8,5,1,2,web); // Left/Right
+
+     // 3. Outer Ring (Draping)
+     R(1,3,1,1,web); R(3,1,1,1,web); // TL Curve
+     R(8,1,1,1,web); R(10,3,1,1,web); // TR Curve
+     R(1,8,1,1,web); R(3,10,1,1,web); // BL Curve
+     R(8,10,1,1,web); R(10,8,1,1,web); // BR Curve
+     
+     // 4. Center Knot & Spider
+     R(5,5,2,2,dim); 
+     // Tiny Spider
+     ctx.fillStyle = '#171717'; // Dark Body
+     ctx.fillRect(px+5, py+5, 3, 3);
+     ctx.fillStyle = '#ef4444'; // Red Eye
+     ctx.fillRect(px+6, py+6, 1, 1);
+     // Legs (Pixel perfect)
+     R(4,5,1,1,'#000'); R(8,5,1,1,'#000');
+     R(4,7,1,1,'#000'); R(8,7,1,1,'#000');
+     
+     return;
+  }
+// A. Magic Crystal (Cluster of Thin Spikes)
+  if (t.includes('crystal')) { 
+     const cMain='#a855f7', cLit='#e9d5ff', cDark='#6b21a8';
+     
+     // 1. Tall Center Spike
+     R(5,2,2,8,cMain); 
+     R(6,2,1,8,cLit); // Sharp Highlight
+     
+     // 2. Angled Left Spike
+     R(2,6,2,4,cMain);
+     R(2,6,1,4,cLit);
+     
+     // 3. Angled Right Spike
+     R(8,5,2,5,cMain);
+     R(9,5,1,5,cLit);
+     
+     // 4. Base Glow
+     R(4,9,4,1,cDark);
+     ctx.save();
+     ctx.fillStyle = 'rgba(168, 85, 247, 0.4)';
+     ctx.fillRect(px+3, py+7, 6, 3);
+     ctx.restore();
+     return;
+  }
+
+  // B. Obsidian Shard (Thick, jagged, volcanic glass)
+  if (t.includes('obsidian')) { 
+     const obBase='#020617', obMid='#1e293b', obShin='#4f46e5';
+
+     // 1. Heavy Jagged Mass (Asymmetric)
+     R(2,7,9,4,obBase); // Wide Base
+     R(3,4,6,3,obBase); // Mid Bulk
+     R(6,2,2,2,obBase); // Sharp Tip offset
+
+     // 2. Razor Sharp Facets (Reflective Lines)
+     R(4,4,1,5,obShin); // Vertical sheen
+     R(5,7,4,1,obShin); // Horizontal sheen
+     R(3,8,1,2,obMid);  // Surface texture
+     
+     // 3. Void Particles (Dark Aura)
+     R(1,5,1,1,'#312e81'); R(10,3,1,1,'#312e81'); R(9,9,1,1,'#312e81');
+     return;
+  }
+
+// --- NEW: Industrial Pipe Debris ---
+  if (t.includes('pipe')) {
+     const metal = '#64748b', shadow = '#334155', rust = '#a16207';
+     
+     // 1. Horizontal Segment
+     R(1,7,8,4,metal);      // Main body
+     R(1,7,8,1,'#94a3b8');  // Top cylindric highlight
+     R(1,10,8,1,shadow);    // Bottom shadow
+     
+     // 2. Vertical Segment (Elbow joint)
+     R(6,2,4,6,metal);
+     R(6,2,1,6,'#94a3b8');  // Left highlight
+     R(9,2,1,6,shadow);     // Right shadow
+
+     // 3. Flange / Connector Ring
+     R(3,6,2,6,'#475569');  // The bulky ring
+     R(3,6,1,6,'#cbd5e1');  // Ring highlight
+     
+     // 4. Details (Rust & Holes)
+     R(4,8,1,1,rust); R(7,4,1,1,rust); // Corrosion
+     R(9,8,2,2,'#0f172a');  // Broken open end (Right)
+     R(7,1,2,1,'#0f172a');  // Broken open end (Top)
+     return;
+  }
+
+// --- NEW: Lighting Props ---
+  if (t.includes('candle') || t.includes('lamp')) {
+     const gold = '#d97706', dark = '#78350f', light = '#fbbf24';
+     const wax = '#fff7ed', flame = '#ef4444';
+     
+     // 1. Tall Floor Stand
+     R(2,10,8,1,dark);  // Wide Base Bottom
+     R(3,9,6,1,gold);   // Base Taper
+     R(5,5,2,4,gold);   // Vertical Stem
+     R(6,5,1,4,light);  // Stem Highlight
+     R(3,5,6,1,dark);   // Cup / Tray
+     
+     // 2. The Candle
+     R(5,2,2,3,wax);    // Wax Body
+     R(4,3,1,2,wax);    // Dripping Wax (Left)
+     
+     // 3. The Flame
+     R(5,1,2,1,'#fcd34d'); // Bright Core
+     R(6,0,1,1,flame);     // Tip
+     
+     // 4. Glow Halo (Subtle)
+     ctx.save();
+     ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
+     ctx.fillRect(px+2, py, tile-4, tile/2);
+     ctx.restore();
+     return;
+  }
+
+// --- 5. DECOR: Chains & Carpets ---
+  if (t.includes('chain')) { // Iron Chain
+     for(let i=0; i<12; i+=3) {
+       R(5,i,2,2,'#9ca3af'); // Link Light
+       R(5,i+1,2,1,'#4b5563'); // Link Shadow
+       R(5,i,1,1,'#d1d5db'); // Highlight
+     }
+     return;
+  }
+  if (t.includes('carpet')) { // Red Carpet
+     R(2,0,8,12,'#991b1b'); // Red Base
+     R(1,0,1,12,'#fbbf24'); R(10,0,1,12,'#fbbf24'); // Gold Trim
+     R(5,0,2,12,'#7f1d1d'); // Darker center path
+     R(2,0,1,12,'#ef4444'); // Fabric Highlight
+     return;
+  }
+  if (t.includes('vase') || t.includes('urn')) { // Golden Vase / Urn
+     const isGold = t.includes('gold');
+     const cBase = isGold ? '#fbbf24' : '#d97706';
+     const cShad = isGold ? '#b45309' : '#92400e';
+     const cHigh = isGold ? '#fef3c7' : '#fbbf24';
+     
+     R(4,3,4,1,cBase); // Rim
+     R(5,4,2,1,cShad); // Neck
+     R(3,5,6,6,cBase); // Body
+     R(3,5,1,6,cShad); // Side Shadow
+     R(6,6,1,4,cHigh); // Shine
+     return;
+  }
+
+  // --- 6. NATURE: Plants & Nests ---
+  if (t.includes('vine')) { // Vine Cluster
+     R(5,0,2,12,'#15803d'); // Main thick vine
+     R(2,3,3,3,'#16a34a');  // Leaf clump left
+     R(7,6,3,3,'#16a34a');  // Leaf clump right
+     R(3,9,3,3,'#16a34a');  // Leaf clump bottom
+     R(6,2,1,1,'#86efac'); R(8,7,1,1,'#86efac'); // Highlights
+     return;
+  }
+  if (t.includes('flower')) { // Giant Flower
+     R(5,7,2,5,'#166534'); // Stalk
+     R(2,3,8,4,'#db2777'); // Pink petals wide
+     R(3,2,6,6,'#be185d'); // Darker inner
+     R(5,5,2,2,'#fef08a'); // Pollen center
+     R(2,8,3,2,'#15803d'); // Base leaves
+     return;
+  }
+  if (t.includes('rat')) { // Rat Nest
+     R(2,8,8,4,'#5c4033'); // Twigs/Trash
+     R(3,9,2,1,'#a3a3a3'); // Grey fluff
+     R(4,7,1,1,'#ef4444'); R(6,7,1,1,'#ef4444'); // Glowing eyes
+     R(7,9,1,1,'#fca5a5'); // Pink tail?
+     return;
+  }
+  if (t.includes('web')) { // Spiderweb
+     ctx.save();
+     ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+     ctx.lineWidth = 1;
+     ctx.beginPath();
+     ctx.moveTo(px,px); ctx.lineTo(px+tile,py+tile); // Cross 1
+     ctx.moveTo(px+tile,py); ctx.lineTo(px,py+tile); // Cross 2
+     ctx.stroke();
+     ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2, tile*0.25, 0, 7); ctx.stroke(); // Ring
+     ctx.restore();
+     return;
+  }
+
+  // --- 7. ELEMENTAL: Magma & Rock ---
+  if (t.includes('magma') || t.includes('lava')) { 
+     if(t.includes('vent')) { // Lava Vent
+        R(2,8,8,4,'#271c19'); // Volcano Base
+        R(4,8,4,2,'#ef4444'); // Magma rim
+        R(5,5,2,3,'#f97316'); // Fire Plume
+        R(5,3,2,2,'#7f1d1d'); // Smoke
+     } else { // Magma Rock
+        R(2,8,8,4,'#1c1917'); // Dark Rock
+        R(3,7,2,2,'#1c1917');
+        R(4,9,4,1,'#ef4444'); R(7,8,1,2,'#ef4444'); // Molten cracks
+        R(5,9,2,1,'#fbbf24'); // Heat core
+     }
+     return;
+  }
+  if (t.includes('float')) { // Floating Rock
+     R(3,4,6,5,'#57534e'); // The Rock
+     R(4,3,4,1,'#a8a29e'); // Top highlight
+     R(4,10,4,1,'#000');   // Shadow on ground (detached)
+     return;
+  }
+
+  // --- 8. VOID / CRYSTAL ---
+  if (t.includes('mote')) { // Star Mote
+     R(5,5,2,2,'#f0abfc'); // Core
+     ctx.save();
+     ctx.fillStyle = 'rgba(232, 121, 249, 0.6)';
+     ctx.fillRect(px+2, py+5, 8, 2); // Horizontal glow
+     ctx.fillRect(px+5, py+2, 2, 8); // Vertical glow
+     ctx.restore();
+     return;
+  }
+  
+  if (t.includes('crystal') || t.includes('shard')) { // Crystal & Obsidian
+     const isObs = t.includes('obsidian');
+     const col = isObs ? '#1f2937' : '#a855f7'; // Dark Grey vs Purple
+     const lit = isObs ? '#3730a3' : '#e9d5ff'; // Indigo vs Lavender highlight
+     
+     // Main Shard
+     R(5,3,2,8,col); 
+     R(6,3,1,8,lit); // Highlight edge
+     
+     // Base Cluster
+     R(3,8,2,3,col); R(8,8,2,3,col);
+     
+     // Aura / Particles
+     if(isObs) {
+       R(2,5,1,1,'#4c1d95'); R(9,6,1,1,'#4c1d95'); // Dark aura particles
+     } else {
+       ctx.save();
+       ctx.fillStyle = 'rgba(168, 85, 247, 0.3)'; // Glow
+       ctx.fillRect(px+2, py+2, 8, 8);
+       ctx.restore();
+     }
+     return;
+  }
+
+  if (t.includes('float')) { // Floating Rock
+     // Levitation Glow
+     ctx.save();
+     ctx.fillStyle = 'rgba(147, 197, 253, 0.2)'; 
+     ctx.fillRect(px+2, py+8, 8, 2);
+     ctx.restore();
+
+     // The Rock (Hovering High)
+     R(3,3,6,5,'#57534e'); // Rock Body
+     R(3,3,2,1,'#a8a29e'); // Top Lit
+     R(5,8,2,1,'#60a5fa'); // Magic Thruster/Rune
+     R(4,11,4,1,'#000');   // Shadow on floor
+     return;
+  }
+  
+  if (t.includes('monolith')) { // Dark Monolith
+     R(3,1,6,11,'#09090b'); // Black Pillar
+     R(4,3,1,7,'#2e1065');  // Dark purple groove
+     R(7,3,1,7,'#2e1065');
+     R(5,5,2,1,'#d8b4fe');  // Glowing Rune 1
+     R(5,8,2,1,'#d8b4fe');  // Glowing Rune 2
+     return;
+  }
+
+  
+  // Fallback (Generic Box)
+  R(2,2,8,8,'#52525b'); R(2,2,8,1,'#a1a1aa');
 }
+
 
 function drawShadowPixel(ctx, x, y, tile){
   const { s, R } = gridN(ctx, x, y, tile, 12);
@@ -7297,28 +7650,51 @@ function getBiomePalette(floor) {
   return BIOMES[cycleIndex];
 }
 
-function drawSpikePixel(ctx, x, y, tile) {
+function drawSpikePixel(ctx, x, y, tile, state='up'){
   const { R } = gridN(ctx, x, y, tile, 12);
-  // Background (Floor)
-  // R(0,0,12,12, bg); // Assumes drawn over floor
-  
-  const steel = '#9ca3af';
-  const dark  = '#4b5563';
-  const tip   = '#e5e7eb';
-  const blood = '#ef4444';
+  const plate = '#334155', dark = '#1e293b', holes = '#020617';
+  const steel = '#94a3b8', shine = '#e2e8f0';
+  const blood = '#991b1b', fresh = '#ef4444';
 
-  // 3 Spikes in a pattern
-  // Spike 1 (Top Left)
-  R(2,3,1,3,steel); R(2,2,1,1,tip); R(3,5,1,1,dark);
-  
-  // Spike 2 (Bottom Right)
-  R(8,7,1,3,steel); R(8,6,1,1,tip); R(7,9,1,1,dark);
-  
-  // Spike 3 (Center)
-  R(5,5,1,4,steel); R(5,4,1,1,tip); R(6,8,1,1,dark);
-  
-  // Blood stain (random chance for flavor, deterministic by coord would be better but static is fine)
-  R(5,6,1,1,blood);
+  // 1. Base Plate (Heavy Iron Frame)
+  R(1,1,10,10, dark); // Shadow/Recess
+  R(1,1,1,1,'#64748b'); R(10,1,1,1,'#64748b'); // Bolts
+  R(1,10,1,1,'#64748b'); R(10,10,1,1,'#64748b');
+
+  // 2. The Mechanics (5-point pattern)
+  const pts = [
+    {x:3, y:3}, {x:8, y:3},
+    {x:5, y:6},
+    {x:3, y:8}, {x:8, y:8}
+  ];
+
+  if (state === 'down') {
+    // --- SAFE STATE: Retracted Holes ---
+    R(2,2,8,8, plate); // Plate cover
+    pts.forEach(p => {
+      R(p.x, p.y, 2, 2, holes);    // The pit
+      R(p.x, p.y+1, 2, 1, '#000'); // Deep shadow
+    });
+  } else {
+    // --- DANGER STATE: Extended Spikes ---
+    R(2,2,8,8, plate); 
+    pts.forEach((p, i) => {
+      // Base collar
+      R(p.x, p.y+1, 2, 1, dark);
+      // Spike Shaft
+      R(p.x, p.y-1, 2, 3, steel);
+      R(p.x, p.y-1, 1, 3, shine); // Highlight left edge
+      // Sharp Tip
+      R(p.x, p.y-3, 2, 2, steel); // Taper
+      R(p.x, p.y-4, 1, 1, shine); // Point
+      
+      // Blood Tips (on center and corners)
+      if(i%2===0) {
+         R(p.x, p.y-3, 2, 2, blood); 
+         R(p.x, p.y-4, 1, 1, fresh);
+      }
+    });
+  }
 }
 
 
@@ -7422,24 +7798,15 @@ function draw(){
       }
       // ------------------------------------
       // --- NEW: Render Spikes (Tile 7) ---
-      if (t===7) {
-            drawSpikePixel(ctx, px, py, tile);
+          if (t===7) {
+            drawSpikePixel(ctx, px, py, tile, 'up'); // Always active
           }
-          
           // --- NEW: Timed Spikes (Tile 9) ---
           if (t===9){
-            // Active if (turn / 3) is odd (e.g., 0-2 OFF, 3-5 ON)
+            // Active if (turn / 3) is odd
             const isActive = Math.floor((state.gameTurn||0) / 3) % 2 !== 0;
-            if (isActive) {
-              drawSpikePixel(ctx, px, py, tile); // Draw Up (Danger)
-            } else {
-              // Draw Down (Safe/Darker)
-              ctx.save();
-              ctx.globalAlpha = 0.3;
-              ctx.filter = 'grayscale(1)';
-              drawSpikePixel(ctx, px, py, tile);
-              ctx.restore();
-            }
+            // Pass 'up' or 'down' to show correct mechanical state
+            drawSpikePixel(ctx, px, py, tile, isActive ? 'up' : 'down');
           }
       // -----------------------------------
       
@@ -7464,21 +7831,39 @@ if (t===2){
       } else if (t===5){
   const it = state.pickups[kxy];
   if (it){ + drawPickupPixel(ctx, it, px, py, tile); }
-}
-else if (t===6){
-  // Background: Dark floor
-  // ctx.fillStyle = '#0b141d'; ctx.fillRect(px,py,tile,tile); 
-  
-  const { R } = gridN(ctx, px, py, tile, 12);
-  R(2,8,8,1,'#4a5d75'); 
-  R(3,7,6,1,'#4a5d75'); 
-  R(4,3,4,4,'#6d88ad');
+} else if (t===6){
+             // --- NEW: Mystical Shrine (Levitating Crystal Altar) ---
+             const { R } = gridN(ctx, px, py, tile, 12);
+             const stone = '#475569', dark = '#1e293b', lit = '#94a3b8';
+             const rune = '#c084fc'; // Purple/Pink mystic energy
 
-  ctx.shadowColor = '#7df9ff'; 
-  ctx.shadowBlur = 10;
-  R(5,2,2,2,'#7df9ff'); 
-  ctx.shadowBlur = 0;
-}
+             // 1. Stone Pedestal (Tiered)
+             R(1,10,10,2,dark);    // Bottom Foundation
+             R(2,8,8,3,stone);     // Main Plinth
+             R(2,8,1,3,dark);      // Side Shadow (Left)
+             R(9,8,1,3,lit);       // Side Highlight (Right)
+             R(3,7,6,1,lit);       // Pedestal Top Surface
+             
+             // 2. Floating Shadow (Cast by the crystal)
+             R(4,7,4,1,'#0f172a'); 
+
+             // 3. Levitating Artifact (Glowing Crystal)
+             ctx.save();
+             ctx.shadowColor = rune; 
+             ctx.shadowBlur = 15;  // Strong magical glow
+             
+             // The Crystal Shape
+             R(5,2,2,5,rune);      // Vertical Core
+             R(4,3,4,3,rune);      // Horizontal Body
+             R(5,3,2,3,'#fff');    // Bright Inner Light
+             
+             ctx.shadowBlur = 0;
+             ctx.restore();
+
+             // 4. Orbiting Particles
+             R(3,4,1,1,'#e9d5ff'); // Left mote
+             R(8,2,1,1,'#e9d5ff'); // Right mote
+          }
 // --- NEW: Draw Gold Well (2x2) ---
     if (state.goldWell) {
        const gw = state.goldWell;
@@ -17632,6 +18017,108 @@ draw?.();
 
   });
 })();
+
+// --- NEW: Debug Prop Spawner (Floating UI) ---
+setTimeout(initDebugSpawner, 2000); // Wait for DOM/Game load
+
+function initDebugSpawner() {
+  // 1. Define Categories based on your drawPropPixel logic
+  const library = {
+    'Storage': ['crate', 'barrel', 'toxic barrel', 'pipe debris'],
+    'Dungeon': ['bone', 'skull pile', 'pillar', 'iron chain', 'broken grate', 'gargoyle', 'candle'],
+    'Crypt': ['coffin', 'broken tomb', 'urn', 'gold vase', 'treasure pile', 'red carpet'],
+    'Nature': ['fern', 'vine cluster', 'giant flower', 'rat nest', 'slime puddle', 'spider web'],
+    'Elemental': ['magma rock', 'obsidian shard', 'lava vent'],
+    'Void': ['crystal shard', 'floating rock', 'star mote', 'dark monolith'],
+    'Debris': ['rubble']
+  };
+
+  // 2. Create Panel (Hidden by default)
+  const panel = document.createElement('div');
+  panel.style.cssText = "position:fixed; top:120px; left:10px; width:150px; max-height:60vh; overflow-y:auto; background:rgba(10,15,20,0.95); border:1px solid #444; color:#fff; font-family:monospace; font-size:11px; z-index:11000; padding:4px; box-shadow: 2px 2px 10px #000; display:none;";
+  panel.id = 'debugPropPanel';
+  panel.innerHTML = '<div style="color:#facc15; border-bottom:1px solid #555; margin-bottom:6px; font-weight:bold; cursor:pointer; text-align:right;" onclick="this.parentElement.style.display=\'none\'">CLOSE [X]</div>';
+
+  // 3. Build Accordion Buttons
+  for (const [biome, props] of Object.entries(library)) {
+    const header = document.createElement('div');
+    header.textContent = `▼ ${biome}`;
+    header.style.cssText = "color:#9ca3af; margin-top:4px; font-weight:bold; cursor:pointer; background:#1f2937; padding:4px; border-radius:4px;";
+    panel.appendChild(header);
+
+    const container = document.createElement('div');
+    container.style.paddingLeft = "4px";
+    
+    props.forEach(type => {
+      const btn = document.createElement('button');
+      btn.textContent = type;
+      btn.style.cssText = "display:block; width:100%; text-align:left; background:transparent; color:#d1d5db; border:none; border-left:1px solid #374151; margin:1px 0; padding:2px 6px; cursor:pointer; font-size:11px;";
+      
+      // Hover
+      btn.onmouseenter = () => { btn.style.color = '#fff'; btn.style.background = '#374151'; };
+      btn.onmouseleave = () => { btn.style.color = '#d1d5db'; btn.style.background = 'transparent'; };
+
+      btn.onclick = () => {
+        // Spawn Logic
+        const gx = state.player.x; 
+        const gy = state.player.y;
+        
+        // Try offsets: Right, Left, Down, Up
+        const offsets = [[1,0], [-1,0], [0,1], [0,-1]];
+        let placed = false;
+        
+        for(let o of offsets) {
+           const tx = gx + o[0];
+           const ty = gy + o[1];
+           const k = (typeof key === 'function') ? key(tx,ty) : `${tx},${ty}`;
+           
+           // Only spawn if empty floor or existing prop (overwrite prop is ok)
+           // Check bounds, floor tile (1), no pickup, no enemy
+           if(inBounds(tx,ty) && state.tiles[ty][tx] === 1 && !state.pickups[k] && !enemyAt(tx,ty)) {
+             state.props[k] = { type: type };
+             state.tiles[ty][tx] = 8; // Mark as prop/obstacle
+             placed = true;
+             console.log(`Spawned [${type}] at ${tx},${ty}`);
+             if(typeof draw === 'function') draw();
+             break;
+           }
+        }
+        if(!placed) alert('Move to an open space (needs empty tile adjacent to player).');
+      };
+      container.appendChild(btn);
+    });
+    panel.appendChild(container);
+    
+    // Accordion Toggle
+    header.onclick = () => {
+       const isHidden = container.style.display === 'none';
+       container.style.display = isHidden ? 'block' : 'none';
+       header.textContent = (isHidden ? '▼ ' : '► ') + biome;
+    };
+  }
+  document.body.appendChild(panel);
+
+  // 4. Inject "Toggle Spawner" Button into your existing Debug Modal
+  const dbgContainer = document.querySelector('#debugModal .row[style*="margin-top"]');
+  if(dbgContainer) {
+      const toggle = document.createElement('button');
+      toggle.className = 'btn';
+      toggle.textContent = "Open Prop Spawner";
+      toggle.style.borderColor = "#a855f7"; // Purple border to stand out
+      toggle.style.color = "#a855f7";
+      toggle.onclick = () => {
+          const p = document.getElementById('debugPropPanel');
+          if(p) {
+            p.style.display = 'block';
+            // Close the main debug modal so we can see the game
+            const m = document.getElementById('debugModal');
+            if(m) m.style.display = 'none';
+            if(document.body.classList.contains('noscroll')) document.body.classList.remove('noscroll');
+          }
+      };
+      dbgContainer.appendChild(toggle);
+  }
+}
 
 // ====== CODEX SYSTEM ======
 const CODEX_KEY = 'dc_codex_v1';
