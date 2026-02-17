@@ -4627,16 +4627,17 @@ if (spawnedCleric)       sounds.push("soft chanting");
 
 if (sounds.length > 0) {
   // Join with commas and an Oxford comma/and
-  let text = "you hear " + sounds[0];
+  let text = "You hear " + sounds[0];
   if (sounds.length === 2) {
-    text = `you hear ${sounds[0]} and ${sounds[1]} nearby`;
+    text = `You hear ${sounds[0]} and ${sounds[1]} nearby`;
   } else if (sounds.length > 2) {
     const last = sounds.pop();
-    text = `you hear ${sounds.join(", ")}, and ${last} nearby`;
+    text = `You hear ${sounds.join(", ")}, and ${last} nearby`;
   } else {
-    text = `you hear ${sounds[0]} nearby`;
+    text = `You hear ${sounds[0]} nearby`;
   }
   showBanner(text, 3600);
+  log(text); // Add to Event Log
 }
 // ---------------------------------------------------------------------
 
