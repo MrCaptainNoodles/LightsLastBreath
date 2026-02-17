@@ -15174,11 +15174,11 @@ window.offerPick2Choice = function offerPick2Choice(context){
 
   _pick2Current = [PICK2_POOL[i], PICK2_POOL[j]];
 
-  if (pick2Title){
-    pick2Title.textContent =
-      (context === 'start')
-        ? 'Pick 1 of 2 — Opening Omen'
-        : 'Pick 1 of 2 — Boss Reward';
+if (pick2Title){
+    if (context === 'start') pick2Title.textContent = "Starting Omen";
+    else if (context === 'warlord') pick2Title.textContent = "Warlord Reward";
+    else if (context === 'boss') pick2Title.textContent = "Boss Reward";
+    else pick2Title.textContent = "A Dark Omen";
   }
   if (pick2Desc){
     pick2Desc.textContent = 'Each choice has a blessing and a curse.';
@@ -16829,10 +16829,10 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
 
 // --- NEW HELPER FUNCTIONS ---
 // Fix: Define the missing function that opens the Omen Menu
-function offerPick2Choice() {
+function offerPick2Choice(context) {
   // Only for Endless Mode
   if (state.gameMode !== 'endless') return;
-  
+
   // Ensure we have omens to pick from
   const pool = (typeof PICK2_POOL !== 'undefined') ? PICK2_POOL : [];
   if (pool.length < 2) return;
@@ -16841,7 +16841,6 @@ function offerPick2Choice() {
   const i1 = Math.floor(Math.random() * pool.length);
   let i2 = Math.floor(Math.random() * pool.length);
   while (i2 === i1) i2 = Math.floor(Math.random() * pool.length);
-
   const o1 = pool[i1];
   const o2 = pool[i2];
 
@@ -16853,7 +16852,12 @@ function offerPick2Choice() {
   const b2 = document.getElementById('btnPick2B');
 
   if (m && b1 && b2) {
-    if(t) t.textContent = "A Dark Omen";
+    if (t) {
+        if (context === 'start') t.textContent = "Starting Omen";
+        else if (context === 'warlord') t.textContent = "Warlord Reward";
+        else if (context === 'boss') t.textContent = "Boss Reward";
+        else t.textContent = "A Dark Omen";
+    }
     if(d) d.textContent = "Accept a burden to gain power.";
     
     // Configure Button A
@@ -16924,9 +16928,9 @@ function handleEnemyDeath(e, source) {
       } else {
         // Safe to show immediately.
         if (typeof window.offerPick2Choice === 'function') {
-            window.offerPick2Choice();
+          window.offerPick2Choice('warlord');
         } else {
-            console.error("offerPick2Choice function is missing!");
+          console.error("offerPick2Choice function is missing!");
         }
       }
     }, 800);
