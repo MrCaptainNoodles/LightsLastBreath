@@ -3033,8 +3033,12 @@ function updateDynamicMusic() {
   }
 
   // Only switch if the URL is different from what's playing
-  if (bgmAudio && bgmAudio.src === url) return; 
-  playGameBgm(url);
+    // FIX: If it matches but is paused (due to restart), force play
+    if (bgmAudio && bgmAudio.src === url) {
+       if (bgmAudio.paused) bgmAudio.play().catch(()=>{});
+       return;
+    } 
+    playGameBgm(url);
 }
 
 
@@ -3336,14 +3340,12 @@ async function startTutorial(e){
  function startClassic(e){
   if (e?.preventDefault) e.preventDefault();
   if (menu) menu.style.display = 'none';
-  // playGameBgm(CLASSIC_BGM_URL); // <-- Removed old static call
   
   state.gameMode = 'classic';
   
-  // Trigger Restart logic (which now checks for Class Unlocks)
-  // Passing null or undefined triggers the menu check
+  // Trigger Restart logic (Checks for Classes)
+  // Music is now handled INSIDE doRestart()
   doRestart(); 
-  updateDynamicMusic(); // <-- Added: Triggers the new biome music for Floor 1
 }
 
 function startEndless(e){
@@ -3354,12 +3356,9 @@ function startEndless(e){
   // Mark mode + music
   state.gameMode = 'endless';
  
-
   // Trigger Restart logic (Checks for Classes)
-  // Note: The "Pick 1 of 2" Omen will trigger automatically inside doRestart 
-  // because we added the check at the bottom of doRestart in the previous batch.
+  // Music is now handled INSIDE doRestart()
   doRestart();
-  updateDynamicMusic(); // <--- NEW: Use dynamic logic
 }
 
 
@@ -9250,28 +9249,48 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     // --- NEW: Lazy Init HP Max (Ensures healing works for standard mobs) ---
     if (!e.hpMax) e.hpMax = e.hp;
 
-    // --- NEW: Mage Heals Allies ---
+// --- SAFE MAGE HEALING LOGIC ---
     if (e.type === 'Mage' && e.hp > 0 && !e.recovering && !e.stunTicks && !e.sleep && !e.charging) {
-      // Find injured ally within range 4
-      const ally = state.enemies.find(a => a !== e && (Math.abs(a.x - e.x) + Math.abs(a.y - e.y)) <= 4 && a.hp < a.hpMax);
+      // 1. Safety: Explicitly grab the latest enemy list to avoid targeting dead units
+      const currentEnemies = state.enemies || [];
+
+      // 2. Find injured ally: Must be ALIVE (hp > 0), not self, and close
+      const ally = currentEnemies.find(a => 
+        a !== e && 
+        a.hp > 0 && 
+        (Math.abs(a.x - e.x) + Math.abs(a.y - e.y)) <= 4 && 
+        a.hp < a.hpMax
+      );
 
       if (ally) {
         const amt = rand(3, 6);
         ally.hp = Math.min(ally.hp + amt, ally.hpMax);
-        spawnFloatText("+" + amt, ally.x, ally.y, '#4ade80');
-        flashEnemy(ally, 'green');
+        
+        // Visuals
+        if (typeof spawnFloatText === 'function') spawnFloatText("+" + amt, ally.x, ally.y, '#4ade80');
+        if (typeof flashEnemy === 'function') flashEnemy(ally, 'green');
 
+        // 3. Projectile Safety: Wrap in try-catch to prevent "Input Lock" freezes
         if (state.seen.has(key(e.x, e.y))) {
           log(`The Mage heals the ${ally.type}!`);
-          spawnProjectileEffect({
-            kind: 'magic', color: '#4ade80',
-            fromX: e.x, fromY: e.y, toX: ally.x, toY: ally.y,
-            speed: 0.15, onDone: ()=>{}
-          });
+          try {
+            if (typeof spawnProjectileEffect === 'function') {
+              spawnProjectileEffect({ 
+                kind: 'magic', color: '#4ade80', 
+                fromX: e.x, fromY: e.y, 
+                toX: ally.x, toY: ally.y, 
+                speed: 0.15, 
+                onDone: ()=>{} // Empty callback is safer than missing one
+              });
+            }
+          } catch(err) {
+            console.warn("Heal animation failed (prevented freeze):", err);
+          }
         }
-        continue; // Skip the rest of the Mage's turn
+        continue; // End Mage turn
       }
     }
+    // -------------------------------
 
     // --- NEW: Reaper Logic ---
     if (e.type === 'Reaper') {
@@ -10027,24 +10046,29 @@ function collectIfPickup(){
   const kxy=key(state.player.x,state.player.y);
   if(state.tiles[state.player.y][state.player.x]===5 && state.pickups[kxy]){
     const it=state.pickups[kxy];
-        if(it.kind==='weapon'){
-          
-      // --- NEW: Check Category Limit ---
-      const wType = getWeaponType(it.payload.name);
-      const curCount = countWeaponsInCategory(wType);
-      
-      if (curCount >= MAX_WEAPON_CAT) {
-         // Trigger Swap UI
-         openWeaponSwapModal(it.payload, kxy, state.player.x, state.player.y);
-         return; // STOP pickup
-      }
-      // ---------------------------------
-
+    if(it.kind==='weapon'){
+        // --- NEW: Check Category Limit ---
+        const wType = getWeaponType(it.payload.name);
+        const curCount = countWeaponsInCategory(wType);
+        if (curCount >= MAX_WEAPON_CAT) {
+            openWeaponSwapModal(it.payload, kxy, state.player.x, state.player.y);
+            return; 
+        }
+        // ---------------------------------
         SFX.pickup();
-      state.inventory.weapons[it.payload.name]=(state.inventory.weapons[it.payload.name]||0)+1;
-      log(`Picked up ${it.payload.name} (now x${state.inventory.weapons[it.payload.name]}).`);
+        state.inventory.weapons[it.payload.name]=(state.inventory.weapons[it.payload.name]||0)+1;
+        log(`Picked up ${it.payload.name} (now x${state.inventory.weapons[it.payload.name]}).`);
 
-      // --- TUTORIAL Step 4 (Pickup -> Equip) ---
+        // --- NEW: Codex Unlock (Weapons) ---
+        let cKey = 'Wep_' + it.payload.name.replace(/ /g,''); 
+        // Handle irregular names
+        if(it.payload.name === 'Knuckle Duster') cKey = 'Wep_Knuckles';
+        if(it.payload.name === 'Key of Destiny') cKey = 'Wep_Key';
+        if(it.payload.name.includes('Staff'))    cKey = 'Wep_Staff'; // Maps Fire Staff -> Wep_Staff
+        unlockCodex(cKey, true);
+        // -----------------------------------
+
+        // --- TUTORIAL Step 4 (Pickup -> Equip) ---
       if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && it.payload.name === 'Warhammer'){
         hideBanner();
         showBanner("Warhammer acquired! Press I and go to weapons to equip it.", 999999);
@@ -10073,8 +10097,18 @@ function collectIfPickup(){
   state.inventory.idols[it.payload] = (state.inventory.idols[it.payload]||0) + 1;
   unlockCodex(it.payload, true); // <--- Updates Codex count & seen status
   log(`Picked up ${it.payload}. You feel a heavy burden...`);
-  // --- NEW: Consumable Pickup Logic ---
-}else if(it.kind==='bomb'){
+// --- ADD THIS BLOCK ---
+    }else if(it.kind==='shield'){
+        SFX.pickup();
+        // Add to inventory (Shields live in the 'weapons' list in your code)
+        state.inventory.weapons[it.payload] = (state.inventory.weapons[it.payload]||0)+1; 
+        log(`Picked up ${it.payload}.`);
+
+        // Codex Unlock logic
+        let sKey = 'Shld_' + it.payload.replace(' Shield',''); 
+        if(it.payload === 'Buckler') sKey = 'Shld_Buckler';
+        unlockCodex(sKey, true);
+    }else if(it.kind==='bomb'){
       SFX.pickup();
       state.inventory.bombs = (state.inventory.bombs|0) + (it.payload||1);
       log(`Picked up ${it.payload||1} Bomb(s).`);
@@ -11227,8 +11261,19 @@ function openChest(x,y){
     } else {
        // Normal Add
        state.inventory.weapons[w.name] = (state.inventory.weapons[w.name] || 0) + 1;
-       lootMsg.push(`${w.name} (now x${state.inventory.weapons[w.name]})`);
-    }
+          lootMsg.push(`${w.name} (now x${state.inventory.weapons[w.name]})`);
+
+          // --- NEW: Codex Unlock (Chest Weapons) ---
+          // 1. Strip affixes (Sharp, Cursed Blood, etc) to get base name
+          const clean = w.name.replace(/Cursed |Blood |Greed |Rust |Frailty |Sharp |Heavy |Vampiric |Ancient /g, '');
+          // 2. Generate Key
+          let cKey = 'Wep_' + clean.replace(/ /g,''); 
+          if(clean === 'Knuckle Duster') cKey = 'Wep_Knuckles';
+          if(clean === 'Key of Destiny') cKey = 'Wep_Key';
+          if(clean.includes('Staff'))    cKey = 'Wep_Staff';
+          unlockCodex(cKey, true);
+          // -----------------------------------------
+        }
     // ----------------------------------
   }
 
@@ -11299,6 +11344,12 @@ function openChest(x,y){
         // Add to named inventory (not generic counter)
         state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
         lootMsg.push(`+1 ${name}`);
+
+        // --- NEW: Codex Unlock (Chest Shields) ---
+        let sKey = 'Shld_' + name.replace(' Shield','').replace(/ /g,''); 
+        if(name === 'Buckler') sKey = 'Shld_Buckler';
+        unlockCodex(sKey, true);
+        // -----------------------------------------
 
         // Auto-equip if allowed
         if (!state.player.shield && isShieldAllowed()) {
@@ -15932,9 +15983,49 @@ function stopRunTimerFreeze(){
 
 
 function doRestart(className){
-  // --- FIX: Wipe old save immediately on new run setup ---
-  // We do this at the very top so ANY call to restart (menu or actual start) kills the old save.
+  // --- FIX: Wipe old save & Clear Visuals immediately ---
   localStorage.removeItem('dc_save_v1');
+
+  // 1. HARD RESET: Wipe everything visual logic uses
+  state.particles = [];
+  state.floatingText = [];
+  state.projectiles = [];
+  state.explosions = [];
+  state.enemies = []; 
+  
+  // 2. Clear Props & Pickups (The "Ghost Objects" you were seeing)
+  state.props = {};
+  state.pickups = {};
+  state.decals = []; 
+  
+  // 3. Reset Map & Fog (Prevents Boss Floor "No Fog" form revealing the empty map)
+  const W = state.size.w || 50, H = state.size.h || 50;
+  state.tiles = Array.from({length:H}, ()=>Array(W).fill(0)); 
+  state.seen = new Set(); 
+  state.noFog = false; // <--- CRITICAL: Turns fog back on so you don't see the black void
+  
+// 4. Force Clear Canvas
+  state._animating = false;
+
+  // FIX: Correct ID is "bossHud" (camelCase), not "boss-hud"
+  const hud = document.getElementById('bossHud');
+  if (hud) hud.style.display = 'none';
+
+  const cvs = document.getElementById('view');
+  const cx = cvs ? cvs.getContext('2d') : null;
+  if (cx) {
+    // Robust clear: reset transform, clear rect, then fill
+    cx.save();
+    cx.setTransform(1, 0, 0, 1, 0, 0); 
+    cx.clearRect(0, 0, cvs.width, cvs.height);
+    cx.fillStyle = '#0b141d';
+    cx.fillRect(0, 0, cvs.width, cvs.height);
+    cx.restore();
+  }
+
+  // 5. Stop Audio
+  if(typeof stopBgm === 'function') stopBgm();
+  // -----------------------------------------------------
 
   // --- FIX: Toggle UI Bars ---
   // Hide bars if in menu (no className), Show them if starting run (has className)
@@ -15952,24 +16043,38 @@ function doRestart(className){
     }
 
     // Determine which of the available classes are actually unlocked
-    const unlocked = available.filter(k => CLASSES[k].unlock || meta['unlocked_'+k]);
-    
-    // Show menu if ANY class is available (even just the default)
-    if (unlocked.length >= 1) {
-      // --- FIX: Clear the view so we don't see the dead run behind the menu ---
-      const cvs = document.getElementById('view');
-      const cx = cvs ? cvs.getContext('2d') : null;
-      if (cx) {
-        cx.fillStyle = '#0b141d';
-        cx.fillRect(0, 0, cvs.width, cvs.height);
-      }
-      // 1. ADDED: Clear any lingering floor tint (Miasma, Bloodhunt, etc.)
-      const ft = document.getElementById('floorTint');
-      if (ft) ft.style.background = 'rgba(0,0,0,0)';
-      // -----------------------------------------------------------------------
+      const unlocked = available.filter(k => CLASSES[k].unlock || meta['unlocked_'+k]);
 
-      const m = document.getElementById('classSelectModal');
-      const b = document.getElementById('classSelectBody');
+      // Show menu if ANY class is available (even just the default)
+      // Show menu if ANY class is available (even just the default)
+      if (unlocked.length >= 1) {
+          // --- FIX: Stop Audio & Safely Wipe Visuals ---
+          if(typeof stopBgm === 'function') stopBgm(); 
+          state.enemies = [];      
+          state.particles = [];    
+          state.floatingText = []; 
+          state.projectiles = [];
+          
+          // CRITICAL FIX: Create a valid empty map (all walls).
+          // Setting tiles=[] caused draw() to crash and freeze the old screen.
+          const W = state.size.w || 50, H = state.size.h || 50;
+          state.tiles = Array.from({length:H}, ()=>Array(W).fill(0)); 
+          state.seen = new Set(); // Clear vision so nothing is drawn
+          
+          // Clear canvas explicitly
+          const cvs = document.getElementById('view');
+          const cx = cvs ? cvs.getContext('2d') : null;
+          if (cx) {
+              cx.fillStyle = '#0b141d';
+              cx.fillRect(0, 0, cvs.width, cvs.height);
+          }
+          const ft = document.getElementById('floorTint');
+          if (ft) ft.style.background = 'rgba(0,0,0,0)';
+          // --------------------------------------------------
+          // --------------------------------------------------
+          
+          const m = document.getElementById('classSelectModal');
+          const b = document.getElementById('classSelectBody');
       b.innerHTML = '';
       // --- NEW: Grid Layout Styles (4 Columns Fixed) ---
       b.style.display = 'grid';
@@ -16238,6 +16343,11 @@ function doRestart(className){
   renderSkills && renderSkills();
   startRunTimer();
   updateRunTimerNow();
+  
+  // --- FIX: Start Floor 1 Music Here ---
+  // We do this AFTER gen() so state.floor is correct (1)
+  if(typeof updateDynamicMusic === 'function') updateDynamicMusic();
+  // -------------------------------------
 
   // 1. ADDED: Restore the opening flavor text
   log('You awaken with nothing. Explore, loot, survive.');
@@ -16956,7 +17066,10 @@ function useStaff(w) {
            // Bashing still uses durability logic if you want, but usually it's just a fallback.
            // We will leave durability for the main projectile attack for now.
            
-           if(t.hp<=0) { state.enemies=state.enemies.filter(x=>x!==t); state.run.kills++; awardKill('magic', t.xp); SFX.kill(); }
+           if(t.hp<=0) {
+      // FIX: Route through central handler so Omens/Boss events trigger
+      handleEnemyDeath(t, 'magic');
+    }
         } else log("You swing at the air.");
         enemyStep(); draw(); return;
     }
@@ -18124,7 +18237,7 @@ function initDebugSpawner() {
 const CODEX_KEY = 'dc_codex_v1';
 const CODEX_DEF = {
   // Enemies
-  Rat: { name:'Rat', desc:'A large, disease-ridden rodent.', seen:false, kills:0 },
+  Rat: { name:'Rat', desc:'A disease-ridden rodent wandering the dungeon.', seen:false, kills:0 },
   Bat: { name:'Bat', desc:'Flits in the shadows. Drinks blood to heal.', seen:false, kills:0 },
   Slime: { name:'Slime', desc:'A mindless blob of acidic jelly.', seen:false, kills:0 },
   Spider: { name:'Spider', desc:'Web-spinning hunter. Slows its prey.', seen:false, kills:0 },
@@ -18133,7 +18246,7 @@ const CODEX_DEF = {
   Mage: { name:'Mage', desc:'Casts spells from a distance.', seen:false, kills:0 },
   Mimic: { name:'Mimic', desc:'A chest with teeth. Surprise!', seen:false, kills:0 },
   // Bosses
-  'The Rat King': { name:'The Rat King', desc:'The toxic ruler of the sewers.', seen:false, kills:0 },
+  'The Rat King': { name:'The Rat King', desc:'What was once a ordinary rat has now become monstrous in size due to the constant expore to toxic waste..', seen:false, kills:0 },
   'Count Fang': { name:'Count Fang', desc:'Ancient vampiric horror.', seen:false, kills:0 },
   'Broodmother': { name:'Broodmother', desc:'Queen of the webs.', seen:false, kills:0 },
   'Sir Squish': { name:'Sir Squish', desc:'A slime of noble lineage.', seen:false, kills:0 },
@@ -18214,6 +18327,22 @@ Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Ma
   'Idol of Stone': { name:'Idol of Stone', desc:'+15% Damage Reduction, but you move at half speed.', picked:0, seen:false },
   'Idol of Greed': { name:'Idol of Greed', desc:'+50% Gold found, but you take +50% Damage.', picked:0, seen:false },
   'Idol of Rot':   { name:'Idol of Rot',   desc:'Deals damage to nearby enemies, but hurts you when moving.', picked:0, seen:false },
+// --- BASE EQUIPMENT ---
+  Wep_Shortsword: { name:'Shortsword', desc:'', seen:false },
+  Wep_Claymore: { name:'Claymore', desc:'', seen:false },
+  Wep_Spear: { name:'Spear', desc:'', seen:false },
+ Wep_Axe: { name:'Axe', desc:'', seen:false },
+    Wep_Warhammer: { name:'Warhammer', desc:'', seen:false },
+    Wep_Battleaxe: { name:'Battleaxe', desc:'', seen:false },
+    Wep_Halberd: { name:'Halberd', desc:'', seen:false },
+    Wep_Knuckles: { name:'Knuckle Duster', desc:'', seen:false },
+    Wep_Claws: { name:'Claws', desc:'', seen:false },
+    Wep_Staff: { name:'Wizards Staff', desc:'', seen:false },
+    Wep_Key: { name:'Key of Destiny', desc:'You feel this weapon resonate deep within your heart. Some say it can open any lock.', seen:false },
+  Shld_Buckler: { name:'Buckler', desc:'', seen:false },
+  Shld_Kite: { name:'Kite Shield', desc:'', seen:false },
+  Shld_Tower: { name:'Tower Shield', desc:'', seen:false },
+  Shld_Ancient: { name:'Ancient Shield', desc:'', seen:false },
 };
 if (typeof PICK2_POOL !== 'undefined') {
   PICK2_POOL.forEach(p => {
@@ -18232,12 +18361,16 @@ function loadCodex(){
   
   for (const k in stored) {
     if (merged[k]) {
-        // Merge the saved data INTO the default definition, 
-        // preserving default properties like 'interactions: 0' if not present in 'stored'.
-        merged[k] = { 
-            ...merged[k],    // default properties (like interactions:0)
-            ...stored[k]     // saved values (like kills:10 or seen:true)
-        };
+        // Merge the saved data INTO the default definition,
+      // preserving default properties like 'interactions: 0' if not present in 'stored'.
+      merged[k] = {
+        ...merged[k], // default properties (like interactions:0)
+        ...stored[k], // saved values (like kills:10 or seen:true)
+        
+        // --- FIX: Force fresh text from code (ignores saved legacy text) ---
+        name: merged[k].name,
+        desc: merged[k].desc
+      };
     }
   }
   return merged;
@@ -18288,15 +18421,22 @@ function renderCodexUI(){
 
   // 1. Define Categories (Clustered with Sub-groups)
   const cats = [
-    { 
-      title: 'Bestiary', 
+    {
+      title: 'Bestiary',
       groups: [
         { subtitle: 'Enemies', keys: ['Rat','Bat','Spider','Slime','Goblin','Skeleton','Mage','Mimic'] },
         { subtitle: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] }
       ]
     },
-    { 
-      title: 'World & NPCs', 
+    {
+      title: 'Equipment',
+      groups: [
+        { subtitle: 'Base Weapons', keys: ['Wep_Shortsword','Wep_Key','Wep_Claymore','Wep_Warhammer','Wep_Spear','Wep_Halberd','Wep_Axe','Wep_Battleaxe','Wep_Knuckles','Wep_Claws','Wep_Staff'] },
+        { subtitle: 'Shields', keys: ['Shld_Buckler','Shld_Kite','Shld_Tower','Shld_Ancient'] }
+      ]
+    },
+    {
+      title: 'World & NPCs',
       groups: [
         { subtitle: 'Inhabitants', keys: ['Merchant','Blacksmith','Jester','Cartographer','Cleric'] },
         { subtitle: 'Discoveries', keys: ['Shrine', 'Gold_Well'] },
@@ -18305,8 +18445,8 @@ function renderCodexUI(){
         { subtitle: 'NPC Transactions', keys: ['Merchant_Bought','Merchant_Sold','Blacksmith_Repair','Jester_Spin','Cartographer_Map','Cleric_Bless'] }
       ]
     },
-    { 
-      title: 'Collection', 
+    {
+      title: 'Collection',
       groups: [
         { subtitle: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Hurl','Art_Pierce', 'Art_Backstab', 'Art_Flurry', 'Art_Overload'] },
         { subtitle: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
