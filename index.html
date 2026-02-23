@@ -1763,8 +1763,8 @@ const MUSIC_CONFIG = {
     late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_sewers_2.mp3' 
   },
   crypt: { 
-    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_sewers_1.mp3', 
-    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_sewers_2.mp3'
+    early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_crypt_1.mp3', 
+    late:  'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_crypt_1.mp3'
   },
   magma: { 
     early: 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/music_sewers_1.mp3', 
@@ -2600,6 +2600,36 @@ function playLevelUpSfx(){
   }
 }
 
+// --- NEW: Puzzle Room Music Cue ---
+const PUZZLE_ROOM_SFX_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/puzzle_spawn.mp3'; // Replace with actual filename
+let puzzleSpawnBuf = null;
+
+async function loadPuzzleSpawnSfx(url = PUZZLE_ROOM_SFX_URL){
+  try{
+    initAudio();
+    const res = await fetch(url, { mode:'cors' });
+    const arr = await res.arrayBuffer();
+    puzzleSpawnBuf = await new Promise((ok, err)=>audioCtx.decodeAudioData(arr, ok, err));
+  }catch(e){ console.warn('puzzle room sfx failed to load', e); }
+}
+
+window.playPuzzleMusic = function(){
+  if (!audioCtx || muted) return;
+  const now = audioCtx.currentTime || 0;
+
+  if (puzzleSpawnBuf){
+    const src = audioCtx.createBufferSource();
+    src.buffer = puzzleSpawnBuf;
+    src.playbackRate.value = 1.0;
+    const g = audioCtx.createGain(); g.gain.value = 0.50; 
+    src.connect(g); g.connect(musicGain || masterGain); // Routes to Music Volume Slider
+    src.start(now);
+  }else{
+    // Fallback synth sound if file isn't loaded yet
+    chordTo(musicGain || masterGain, [440,660,880], 0.5, 'sine', 0.4);
+  }
+};
+
 
 // Preload on boot (alongside your other loads)
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -2608,6 +2638,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   loadLockOkSfx();
   loadChestOpenSfx(); 
   loadLevelUpSfx();          // <-- add this line
+  loadPuzzleSpawnSfx();
 });
 
 function defineSfx(){
@@ -3146,6 +3177,7 @@ window.saveRun = function(){
   copy.seen = Array.from(state.seen||[]);
   copy.corridor = Array.from(state.corridor||[]);
   copy.lockedDoors = Array.from(state.lockedDoors||[]);
+  copy.puzzleDoors = Array.from(state.puzzleDoors||[]);
   copy.mimicChests = Array.from(state.mimicChests||[]);
   if(state.redChests) copy.redChests = Array.from(state.redChests.entries());
   
@@ -3165,6 +3197,7 @@ window.loadRun = function(){
     d.seen = new Set(d.seen);
     d.corridor = new Set(d.corridor);
     d.lockedDoors = new Set(d.lockedDoors);
+    d.puzzleDoors = new Set(d.puzzleDoors);
     d.mimicChests = new Set(d.mimicChests);
     if(d.redChests) d.redChests = new Map(d.redChests);
 
@@ -3770,7 +3803,7 @@ const BOSS_NAMES = {
   Bat:      'Count Fang',
   Spider:   'Broodmother',
   Slime:    'Sir Squish',
-  Goblin:   'Carl',
+  Goblin:   'Throngler',
   Skeleton: 'Mr. Humerus',
   Mage:     'Archon of Ash',
   Clone:    'Your Shadow' // floor 50 clone; change as you like
@@ -3800,6 +3833,7 @@ function gen(){
   state.enemies=[]; state.pickups={};
  state.props={}; // <--- NEW: Init props
   state.lockedDoors = new Set();     // ← reset per-floor
+  state.puzzleDoors = new Set();
   state._starterChest = null;        // ← avoid stale pointer
   
   delete state._pendingOmen;         // <--- FIX: Ensure Omen flag resets every floor
@@ -4003,10 +4037,16 @@ return;
   // Scale rooms slightly with floor depth (min 8, max 25)
   const roomCount = 8 + Math.min(17, Math.floor(state.floor / 2)); // Max rooms capped at 25
   let attempts=0;
-  while(state.rooms.length<roomCount && attempts<1000){ // Increased attempts to 1000
+  
+  // NEW: Restrict normal room generation to the top-left 76x76 grid.
+  // This guarantees the bottom-right corner (from 80,80 to 100,100) is a pure void reserved exclusively for Puzzle Dimensions.
+  const genW = Math.min(W, 76);
+  const genH = Math.min(H, 76);
+
+  while(state.rooms.length<roomCount && attempts<1000){ 
     attempts++;
     const w=rand(6,12), h=rand(6,12);
-    const x=rand(2,W-w-3), y=rand(2,H-h-3);
+    const x=rand(2,genW-w-3), y=rand(2,genH-h-3);
     let overlap=false;
     for(const r of state.rooms){
       if(!(x+w+2<r.x || y+h+2<r.y || x>r.x+r.w+2 || y>r.y+r.h+2)){overlap=true;break;}
@@ -4033,8 +4073,8 @@ return;
   // Fallback: ensure at least one room exists so spawners have a target
 if (state.rooms.length === 0) {
   const w = 10, h = 8;
-  const x = Math.max(2, Math.floor(W/2 - w/2));
-  const y = Math.max(2, Math.floor(H/2 - h/2));
+  const x = Math.max(2, Math.floor(genW/2 - w/2));
+  const y = Math.max(2, Math.floor(genH/2 - h/2));
   const r = { x, y, w, h };
   state.rooms.push(r);
   for (let yy = y; yy < y + h; yy++) {
@@ -4267,6 +4307,83 @@ state.mimicChests = new Set();
 
   // (Moved Red Chest logic to end of gen() so it detects NPCs correctly)
 
+  // --- Puzzle Rooms (Pocket Dimensions) ---
+  state.puzzleRooms = new Set();
+  state.boulderPuzzleActive = false;
+  state.icePuzzleActive = false;
+
+  window.generatePuzzleArea = function(puzzleType, diff) {
+      const r = { x: 80, y: 80, w: 13, h: 13 }; // Increased room size for more boulder space
+      state.puzzleRooms.add(r);
+      
+      // Cleanup a large fixed block to ensure no old puzzle walls or ice remains
+      for(let y=78; y<102; y++){
+          for(let x=78; x<102; x++){
+              if (inBounds(x,y)) {
+                  if (!state.tiles[y]) state.tiles[y] = [];
+                  state.tiles[y][x] = 0; 
+                  delete state.props[key(x,y)];
+                  delete state.pickups[key(x,y)];
+              }
+          }
+      }
+      
+      // Paint the frame for the specific room dimensions
+      for(let y=r.y; y<r.y+r.h; y++){
+          for(let x=r.x; x<r.x+r.w; x++){
+              state.tiles[y][x] = (x === r.x || x === r.x+r.w-1 || y === r.y || y === r.y+r.h-1) ? 0 : 1;
+          }
+      }
+
+      const midX = Math.floor(r.x + r.w / 2);
+      const spawnY = r.y + r.h - 3; 
+
+      const chasmY = r.y + 2;
+      const noteY = r.y + 1;
+      for (let x = r.x + 1; x < r.x + r.w - 1; x++) state.tiles[chasmY][x] = 15;
+
+      const d = (diff !== null && diff !== undefined) ? diff : rand(0, 16); 
+      let pPos = [], bPos = [], walls = [];
+      if (d === 0) { pPos = [[r.x+4, r.y+4], [r.x+6, r.y+4], [r.x+8, r.y+4]]; bPos = [[r.x+4, r.y+8], [r.x+8, r.y+8], [r.x+6, r.y+9]]; walls = [[r.x+4, r.y+6], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+8, r.y+6], [r.x+6, r.y+5], [r.x+6, r.y+7]]; }
+      else if (d === 1) { pPos = [[r.x+6, r.y+3], [r.x+5, r.y+4], [r.x+7, r.y+4]]; bPos = [[r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+6, r.y+9]]; walls = [[r.x+6, r.y+5], [r.x+6, r.y+6], [r.x+6, r.y+7], [r.x+5, r.y+5], [r.x+7, r.y+5], [r.x+4, r.y+7], [r.x+8, r.y+7]]; }
+      else if (d === 2) { pPos = [[r.x+6, r.y+3], [r.x+5, r.y+4], [r.x+7, r.y+4]]; bPos = [[r.x+4, r.y+8], [r.x+8, r.y+8], [r.x+6, r.y+9]]; walls = [[r.x+5, r.y+7], [r.x+6, r.y+7], [r.x+7, r.y+7], [r.x+4, r.y+5], [r.x+5, r.y+5], [r.x+7, r.y+5], [r.x+8, r.y+5]]; }
+      else if (d === 3) { pPos = [[r.x+3, r.y+4], [r.x+4, r.y+4], [r.x+8, r.y+4], [r.x+9, r.y+4]]; bPos = [[r.x+4, r.y+8], [r.x+6, r.y+8], [r.x+8, r.y+8], [r.x+6, r.y+9]]; walls = [[r.x+5, r.y+6], [r.x+6, r.y+6], [r.x+7, r.y+6], [r.x+5, r.y+7], [r.x+7, r.y+7], [r.x+5, r.y+5], [r.x+7, r.y+5]]; }
+      else if (d === 4) { pPos = [[r.x+5, r.y+4], [r.x+6, r.y+4], [r.x+5, r.y+5], [r.x+6, r.y+5]]; bPos = [[r.x+4, r.y+8], [r.x+6, r.y+8], [r.x+8, r.y+8], [r.x+5, r.y+9]]; walls = [[r.x+4, r.y+6], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+8, r.y+6], [r.x+4, r.y+7], [r.x+8, r.y+7], [r.x+7, r.y+4], [r.x+4, r.y+4]]; }
+      else if (d === 5) { pPos = [[r.x+4, r.y+3], [r.x+8, r.y+3], [r.x+4, r.y+5], [r.x+8, r.y+5]]; bPos = [[r.x+3, r.y+8], [r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+9, r.y+8]]; walls = [[r.x+6, r.y+4], [r.x+6, r.y+5], [r.x+6, r.y+6], [r.x+6, r.y+7], [r.x+6, r.y+8], [r.x+4, r.y+7], [r.x+8, r.y+7]]; }
+      else if (d === 6) { pPos = [[r.x+5, r.y+3], [r.x+7, r.y+3], [r.x+5, r.y+4], [r.x+7, r.y+4]]; bPos = [[r.x+4, r.y+8], [r.x+8, r.y+8], [r.x+5, r.y+9], [r.x+7, r.y+9]]; walls = [[r.x+6, r.y+4], [r.x+6, r.y+5], [r.x+6, r.y+6], [r.x+6, r.y+7], [r.x+4, r.y+6], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+8, r.y+6]]; }
+      else if (d === 7) { pPos = [[r.x+4, r.y+4], [r.x+5, r.y+4], [r.x+6, r.y+4], [r.x+6, r.y+5]]; bPos = [[r.x+4, r.y+8], [r.x+6, r.y+8], [r.x+8, r.y+8], [r.x+7, r.y+9]]; walls = [[r.x+5, r.y+6], [r.x+6, r.y+6], [r.x+7, r.y+6], [r.x+7, r.y+7], [r.x+7, r.y+8], [r.x+5, r.y+5], [r.x+4, r.y+7]]; }
+      else if (d === 8) { pPos = [[r.x+3, r.y+3], [r.x+4, r.y+3], [r.x+5, r.y+3], [r.x+3, r.y+4], [r.x+4, r.y+4]]; bPos = [[r.x+4, r.y+8], [r.x+6, r.y+8], [r.x+8, r.y+8], [r.x+5, r.y+9], [r.x+7, r.y+9]]; walls = [[r.x+6, r.y+4], [r.x+6, r.y+5], [r.x+6, r.y+6], [r.x+7, r.y+6], [r.x+8, r.y+6], [r.x+4, r.y+7], [r.x+5, r.y+7]]; }
+      else if (d === 9) { pPos = [[r.x+4, r.y+4], [r.x+5, r.y+4], [r.x+6, r.y+4], [r.x+7, r.y+4], [r.x+8, r.y+4]]; bPos = [[r.x+3, r.y+8], [r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+9, r.y+8], [r.x+6, r.y+9]]; walls = [[r.x+4, r.y+6], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+8, r.y+6], [r.x+4, r.y+7], [r.x+8, r.y+7]]; }
+      else if (d === 10) { pPos = [[r.x+4, r.y+3], [r.x+6, r.y+3], [r.x+8, r.y+3], [r.x+5, r.y+4], [r.x+7, r.y+4]]; bPos = [[r.x+3, r.y+8], [r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+9, r.y+8], [r.x+6, r.y+9]]; walls = [[r.x+3, r.y+6], [r.x+4, r.y+6], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+8, r.y+6], [r.x+9, r.y+6], [r.x+5, r.y+7], [r.x+7, r.y+7]]; }
+      else if (d === 11) { pPos = [[r.x+4, r.y+3], [r.x+6, r.y+3], [r.x+8, r.y+3], [r.x+4, r.y+5], [r.x+6, r.y+5], [r.x+8, r.y+5]]; bPos = [[r.x+3, r.y+8], [r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+9, r.y+8], [r.x+4, r.y+9], [r.x+8, r.y+9]]; walls = [[r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+5, r.y+7], [r.x+7, r.y+7], [r.x+5, r.y+4], [r.x+7, r.y+4]]; }
+      else if (d === 12) { pPos = [[r.x+3, r.y+3], [r.x+4, r.y+3], [r.x+5, r.y+3], [r.x+7, r.y+5], [r.x+8, r.y+5], [r.x+9, r.y+5]]; bPos = [[r.x+4, r.y+8], [r.x+6, r.y+8], [r.x+8, r.y+8], [r.x+5, r.y+9], [r.x+7, r.y+9], [r.x+9, r.y+9]]; walls = [[r.x+6, r.y+4], [r.x+6, r.y+5], [r.x+6, r.y+6], [r.x+6, r.y+7], [r.x+4, r.y+6], [r.x+8, r.y+7]]; }
+      else if (d === 13) { pPos = [[r.x+5, r.y+4], [r.x+6, r.y+4], [r.x+7, r.y+4], [r.x+5, r.y+5], [r.x+6, r.y+5], [r.x+7, r.y+5]]; bPos = [[r.x+4, r.y+8], [r.x+6, r.y+8], [r.x+8, r.y+8], [r.x+3, r.y+9], [r.x+5, r.y+9], [r.x+7, r.y+9]]; walls = [[r.x+4, r.y+6], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+8, r.y+6], [r.x+6, r.y+7], [r.x+4, r.y+7], [r.x+8, r.y+7]]; }
+      else if (d === 14) { pPos = [[r.x+3, r.y+4], [r.x+4, r.y+4], [r.x+5, r.y+4], [r.x+6, r.y+4], [r.x+7, r.y+4], [r.x+8, r.y+4], [r.x+9, r.y+4]]; bPos = [[r.x+3, r.y+8], [r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+9, r.y+8], [r.x+4, r.y+9], [r.x+6, r.y+9], [r.x+8, r.y+9]]; walls = [[r.x+4, r.y+6], [r.x+6, r.y+6], [r.x+8, r.y+6], [r.x+5, r.y+7], [r.x+7, r.y+7], [r.x+4, r.y+5], [r.x+8, r.y+5]]; }
+      else if (d === 15) { pPos = [[r.x+5, r.y+3], [r.x+6, r.y+3], [r.x+7, r.y+3], [r.x+4, r.y+4], [r.x+8, r.y+4], [r.x+5, r.y+5], [r.x+7, r.y+5]]; bPos = [[r.x+3, r.y+8], [r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+9, r.y+8], [r.x+4, r.y+9], [r.x+6, r.y+9], [r.x+8, r.y+9]]; walls = [[r.x+4, r.y+7], [r.x+6, r.y+7], [r.x+8, r.y+7], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+6, r.y+5]]; }
+      else { pPos = [[r.x+4, r.y+3], [r.x+6, r.y+3], [r.x+8, r.y+3], [r.x+5, r.y+4], [r.x+7, r.y+4], [r.x+4, r.y+5], [r.x+8, r.y+5]]; bPos = [[r.x+3, r.y+8], [r.x+5, r.y+8], [r.x+7, r.y+8], [r.x+9, r.y+8], [r.x+4, r.y+9], [r.x+6, r.y+9], [r.x+8, r.y+9]]; walls = [[r.x+3, r.y+6], [r.x+5, r.y+6], [r.x+7, r.y+6], [r.x+9, r.y+6], [r.x+4, r.y+7], [r.x+8, r.y+7], [r.x+6, r.y+7]]; }
+
+
+      
+      
+      pPos.forEach(p => state.tiles[p[1]][p[0]] = 16);
+      walls.forEach(w => { state.tiles[w[1]][w[0]] = 0; });
+      bPos.forEach(b => { state.props[key(b[0], b[1])] = { type: 'boulder', underTile: 1 }; state.tiles[b[1]][b[0]] = 8; });
+
+      state.boulderPuzzleActive = true;
+      state.puzzleGateY = chasmY;
+      state.puzzleRoomX = r.x + 1;
+      state.puzzleRoomW = r.w - 2;
+      state.puzzlePlatesCount = pPos.length;
+      
+      state.pickups[key(midX, noteY)] = { kind: 'lore', payload: { id: 'Note_'+rand(1,10), title: 'Ancient Fragment' } };
+      state.tiles[noteY][midX] = 5;
+
+      state.puzzleStartX = midX; state.puzzleStartY = spawnY;
+      state.props[key(midX, spawnY + 1)] = { type: 'puzzle_exit' };
+      state.tiles[spawnY + 1][midX] = 8;
+  };
+
+  
   // --- Shrines (tile 6) ---
 ensurePathToStairsUnlocked(); 
 
@@ -4576,11 +4693,31 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < cC
   }
   // ------------------------------------------------------
 
+  // 10% Spawn Chance check (Moved here to properly avoid NPCs)
+  if (state.rooms.length > 2 && Math.random() < 0.10) {
+      const pCands = state.rooms.slice(1).filter(r => r !== state._stairsRoom && !state.merchant?.room && !state.blacksmith?.room && !state.jester?.room && !state.cartographer?.room && !state.cleric?.room && r !== state.goldWell?.room);
+      
+      if (pCands.length > 0) {
+          const entryRoom = pCands[rand(0, pCands.length - 1)];
+          const portalX = Math.floor(entryRoom.x + entryRoom.w/2), portalY = Math.floor(entryRoom.y + entryRoom.h/2);
+          state.props[key(portalX, portalY)] = { type: 'puzzle_portal' };
+          state.tiles[portalY][portalX] = 8;
+          
+          state.puzzleEntryRoom = entryRoom; // Track for busy set
+
+          generatePuzzleArea(0, null); // Always spawn boulder variations
+
+          if (typeof window.playPuzzleMusic === 'function') window.playPuzzleMusic();
+          log("An Ethereal Gateway has appeared somewhere on this floor...");
+      }
+  }
+
   // --- NEW: Cursed Spawns (Stairs & Red Chest) ---
   // We handle both here, AFTER NPCs spawn, to ensure they don't overlap.
   
   // 1. Build "Busy" Set (Start + Stairs + NPCs + Wells + Shrines)
   const busy = new Set([state.startRoom, state._stairsRoom]);
+  if (state.puzzleEntryRoom) busy.add(state.puzzleEntryRoom);
   if (state.merchant?.room) busy.add(state.merchant.room);
   if (state.blacksmith?.room) busy.add(state.blacksmith.room);
   if (state.jester?.room) busy.add(state.jester.room);
@@ -4588,6 +4725,7 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < cC
   if (state.cleric?.room) busy.add(state.cleric.room);
   if (state.goldWell?.room) busy.add(state.goldWell.room);
   if (state.shrines) state.shrines.forEach(s => busy.add(s.room));
+  if (state.puzzleRooms) state.puzzleRooms.forEach(pr => busy.add(pr)); // Block everything else from Puzzle Rooms!
 
   // 2. Cursed Stairs (Moved from earlier)
   if (state.floor % 10 !== 0 && state.rooms.length > 2 && Math.random() < 0.4) {
@@ -4717,6 +4855,15 @@ if (
       inSafe(state.safeRect4, x, y)
     ) continue;
 
+// NEVER spawn enemies in puzzle rooms
+let inPuzzleEnemy = false;
+if (state.puzzleRooms) {
+    for (const pr of state.puzzleRooms) {
+        if (x >= pr.x && x < pr.x + pr.w && y >= pr.y && y < pr.y + pr.h) inPuzzleEnemy = true;
+    }
+}
+if (inPuzzleEnemy) continue;
+
 
 // pick kind and build enemy
   const k = kinds[Math.floor(Math.random() * kinds.length)];
@@ -4811,6 +4958,15 @@ while(propCount > 0 && propSafe < 1000){
 // Don't put on NPC tiles
   // FIX: Added isClericTile check so crates don't spawn on her head
   if (isMerchantTile(rx,ry) || isBlacksmithTile(rx,ry) || isJesterTile(rx,ry) || isCartographerTile(rx,ry) || isClericTile(rx,ry)) continue;
+  
+  // NEVER spawn random props inside puzzle rooms
+  let inPuzzle = false;
+  if (state.puzzleRooms) {
+      for (const pr of state.puzzleRooms) {
+          if (rx >= pr.x && rx < pr.x + pr.w && ry >= pr.y && ry < pr.y + pr.h) inPuzzle = true;
+      }
+  }
+  if (inPuzzle) continue;
 
 // Determine prop pool based on floor depth
   let types = ['crate','barrel','rubble']; // Default fallback
@@ -5104,6 +5260,15 @@ if (typeof isBlacksmithTile === 'function' && isBlacksmithTile(spot.x, spot.y)) 
 if (typeof isJesterTile === 'function' && isJesterTile(spot.x, spot.y)) continue;
 if (typeof isCartographerTile === 'function' && isCartographerTile(spot.x, spot.y)) continue;
 if (typeof isClericTile === 'function' && isClericTile(spot.x, spot.y)) continue; // --- NEW ---
+
+    // NEVER place random loot in puzzle rooms
+    let inPuzzleLootTopUp = false;
+    if (state.puzzleRooms) {
+        for (const pr of state.puzzleRooms) {
+            if (spot.x >= pr.x && spot.x < pr.x + pr.w && spot.y >= pr.y && spot.y < pr.y + pr.h) inPuzzleLootTopUp = true;
+        }
+    }
+    if (inPuzzleLootTopUp) continue;
 
     // Block Golden Well (2x2)
     if (state.goldWell && spot.x >= state.goldWell.x && spot.x <= state.goldWell.x+1 && spot.y >= state.goldWell.y && spot.y <= state.goldWell.y+1) continue;
@@ -7732,18 +7897,28 @@ function draw(){
   // 1. Init if missing (legacy save safety)
   if (state.player.rx === undefined) { state.player.rx = state.player.x; state.player.ry = state.player.y; }
 
-  // 2. Interpolate (Lerp) towards target. 0.25 = move 25% of the distance per frame.
-  const lerp = 0.25; 
-  state.player.rx += (state.player.x - state.player.rx) * lerp;
-  state.player.ry += (state.player.y - state.player.ry) * lerp;
+  
+  // 2. Player Sprite Interpolation (Smooth, consistent speed)
+    const lerp = 0.25;
+    let sx = (state.player.x - state.player.rx) * lerp;
+    let sy = (state.player.y - state.player.ry) * lerp;
 
-  // 3. Snap if very close to stop micro-jitter
-  if (Math.abs(state.player.x - state.player.rx) < 0.01) state.player.rx = state.player.x;
-  if (Math.abs(state.player.y - state.player.ry) < 0.01) state.player.ry = state.player.y;
-  // --------------------------------
+    // Reduced slide speed so it doesn't move too fast on ice
+    if (sx > 0.35) sx = 0.35;
+    if (sx < -0.35) sx = -0.35;
+    if (sy > 0.35) sy = 0.35;
+    if (sy < -0.35) sy = -0.35;
+    
+    state.player.rx += sx;
+    state.player.ry += sy;
 
-  const ox = state.player.x - Math.floor(viewW/2);
-  const oy = state.player.y - Math.floor(viewH/2);
+    if (Math.abs(state.player.x - state.player.rx) < 0.01) state.player.rx = state.player.x;
+    if (Math.abs(state.player.y - state.player.ry) < 0.01) state.player.ry = state.player.y;
+
+    // --------------------------------
+    // Camera centered on the visual interpolated position so it pans smoothly
+    const ox = Math.round(state.player.rx) - Math.floor(viewW/2);
+    const oy = Math.round(state.player.ry) - Math.floor(viewH/2);
   const rad = state.player.tempVisionRange || state.fovRadius;
 
   const bossesToDraw = []; // {sym, px, py}
@@ -7763,7 +7938,8 @@ function draw(){
 
       const d = Math.abs(gx-state.player.x)+Math.abs(gy-state.player.y);
       // FIX: Vision requires distance AND clear line of sight
-      const vis = d<=rad && checkLOS(state.player.x, state.player.y, gx, gy);
+      const vis = d<=rad && (state._inPuzzleRoom || checkLOS(state.player.x, state.player.y, gx, gy));
+
       const kxy = key(gx,gy);
       if (vis) state.seen.add(kxy);
       const seen = state.seen.has(kxy);
@@ -7811,19 +7987,122 @@ function draw(){
       // -----------------------------------
       
 if (t===2){
-  const locked = state.lockedDoors?.has(kxy);
-  drawDoorPixel(ctx, px, py, tile, !!locked);
-} else if (t===3){
+        const locked = state.lockedDoors?.has(kxy);
+        if (state.puzzleDoors?.has(kxy)) {
+            ctx.save();
+            ctx.filter = 'hue-rotate(200deg) saturate(1.5)';
+            drawDoorPixel(ctx, px, py, tile, !!locked);
+            ctx.restore();
+        } else {
+            drawDoorPixel(ctx, px, py, tile, !!locked);
+        }
+      } else if (t===3){
         // Check if this specific chest is a Red Challenge Chest
         if (state.redChests && state.redChests.has(kxy)) {
           drawRedChestPixel(ctx, px, py, tile);
         } else {
           drawChestPixel(ctx, px, py, tile);
         }
-      } else if (t===4){
-        drawStairsPixel(ctx, px, py, tile);
-      } else if (t===10){
-        // Cursed Stairs: Red tint
+      } else if (t===13 || t===14) {
+          // Highly Detailed Ice Base
+          ctx.fillStyle='#0ea5e9'; ctx.fillRect(px, py, tile, tile); // Base deep blue
+          ctx.fillStyle='#38bdf8'; ctx.fillRect(px+2, py+2, tile-4, tile-4); // Mid ice layer
+          ctx.fillStyle='#7dd3fc'; ctx.fillRect(px+4, py+4, tile-8, tile-8); // Light inner freeze
+          ctx.fillStyle='#e0f2fe'; ctx.fillRect(px+6, py+6, tile-12, 4); // Bright surface reflection
+          ctx.fillStyle='#bae6fd'; ctx.fillRect(px+tile-8, py+tile-8, 4, 4); // Secondary glint
+          
+          if (t===14) {
+              // Intricate Cracks for Fragile Ice
+              ctx.strokeStyle='#0284c7'; ctx.lineWidth=2; 
+              ctx.beginPath(); 
+              ctx.moveTo(px+4, py+4); ctx.lineTo(px+12, py+14); ctx.lineTo(px+8, py+22);
+              ctx.moveTo(px+12, py+14); ctx.lineTo(px+24, py+10); ctx.lineTo(px+28, py+18);
+              ctx.moveTo(px+16, py+24); ctx.lineTo(px+22, py+16);
+              ctx.stroke();
+              // White frost highlights on crack edges
+              ctx.strokeStyle='#f0f9ff'; ctx.lineWidth=1;
+              ctx.beginPath();
+              ctx.moveTo(px+5, py+5); ctx.lineTo(px+11, py+13);
+              ctx.moveTo(px+13, py+15); ctx.lineTo(px+23, py+11);
+              ctx.stroke();
+          }
+        } else if (t===15 || t===18) {
+          // Highly Detailed Abyss / Pit
+          ctx.fillStyle='#0f172a'; ctx.fillRect(px, py, tile, tile); // Base dark edge
+          ctx.fillStyle='#020617'; ctx.fillRect(px+2, py+4, tile-4, tile-4); // Deep void
+          // Fading rocky edges falling into the pit
+          ctx.fillStyle='#1e293b'; 
+          ctx.fillRect(px+2, py+2, 8, 4); ctx.fillRect(px+18, py+2, 10, 3);
+          ctx.fillRect(px+4, py+6, 4, 4); ctx.fillRect(px+22, py+5, 4, 3);
+        } else if (t===16) {
+          // Highly Detailed Pressure Plate (Empty)
+          ctx.fillStyle='#334155'; ctx.fillRect(px+2, py+2, tile-4, tile-4); // Outer rim shadow
+          ctx.fillStyle='#475569'; ctx.fillRect(px+2, py+2, tile-4, 2); // Rim highlight top
+          ctx.fillStyle='#475569'; ctx.fillRect(px+2, py+2, 2, tile-4); // Rim highlight left
+          ctx.fillStyle='#1e293b'; ctx.fillRect(px+4, py+4, tile-8, tile-8); // Inner depression
+          ctx.fillStyle='#94a3b8'; ctx.fillRect(px+6, py+6, tile-12, tile-12); // The unpressed plate
+          ctx.fillStyle='#cbd5e1'; ctx.fillRect(px+6, py+6, tile-12, 2); // Plate highlight
+          ctx.fillStyle='#0f172a'; ctx.fillRect(px+(tile/2)-2, py+(tile/2)-2, 4, 4); // Center rune
+        } else if (t===17) {
+          ctx.fillStyle='#78350f'; ctx.fillRect(px, py, tile, tile); // Raised Bridge
+          ctx.fillStyle='#451a03'; ctx.fillRect(px, py+4, tile, 2);
+        } else if (t===8 && state.props[kxy]?.type === 'puzzle_portal_dead') {
+          // Dead Gateway Sprite
+          ctx.fillStyle = '#1e293b'; 
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2 + 2, tile/2-2, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#334155'; 
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2, tile/2-4, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#475569'; 
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2, tile/4, 0, Math.PI*2); ctx.fill();
+        } else if (t===8 && state.props[kxy]?.type === 'puzzle_portal_dead') {
+          // Dead Gateway Sprite
+          ctx.fillStyle = '#1e293b'; 
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2 + 2, tile/2-2, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#334155'; 
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2, tile/2-4, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#475569'; 
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2, tile/4, 0, Math.PI*2); ctx.fill();
+        } else if (t===8 && (state.props[kxy]?.type === 'puzzle_portal' || state.props[kxy]?.type === 'puzzle_exit')) {
+          // Ethereal Gateway Sprite
+          ctx.fillStyle = '#3b0764'; // Deep purple outer shadow
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2 + 2, tile/2-2, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#7e22ce'; // Bright purple mid
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2, tile/2-4, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#d8b4fe'; // Glowing center core
+          ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2, tile/4, 0, Math.PI*2); ctx.fill();
+        } else if (t===8 && state.props[kxy]?.type === 'boulder') {
+          // If on a plate, draw the pressed plate underneath
+          if (state.props[kxy].underTile === 16) {
+              ctx.fillStyle='#334155'; ctx.fillRect(px+2, py+2, tile-4, tile-4); // Rim
+              ctx.fillStyle='#0f172a'; ctx.fillRect(px+4, py+4, tile-8, tile-8); // Inner depression
+              ctx.fillStyle='#64748b'; ctx.fillRect(px+6, py+8, tile-12, tile-12-2); // Pressed plate (lower)
+              ctx.fillStyle='#38bdf8'; ctx.fillRect(px+(tile/2)-2, py+(tile/2)-2 + 2, 4, 4); // Glowing center rune!
+          }
+          // Highly Detailed Boulder
+          ctx.fillStyle='#27272a'; ctx.beginPath(); ctx.arc(px+tile/2, py+tile/2 + 2, tile/2 - 2, 0, Math.PI*2); ctx.fill(); // Drop shadow
+          
+          ctx.fillStyle='#52525b'; ctx.fillRect(px+4, py+4, tile-8, tile-8); // Base rock
+          ctx.fillStyle='#71717a'; ctx.fillRect(px+6, py+4, tile-12, tile-10); // Mid tone
+          ctx.fillStyle='#a1a1aa'; ctx.fillRect(px+8, py+4, tile-16, 4); // Top highlight
+          
+          // Chipping / Texture
+          ctx.fillStyle='#3f3f46'; ctx.fillRect(px+4, py+tile-8, tile-8, 4); // Bottom shadow
+          ctx.fillStyle='#27272a'; ctx.fillRect(px+6, py+tile-6, tile-12, 2); // Deep bottom shadow
+          
+          // Cracks and craters
+          ctx.fillStyle='#3f3f46'; 
+          ctx.fillRect(px+8, py+8, 2, 2); // crater 1
+          ctx.fillRect(px+16, py+12, 4, 2); // crater 2
+          ctx.fillRect(px+10, py+16, 2, 4); // crack
+          ctx.fillRect(px+12, py+18, 2, 2); // crack end
+        } else if (t===8 && state.props[kxy]?.type.includes('lever')) {
+          ctx.fillStyle='#333'; ctx.fillRect(px+tile/2-4, py+tile/2-4, 8, 8); // Lever Base
+          ctx.fillStyle=(state.props[kxy].type === 'lever_locked') ? '#ef4444' : '#22c55e';
+          ctx.fillRect(px+tile/2-2, py+4, 4, tile/2); // Stick
+        } else if (t===4){
+          drawStairsPixel(ctx, px, py, tile);
+        } else if (t===10){
+          // Cursed Stairs: Red tint
         ctx.save();
         ctx.filter = 'sepia(1) saturate(5) hue-rotate(-50deg) contrast(1.2)';
         drawStairsPixel(ctx, px, py, tile);
@@ -8257,7 +8536,6 @@ ctx.fillStyle = grad;
 
   // Smart Loop: Run if effects active OR player is still sliding
   const isMoving = (Math.abs(state.player.x - state.player.rx) > 0.01 || Math.abs(state.player.y - state.player.ry) > 0.01);
-  
   state._animating = activeEffects || isMoving;
   if (state._animating) {
     requestAnimationFrame(draw);
@@ -10087,12 +10365,17 @@ function collectIfPickup(){
       state.inventory.antidotes++;
       log('Picked up an antidote.');
     }else if(it.kind==='trinket'){
-  SFX.pickup();
-  state.inventory.trinkets = state.inventory.trinkets || {};
-  state.inventory.trinkets[it.payload] = (state.inventory.trinkets[it.payload]||0) + 1;
-  unlockCodex(it.payload, true); // <--- Updates Codex count & seen status
-  log(`Picked up ${it.payload}.`);
-}else if(it.kind==='idol'){ // --- NEW: Idol Pickup ---
+            SFX.pickup();
+            state.inventory.trinkets = state.inventory.trinkets || {};
+            state.inventory.trinkets[it.payload] = (state.inventory.trinkets[it.payload]||0) + 1;
+            unlockCodex(it.payload, true); // <--- Updates Codex count & seen status
+            log(`Picked up ${it.payload}.`);
+        }else if(it.kind==='note'){
+            SFX.pickup();
+            unlockCodex(it.payload, true);
+            log(`You found a note and recorded it in your Codex.`);
+        }else if(it.kind==='idol'){
+            // --- NEW: Idol Pickup ---
   SFX.pickup();
   state.inventory.idols = state.inventory.idols || {};
   state.inventory.idols[it.payload] = (state.inventory.idols[it.payload]||0) + 1;
@@ -10114,12 +10397,15 @@ function collectIfPickup(){
       state.inventory.bombs = (state.inventory.bombs|0) + (it.payload||1);
       log(`Picked up ${it.payload||1} Bomb(s).`);
     }else if(it.kind==='warp'){
-      SFX.pickup();
-      state.inventory.warpStones = (state.inventory.warpStones|0) + (it.payload||1);
-      log(`Picked up ${it.payload||1} Warp Stone(s).`);
-    // ------------------------------------
-
-    }else if(it.kind==='lockpicks'){
+          SFX.pickup();
+          state.inventory.warpStones = (state.inventory.warpStones|0) + (it.payload||1);
+          log(`Picked up ${it.payload||1} Warp Stone(s).`);
+// ------------------------------------
+        }else if(it.kind==='lore'){
+        SFX.pickup();
+        unlockCodex(it.payload.id, true);
+        log(`You found a torn page! Check your Codex.`);
+      }else if(it.kind==='lockpicks'){
         SFX.pickup();    
       state.inventory.lockpicks += it.payload; log(`Picked up ${it.payload} lockpick(s).`);
     } else if (it.kind === 'arrows'){
@@ -10250,10 +10536,141 @@ function tryMove(dx,dy){
   if(t===6) { log('A mystical shrine blocks the way. Press E to interact.'); return; }
   
   // 1. ADDED: Block movement into scenery
-  if(t===8) { 
-    const pType = state.props[key(nx,ny)]?.type || 'crate';
-    log(`A ${pType} blocks the way. Press SPACE to smash it!`); 
-    return; 
+  
+  if(t===8) {
+    const pKey = key(nx,ny);
+    const pType = state.props[pKey]?.type || 'crate';
+    
+    // --- PORTAL TELEPORTS ---
+    if (pType === 'puzzle_portal_dead') {
+        log("The gateway has sealed shut permanently.");
+        return;
+    }
+    if (pType === 'puzzle_portal') {
+        log("You step through the Ethereal Gateway...");
+        if (SFX.lockSuccess) SFX.lockSuccess(); 
+        
+        // --- VISION & CAMERA ADJUSTMENT ---
+        state._prevFov = state.fovRadius;
+        state.fovRadius = 22; // Large enough to see the whole 15x17 room
+        state._inPuzzleRoom = true;
+        // ----------------------------------
+
+        state.puzzleEntryX = state.player.x;
+        state.puzzleEntryY = state.player.y;
+        state.puzzlePortalX = nx;
+        state.puzzlePortalY = ny;
+        
+        state.player.x = state.puzzleStartX;
+        state.player.y = state.puzzleStartY;
+        state.player.rx = state.puzzleStartX;
+        state.player.ry = state.puzzleStartY;
+        draw();
+        return;
+    }
+    if (pType === 'puzzle_exit') {
+        log("You return to the dungeon...");
+        if (SFX.lockSuccess) SFX.lockSuccess();
+
+        // --- RESTORE VISION & CAMERA ---
+        state.fovRadius = state._prevFov || 5;
+        state._inPuzzleRoom = false;
+        // -------------------------------
+
+        state.player.x = state.puzzleEntryX;
+        state.player.y = state.puzzleEntryY;
+        state.player.rx = state.puzzleEntryX;
+        state.player.ry = state.puzzleEntryY;
+        draw();
+        return;
+    }
+
+    if (pType === 'boulder') {
+            const bx = nx + dx, by = ny + dy;
+            const tNext = state.tiles[by]?.[bx];
+            // Can push into floor or plate
+            if (inBounds(bx, by) && (tNext === 1 || tNext === 16) && !enemyAt(bx, by) && !state.props[key(bx,by)]) {
+                state.props[key(bx, by)] = state.props[pKey];
+        delete state.props[pKey];
+        state.tiles[by][bx] = 8;
+        state.tiles[ny][nx] = state.props[key(bx,by)].underTile || 1;
+        state.props[key(bx, by)].underTile = tNext;
+        
+        // --- MULTI-BOULDER COMPLETION CHECK ---
+        if (state.boulderPuzzleActive) {
+            let platesCovered = 0;
+            for (const pk in state.props) {
+                if (state.props[pk].type === 'boulder' && state.props[pk].underTile === 16) platesCovered++;
+            }
+            if (platesCovered >= state.puzzlePlatesCount) {
+                log("A heavy mechanism grinds! The chasm closes!");
+                if (SFX.lockSuccess) SFX.lockSuccess();
+                // Fill in the pits blocking the lore note
+                for (let x = state.puzzleRoomX; x < state.puzzleRoomX + state.puzzleRoomW; x++) {
+                    if (state.tiles[state.puzzleGateY][x] === 15) {
+                        state.tiles[state.puzzleGateY][x] = 1; // Turn pit to floor
+                    }
+                }
+                state.boulderPuzzleActive = false; // Puzzle solved
+            }
+        }
+      } else {
+        log("The boulder won't budge.");
+        return;
+      }
+    } else if (pType === 'lever' || pType === 'lever_locked') {
+      if (pType === 'lever_locked') {
+        log("The lever is jammed permanently.");
+        return;
+      }
+      if (SFX.lockSuccess) SFX.lockSuccess();
+      log("You pulled a lever! The architecture shifts.");
+      for(let y=0; y<state.size.h; y++){
+        for(let x=0; x<state.size.w; x++){
+          if(state.tiles[y][x] === 17) state.tiles[y][x] = 18;
+          else if(state.tiles[y][x] === 18) state.tiles[y][x] = 17;
+        }
+      }
+      if (state.puzzlePullsLeft !== undefined) {
+        state.puzzlePullsLeft--;
+        if (state.puzzlePullsLeft <= 0) {
+          log("The levers lock permanently in place!");
+          for(let py=0; py<state.size.h; py++){
+            for(let px=0; px<state.size.w; px++){
+              if(state.props[key(px,py)]?.type === 'lever') state.props[key(px,py)].type = 'lever_locked';
+            }
+          }
+        }
+      }
+      state.gameTurn = (state.gameTurn || 0) + 1;
+      draw();
+      return;
+    } else {
+      log(`A ${pType} blocks the way. Press SPACE to smash it!`);
+      return;
+    }
+  }
+
+  // Puzzle Pits
+  if (t === 15 || t === 18) {
+      log("You fall into the abyss!");
+      state.player.hp = Math.max(1, state.player.hp - 2);
+      if (typeof flashDamage === 'function') flashDamage();
+      if (state.puzzleStartX) {
+          state.player.x = state.puzzleStartX;
+          state.player.y = state.puzzleStartY;
+          state.player.rx = state.puzzleStartX;
+          state.player.ry = state.puzzleStartY;
+      }
+      draw();
+      return;
+  
+      
+      if (SFX.step) SFX.step();
+      if (typeof collectIfPickup === 'function') collectIfPickup();
+      enemyStep();
+      draw();
+      return;
   }
 
   // --- NEW: Spike Trap Logic ---
@@ -10387,21 +10804,17 @@ function tryMove(dx,dy){
 
 
 // --- NEW: MIASMA ticks every other PLAYER STEP (movement only) ---
-if (isEffectActive('MiasmaChamber')){ // FIX: Use isEffectActive
-  state._miasmaSteps = (state._miasmaSteps|0) + 1;
-  if (state._miasmaSteps % 3 === 0){
-    // Scale: 1 dmg base + 1 per 10 floors (Increased scaling)
-    const damage = 1 + Math.floor(state.floor/5);
-    // Player Damage
-    const p = damageAfterDR(damage);
-    state.player.hp = clamp(state.player.hp - p, 0, state.player.hpMax);
-    flashDamage();
-    log(`The miasma burns you for ${p}.`);
-    updateBars();
-    if (state.player.hp <= 0){
-        triggerGameOver();
-        return;
-      }
+  if (isEffectActive('MiasmaChamber')){ // FIX: Use isEffectActive
+    state._miasmaSteps = (state._miasmaSteps|0) + 1;
+    if (state._miasmaSteps % 3 === 0){
+      // Scale: 1 dmg base + 1 per 10 floors (Increased scaling)
+      const damage = 1 + Math.floor(state.floor/10); // Player Damage
+      const p = damageAfterDR(damage);
+      state.player.hp = clamp(state.player.hp - p, 0, state.player.hpMax);
+      flashDamage();
+      log(`The miasma burns you for ${p}.`);
+      updateBars();
+      if (state.player.hp <= 0){ triggerGameOver(); return; }
     }
   }
   // --- END: MIASMA step tick ---
@@ -11005,7 +11418,13 @@ function handlePropSmash(x, y) {
   }
   const prop = state.props[k];
   const name = prop ? prop.type : 'crate';
-  
+
+  // --- PUZZLE PROTECTION ---
+  if (name === 'boulder' || name === 'puzzle_portal' || name === 'puzzle_exit' || name.includes('lever')) {
+      log("Your weapon clangs uselessly against it.");
+      return; 
+  }
+
   // Remove prop visual and physical block
   if (state.props[k]) delete state.props[k];
   state.tiles[y][x] = 1; // Turn into floor
@@ -18216,33 +18635,96 @@ function initDebugSpawner() {
   }
   document.body.appendChild(panel);
 
-  // 4. Inject "Toggle Spawner" Button into your existing Debug Modal
+  // 4. Inject Spawner Buttons into Debug Modal
   const dbgContainer = document.querySelector('#debugModal .row[style*="margin-top"]');
   if(dbgContainer) {
+      // 4a. Prop Spawner Button
       const toggle = document.createElement('button');
       toggle.className = 'btn';
       toggle.textContent = "Open Prop Spawner";
-      toggle.style.borderColor = "#a855f7"; // Purple border to stand out
-      toggle.style.color = "#a855f7";
+      toggle.style.borderColor = "#a855f7";
       toggle.onclick = () => {
           const p = document.getElementById('debugPropPanel');
-          if(p) {
-            p.style.display = 'block';
-            // Close the main debug modal so we can see the game
-            const m = document.getElementById('debugModal');
-            if(m) m.style.display = 'none';
-            if(document.body.classList.contains('noscroll')) document.body.classList.remove('noscroll');
-          }
+          if(p) { p.style.display = 'block'; document.getElementById('debugModal').style.display = 'none'; document.body.classList.remove('noscroll'); }
       };
       dbgContainer.appendChild(toggle);
+
+      // 4b. NEW: Puzzle Spawner Button
+      const puzzleToggle = document.createElement('button');
+      puzzleToggle.className = 'btn';
+      puzzleToggle.textContent = "Open Puzzle Spawner";
+      puzzleToggle.style.borderColor = "#60a5fa";
+      puzzleToggle.style.color = "#60a5fa";
+      puzzleToggle.onclick = () => {
+          const p = document.getElementById('debugPuzzlePanel');
+          if(p) { p.style.display = 'block'; document.getElementById('debugModal').style.display = 'none'; document.body.classList.remove('noscroll'); }
+      };
+      dbgContainer.appendChild(puzzleToggle);
   }
+
+  // --- 5. NEW: Puzzle Selection Panel ---
+  const puzzlePanel = document.createElement('div');
+  puzzlePanel.id = 'debugPuzzlePanel';
+  puzzlePanel.style.cssText = "position:fixed; top:120px; right:10px; width:180px; max-height:60vh; overflow-y:auto; background:rgba(10,15,20,0.95); border:1px solid #60a5fa; color:#fff; font-family:monospace; font-size:11px; z-index:11000; padding:4px; box-shadow: 2px 2px 10px #000; display:none;";
+  puzzlePanel.innerHTML = '<div style="color:#60a5fa; border-bottom:1px solid #555; margin-bottom:6px; font-weight:bold; cursor:pointer; text-align:right;" onclick="this.parentElement.style.display=\'none\'">CLOSE [X]</div>';
+
+  const puzzleLib = {
+    'Boulder Puzzles': [
+      { name: '1: Easy Trio (3)', type: 0, diff: 0 },
+      { name: '2: Central Cross (3)', type: 0, diff: 1 },
+      { name: '3: Small Triangle (3)', type: 0, diff: 2 },
+      { name: '4: Wide Plates (4)', type: 0, diff: 3 },
+      { name: '5: Compact Square (4)', type: 0, diff: 4 },
+      { name: '6: Split Core (4)', type: 0, diff: 5 },
+      { name: '7: Twin Gate (4)', type: 0, diff: 6 },
+      { name: '8: Offset T (4)', type: 0, diff: 7 },
+      { name: '9: Corner Block (5)', type: 0, diff: 8 },
+      { name: '10: Hallway Line (5)', type: 0, diff: 9 },
+      { name: '11: Blockade (5)', type: 0, diff: 10 },
+      { name: '12: Checker Columns (6)', type: 0, diff: 11 },
+      { name: '13: Extreme Offset (6)', type: 0, diff: 12 },
+      { name: '14: Six Pack (6)', type: 0, diff: 13 },
+      { name: '15: Seven Seas (7)', type: 0, diff: 14 },
+      { name: '16: Hexahedron (7)', type: 0, diff: 15 },
+      { name: '17: Chaos (7)', type: 0, diff: 16 }
+    ],
+  };
+
+  for (const [cat, variations] of Object.entries(puzzleLib)) {
+      const h = document.createElement('div'); h.textContent = cat; h.style.cssText = "color:#9ca3af; margin-top:4px; font-weight:bold; background:#1f2937; padding:4px;";
+      puzzlePanel.appendChild(h);
+      variations.forEach(v => {
+          const b = document.createElement('button'); b.textContent = v.name;
+          b.style.cssText = "display:block; width:100%; text-align:left; background:transparent; color:#d1d5db; border:none; margin:1px 0; padding:4px; cursor:pointer;";
+          b.onclick = () => {
+              if (!state._inPuzzleRoom) {
+                  state.puzzleEntryX = state.player.x;
+                  state.puzzleEntryY = state.player.y;
+                  state._prevFov = state.fovRadius;
+              }
+              state.fovRadius = 22; // Let there be light!
+              state._inPuzzleRoom = true;
+              state.puzzlePortalX = null;
+              
+              generatePuzzleArea(v.type, v.diff);
+              state.player.x = state.puzzleStartX;
+              state.player.y = state.puzzleStartY;
+              state.player.rx = state.puzzleStartX;
+              state.player.ry = state.puzzleStartY;
+              log(`[debug] Teleported to ${cat}: ${v.name}`);
+              draw();
+          };
+          puzzlePanel.appendChild(b);
+      });
+  }
+  document.body.appendChild(puzzlePanel);
 }
 
 // ====== CODEX SYSTEM ======
 const CODEX_KEY = 'dc_codex_v1';
 const CODEX_DEF = {
   // Enemies
-  Rat: { name:'Rat', desc:'A disease-ridden rodent wandering the dungeon.', seen:false, kills:0 },
+  Rat: { name:'Rat', desc:'A disease-ridden rodent wandering the dungeon floors.', seen:false, kills:0 },
   Bat: { name:'Bat', desc:'Flits in the shadows. Drinks blood to heal.', seen:false, kills:0 },
   Slime: { name:'Slime', desc:'A mindless blob of acidic jelly.', seen:false, kills:0 },
   Spider: { name:'Spider', desc:'Web-spinning hunter. Slows its prey.', seen:false, kills:0 },
@@ -18251,15 +18733,15 @@ const CODEX_DEF = {
   Mage: { name:'Mage', desc:'Casts spells from a distance.', seen:false, kills:0 },
   Mimic: { name:'Mimic', desc:'A chest with teeth. Surprise!', seen:false, kills:0 },
   // Bosses
-  'The Rat King': { name:'The Rat King', desc:'What was once a ordinary rat has now become monstrous in size due to the constant expore to toxic waste..', seen:false, kills:0 },
-  'Count Fang': { name:'Count Fang', desc:'Ancient vampiric horror.', seen:false, kills:0 },
-  'Broodmother': { name:'Broodmother', desc:'Queen of the webs.', seen:false, kills:0 },
-  'Sir Squish': { name:'Sir Squish', desc:'A slime of noble lineage.', seen:false, kills:0 },
-  'Carl': { name:'Carl', desc:'The Goblin King. Likes gold.', seen:false, kills:0 },
-  'Mr. Humerus': { name:'Mr. Humerus', desc:'A really big pile of bones.', seen:false, kills:0 },
-  'Archon of Ash': { name:'Archon of Ash', desc:'Master of destructive magic.', seen:false, kills:0 },
-  'Your Shadow': { name:'Your Shadow', desc:'A dark reflection of yourself.', seen:false, kills:0 },
-  'The Mad King': { name:'The Mad King', desc:'The ruler of the dungeon.', seen:false, kills:0 },
+  'The Rat King': { name:'The Rat King', desc:'What was once a ordinary rat has now become monstrous in size due to the fallout of the great Mage War.', seen:false, kills:0 },
+  'Count Fang': { name:'Count Fang', desc:'', seen:false, kills:0 },
+  'Broodmother': { name:'Broodmother', desc:'', seen:false, kills:0 },
+  'Sir Squish': { name:'Sir Squish', desc:'', seen:false, kills:0 },
+  'Throngler': { name:'Throngler', desc:'The lone survivor of his clan. Watched in horror as his village was burned to the ground in the crossfire of the Battle of Stoneburn.', seen:false, kills:0 },
+  'Mr. Humerus': { name:'Mr. Humerus', desc:'.', seen:false, kills:0 },
+  'Archon of Ash': { name:'Archon of Ash', desc:'', seen:false, kills:0 },
+  'Your Shadow': { name:'Your Shadow', desc:'', seen:false, kills:0 },
+  'The Mad King': { name:'The Mad King', desc:'', seen:false, kills:0 },
   // NPCs
   Merchant: { name:'Merchant', desc:'Buys and sells goods.', seen:false },
   Blacksmith: { name:'Blacksmith', desc:'Repairs your equipment.', seen:false },
@@ -18331,8 +18813,26 @@ Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Ma
   'Idol of War':   { name:'Idol of War',   desc:'+20% Damage, but you cannot Heal.', picked:0, seen:false },
   'Idol of Stone': { name:'Idol of Stone', desc:'+15% Damage Reduction, but you move at half speed.', picked:0, seen:false },
   'Idol of Greed': { name:'Idol of Greed', desc:'+50% Gold found, but you take +50% Damage.', picked:0, seen:false },
-  'Idol of Rot':   { name:'Idol of Rot',   desc:'Deals damage to nearby enemies, but hurts you when moving.', picked:0, seen:false },
-// --- BASE EQUIPMENT ---
+  'Idol of Rot': { name:'Idol of Rot', desc:'Deals damage to nearby enemies, but hurts you when moving.', picked:0, seen:false },
+
+  // --- LORE NOTES ---
+  Note_1: { name:'Torn Page 1', desc:'" "', seen:false },
+  Note_2: { name:'Torn Page 2', desc:'" "', seen:false },
+  Note_3: { name:'Torn Page 3', desc:'" "', seen:false },
+  Note_4: { name:'Torn Page 4', desc:'" "', seen:false },
+  Note_5: { name:'Torn Page 5', desc:'" "', seen:false },
+  Note_6: { name:'Torn Page 6', desc:'" "', seen:false },
+  Note_7: { name:'Torn Page 7', desc:'" "', seen:false },
+  Note_8: { name:'Torn Page 8', desc:'" "', seen:false },
+  Note_9: { name:'Torn Page 9', desc:'" "', seen:false },
+  Note_10: { name:'Torn Page 10', desc:'" "', seen:false },
+  Note_11: { name:'Torn Page 11', desc:'" "', seen:false },
+  Note_12: { name:'Torn Page 12', desc:'" "', seen:false },
+  Note_13: { name:'Torn Page 13', desc:'" "', seen:false },
+  Note_14: { name:'Torn Page 14', desc:'" "', seen:false },
+  Note_15: { name:'Torn Page15', desc:'" "', seen:false },
+  
+  // --- BASE EQUIPMENT ---
   Wep_Shortsword: { name:'Shortsword', desc:'', seen:false },
   Wep_Claymore: { name:'Claymore', desc:'', seen:false },
   Wep_Spear: { name:'Spear', desc:'', seen:false },
@@ -18430,7 +18930,7 @@ function renderCodexUI(){
       title: 'Bestiary',
       groups: [
         { subtitle: 'Enemies', keys: ['Rat','Bat','Spider','Slime','Goblin','Skeleton','Mage','Mimic'] },
-        { subtitle: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Carl','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] }
+        { subtitle: 'Bosses', keys: ['The Rat King','Count Fang','Broodmother','Sir Squish','Throngler','Mr. Humerus','Archon of Ash','Your Shadow','The Mad King'] }
       ]
     },
     {
@@ -18457,6 +18957,14 @@ function renderCodexUI(){
         { subtitle: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
         { subtitle: 'Trinkets', keys: ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"] },
         { subtitle: 'Cursed Idols', keys: ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'] }
+      ]
+    },
+    {
+      title: 'Notes',
+      groups: [
+        { subtitle: 'Dungeon Lore', keys: ['Note_1', 'Note_2', 'Note_3', 'Note_4', 'Note_5',
+        'Note_6', 'Note_7', 'Note_8', 'Note_9', 'Note_10',
+        'Note_11', 'Note_12', 'Note_13', 'Note_14', 'Note_15'] }
       ]
     }
   ];
