@@ -4695,7 +4695,19 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < cC
 
   // 10% Spawn Chance check (Moved here to properly avoid NPCs)
   if (state.rooms.length > 2 && Math.random() < 0.10) {
-      const pCands = state.rooms.slice(1).filter(r => r !== state._stairsRoom && !state.merchant?.room && !state.blacksmith?.room && !state.jester?.room && !state.cartographer?.room && !state.cleric?.room && r !== state.goldWell?.room);
+      const pCands = state.rooms.slice(1).filter(r => {
+          if (r === state._stairsRoom || r === state.cleric?.room || r === state.goldWell?.room) return false;
+          
+          const rx = r.x+1, ry = r.y+1, rw = Math.max(1, r.w-2), rh = Math.max(1, r.h-2);
+          const mr = state.merchant?.room, br = state.blacksmith?.room, jr = state.jester?.room, cr = state.cartographer?.room;
+          
+          if (mr && rx===mr.x && ry===mr.y && rw===mr.w && rh===mr.h) return false;
+          if (br && rx===br.x && ry===br.y && rw===br.w && rh===br.h) return false;
+          if (jr && rx===jr.x && ry===jr.y && rw===jr.w && rh===jr.h) return false;
+          if (cr && rx===cr.x && ry===cr.y && rw===cr.w && rh===cr.h) return false;
+          
+          return true;
+      });
       
       if (pCands.length > 0) {
           const entryRoom = pCands[rand(0, pCands.length - 1)];
@@ -4870,7 +4882,7 @@ if (inPuzzleEnemy) continue;
   const e = { x, y, size:1, boss:false, type:k.type, hp:k.hp, atk:[...k.atk], xp:k.xp };
 
   // SHADOW LABYRINTH: 40% chance to spawn a Heartless instead
-  if (state.floorEffect === 'ShadowLabyrinth' && Math.random() < 0.40) {
+  if (state.floorEffect?.includes('ShadowLabyrinth') && Math.random() < 0.40) {
     e.type = 'Heartless';
     e.hp = Math.max(1, Math.floor(e.hp * 0.8)); // Slightly weaker than avg
     e.fast = true;                              // But fast/twitchy
@@ -6717,17 +6729,82 @@ if (t === 'fern' || t.includes('plant')) {
   }
   
   if (t.includes('monolith')) { // Dark Monolith
-     R(3,1,6,11,'#09090b'); // Black Pillar
-     R(4,3,1,7,'#2e1065');  // Dark purple groove
-     R(7,3,1,7,'#2e1065');
-     R(5,5,2,1,'#d8b4fe');  // Glowing Rune 1
-     R(5,8,2,1,'#d8b4fe');  // Glowing Rune 2
-     return;
-  }
+        R(3,1,6,10,'#0f172a'); 
+        R(4,3,1,7,'#2e1065'); // Dark purple groove
+        R(7,3,1,7,'#2e1065');
+        R(5,5,2,1,'#d8b4fe'); // Glowing Rune 1
+        R(5,8,2,1,'#d8b4fe'); // Glowing Rune 2
+        return;
+    }
 
-  
-  // Fallback (Generic Box)
-  R(2,2,8,8,'#52525b'); R(2,2,8,1,'#a1a1aa');
+    // --- 9. GILDED HALLS ---
+    if (t.includes('gold vase')) {
+        R(4,2,4,1,'#fcd34d'); // Rim highlight
+        R(3,3,6,1,'#f59e0b'); // Neck
+        R(4,4,4,1,'#b45309'); // Neck shadow
+        R(2,5,8,5,'#f59e0b'); // Body
+        R(3,10,6,1,'#b45309'); // Base
+        R(7,6,2,3,'#fef3c7'); // Bright reflection
+        R(4,6,1,3,'#b45309'); // Etching/detail
+        return;
+    }
+    if (t.includes('statue')) { // Statue Head
+        R(3,2,6,8,'#e2e8f0'); // Marble base head
+        R(4,2,4,1,'#f8fafc'); // Top highlight
+        R(3,5,1,2,'#94a3b8'); // Left ear/side shadow
+        R(8,5,1,2,'#94a3b8'); // Right ear/side shadow
+        R(4,5,1,1,'#64748b'); // Eye socket L
+        R(7,5,1,1,'#64748b'); // Eye socket R
+        R(5,6,2,2,'#94a3b8'); // Nose shadow
+        R(4,8,4,1,'#64748b'); // Mouth line
+        R(2,10,8,2,'#94a3b8'); // Base/neck broken
+        return;
+    }
+    if (t.includes('stool')) { // Velvet Stool
+        R(2,7,1,4,'#b45309'); // Left leg
+        R(9,7,1,4,'#b45309'); // Right leg
+        R(3,8,6,1,'#f59e0b'); // Crossbar
+        R(1,4,10,3,'#9f1239'); // Velvet cushion
+        R(2,4,8,1,'#e11d48'); // Cushion highlight
+        R(1,7,10,1,'#fcd34d'); // Gold trim on cushion bottom
+        return;
+    }
+    if (t.includes('treasure')) { // Treasure Pile
+        R(1,8,10,3,'#d97706'); // Pile base shadow
+        R(2,6,8,4,'#f59e0b'); // Main gold mound
+        R(3,4,6,3,'#fbbf24'); // Mid gold
+        R(5,2,2,3,'#fcd34d'); // Top peak
+        R(3,7,1,1,'#fff'); // Sparkle
+        R(8,5,1,1,'#fff'); // Sparkle
+        R(6,3,1,1,'#fff'); // Sparkle
+        R(4,6,2,2,'#be123c'); // Ruby embedded
+        R(7,8,2,2,'#1d4ed8'); // Sapphire embedded
+        return;
+    }
+    if (t.includes('carpet')) { // Red Carpet (Rolled)
+        R(2,2,8,8,'#9f1239'); // Carpet base square-ish
+        R(3,3,6,6,'#be123c'); // Lighter red inner
+        R(4,2,4,8,'#fcd34d'); // Gold pattern stripe down middle
+        R(2,9,8,1,'#fbbf24'); // Fringes bottom
+        R(2,2,8,1,'#fbbf24'); // Fringes top
+        return;
+    }
+    if (t.includes('chandelier')) { // Chandelier Fallen
+        R(3,7,6,2,'#b45309'); // Main brass ring
+        R(2,6,8,1,'#f59e0b'); // Top brass ring
+        R(4,8,4,2,'#78350f'); // Broken center support
+        // Broken candles/glass
+        R(1,5,2,2,'#f8fafc'); // Left shattered glass
+        R(9,8,2,2,'#f8fafc'); // Right shattered glass
+        R(1,4,1,1,'#fcd34d'); // Flicker/spark?
+        R(6,5,1,2,'#fef3c7'); // Center candle bent
+        R(5,9,2,1,'#fef3c7'); // Another candle on floor
+        return;
+    }
+
+    // Fallback (Generic Box)
+    R(2,2,8,8,'#52525b');
+    R(2,2,8,1,'#a1a1aa');
 }
 
 
