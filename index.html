@@ -9574,13 +9574,26 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
   if (e._tick % 1 !== 0) continue; 
   
   // Ignore walls: Simply step towards player
-  if (Math.abs(state.player.x - e.x) > Math.abs(state.player.y - e.y)) {
-    e.x += Math.sign(state.player.x - e.x);
-  } else {
-    e.y += Math.sign(state.player.y - e.y);
-  }
+        let nx = e.x;
+        let ny = e.y;
+        if (Math.abs(state.player.x - e.x) > Math.abs(state.player.y - e.y)) {
+          nx += Math.sign(state.player.x - e.x);
+        } else {
+          ny += Math.sign(state.player.y - e.y);
+        }
 
-  // Kill if ON TOP (0) or ADJACENT (1)
+        let inPuzzle = false;
+        if (state.puzzleRooms) {
+          for (const pr of state.puzzleRooms) {
+            if (nx >= pr.x && nx < pr.x + pr.w && ny >= pr.y && ny < pr.y + pr.h) inPuzzle = true;
+          }
+        }
+        if (!inPuzzle) {
+          e.x = nx;
+          e.y = ny;
+        }
+
+        // Kill if ON TOP (0) or ADJACENT (1)
   const dist = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
   if (dist <= 1) {
     state.player.hp = 0;
