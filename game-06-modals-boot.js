@@ -2678,6 +2678,15 @@ function pollGamepad() {
     btn(0, () => { 
         let focusedEl = document.querySelector('.controller-focus');
         
+        // --- FIX: Ghost Button Exploit ---
+        // If the focused element is no longer in our list of visible, active buttons
+        // (like a stat button on a modal that just closed), strip its focus!
+        if (focusedEl && !navs.includes(focusedEl)) {
+            focusedEl.classList.remove('controller-focus');
+            focusedEl = null;
+        }
+        // ---------------------------------
+
         // Auto-target the first item if nothing is focused (Fixes Main Menu bug)
         if (!focusedEl && navs.length > 0) {
             focusedEl = navs[0];
