@@ -2845,7 +2845,7 @@ function ensureSkillInfoModal(){
   m.style.display = 'none';
  // --- FIX 4: Widen modal and add side-by-side flex layout for Stats ---
   m.innerHTML = `
-    <div class="sheet" style="max-width: 650px; width: 95%;">
+    <div class="sheet" style="max-width: 800px; width: 95%;">
       <div class="row">
         <div class="title" id="skillInfoTitle">Skill Details</div>
         <button class="btn" id="btnCloseSkillInfo">Close</button>
@@ -3078,17 +3078,80 @@ function showSkillDetails(type){
   if (statsPanel) {
       let statsHtml = `<div style="font-weight:800; color:#f9d65c; margin-bottom:12px; font-size:14px; border-bottom:1px solid #475569; padding-bottom:6px;">Active Bonuses</div>`;
       let hasAny = false;
+      let totalsMap = {}; 
+
       perks.forEach(p => {
           const curLvl = s.perks[p.id] || 0;
           if (curLvl > 0) {
+              let descText = p.desc;
+              
+              // Extract the numbers and calculate the total inline bonus
+              const isScaling = p.desc.toLowerCase().includes('per level') || p.max > 1;
+              const fullNumMatch = p.desc.match(/\+?[0-9.]+%?/);
+              
+              if (fullNumMatch && isScaling) {
+                  const numOnly = parseFloat(fullNumMatch[0].replace(/[^0-9.]/g, ''));
+                  const totalVal = numOnly * curLvl;
+                  const hasPct = fullNumMatch[0].includes('%');
+                  const prefix = fullNumMatch[0].includes('+') ? '+' : '';
+                  
+                  // Append the calculated total right next to the description
+                  descText += ` <b style="color:#f9d65c;">(${prefix}${totalVal}${hasPct?'%':''})</b>`;
+                  
+                  // Clean up the text string to extract the raw stat name for the summary
+                  let statName = p.desc.replace(fullNumMatch[0], '').replace(/per level/gi, '').trim();
+                  statName = statName.replace(/\s+/g, ' '); // remove double spaces
+                  statName = statName.charAt(0).toUpperCase() + statName.slice(1);
+                  
+                  // Accumulate into the Totals Tracker
+                  if (!totalsMap[statName]) totalsMap[statName] = { val: 0, hasPct, prefix };
+                  totalsMap[statName].val += totalVal;
+              }
+
               statsHtml += `<div style="font-size:12px; color:#d9e7f5; margin-bottom:8px; line-height:1.3;">
                               <span style="color:#4ade80; margin-right:4px;">✔</span> <b>${p.name} (Lv ${curLvl})</b><br>
-                              <span style="opacity:0.8; padding-left:16px; display:block;">${p.desc}</span>
+                              <span style="opacity:0.8; padding-left:16px; display:block;">${descText}</span>
                             </div>`;
               hasAny = true;
           }
       });
-      if (!hasAny) statsHtml += `<div style="font-size:12px; opacity:0.5; font-style:italic;">No perks unlocked yet.</div>`;
+      
+      if (!hasAny) {
+          statsHtml += `<div style="font-size:12px; opacity:0.5; font-style:italic;">No perks unlocked yet.</div>`;
+      } else {
+          // Append the Aggregated Summary block at the bottom
+          const totalsKeys = Object.keys(totalsMap);
+          if (totalsKeys.length > 0) {
+              statsHtml += `<div style="margin-top:16px; border-top:1px dashed #475569; padding-top:12px;">
+                              <div style="font-weight:800; color:#f9d65c; margin-bottom:8px; font-size:13px;">Total Tree Bonuses</div>`;
+              totalsKeys.forEach(k => {
+                  const t = totalsMap[k];
+                  let displayVal = `${t.prefix}${parseFloat(t.val.toFixed(2))}${t.hasPct?'%':''}`;
+                  
+                  // --- FIX: Add Base Stat Math & Context for Accuracy ---
+                  if (k.includes('Accuracy')) {
+                      let base = 75; // Default magic/unarmed base
+                      try {
+                          if (typeof baseAccuracy === 'function' && type !== 'magic') {
+                              // Pulls the actual base accuracy of the weapon type from your combat script
+                              base = Math.round(baseAccuracy(type) * 100) || 75;
+                          }
+                      } catch(e){}
+                      
+                      const total = base + t.val;
+                      displayVal = `<b style="color:#4ade80;">${total}%</b> <span style="font-size:10px; color:#9ca3af; font-weight:normal;">(${base}% base + ${t.val}% bonus)</span>`;
+                  } else {
+                      displayVal = `<b style="color:#4ade80;">${displayVal}</b>`;
+                  }
+                  
+                  statsHtml += `<div style="font-size:12px; color:#d9e7f5; display:flex; justify-content:space-between; margin-bottom:4px; align-items:baseline;">
+                                  <span style="opacity:0.9;">Total ${k}</span>
+                                  <div style="text-align:right;">${displayVal}</div>
+                                </div>`;
+              });
+              statsHtml += `</div>`;
+          }
+      }
       statsPanel.innerHTML = statsHtml;
   }
   
