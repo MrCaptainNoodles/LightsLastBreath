@@ -2029,7 +2029,7 @@ async function startTutorial(e){
 
   updateBars(); updateEquipUI(); draw();
 
-  showBanner("Step 1: Move with WASD or Arrows. Press all 4 directions to continue.", 999999);
+  showBanner(`Step 1: Move with (${getInputName('move')}). Press all 4 directions to continue.`, 999999);
 }
 
 

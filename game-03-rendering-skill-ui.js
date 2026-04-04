@@ -2809,11 +2809,25 @@ function renderSkills(){
   for (const [type, s] of Object.entries(state.skills)){
     if (!s.shown) continue;
 
+    const L = s.lvl | 0;
+    const spent = s.spentPoints || 0;
+    const available = Math.max(0, (L - 1) - spent);
+
     const chip = document.createElement('button');
     chip.className   = 'skill';
     chip.type        = 'button';
     chip.dataset.type= type;
     chip.textContent = `${typeNice(type)} (${s.lvl}) — ${s.xp}/${s.next}`;
+    
+    // --- FIX 3: Glow Gold if points are unused ---
+    if (available > 0) {
+        chip.style.boxShadow = "0 0 10px 2px rgba(251, 191, 36, 0.6)";
+        chip.style.borderColor = "#fbbf24";
+        chip.style.color = "#fbbf24";
+        chip.style.fontWeight = "bold";
+        chip.textContent = `★ ` + chip.textContent; 
+    }
+    
     chip.onclick     = () => showSkillDetails(type);
 
     wrap.appendChild(chip);
@@ -2829,13 +2843,17 @@ function ensureSkillInfoModal(){
   m.id = 'skillInfoModal';
   m.className = 'modal';
   m.style.display = 'none';
+ // --- FIX 4: Widen modal and add side-by-side flex layout for Stats ---
   m.innerHTML = `
-    <div class="sheet">
+    <div class="sheet" style="max-width: 650px; width: 95%;">
       <div class="row">
         <div class="title" id="skillInfoTitle">Skill Details</div>
         <button class="btn" id="btnCloseSkillInfo">Close</button>
       </div>
-      <div id="skillInfoBody" style="margin:8px 0 6px;"></div>
+      <div style="display:flex; flex-direction:row; gap:12px; align-items:flex-start;">
+        <div id="skillInfoBody" style="margin:8px 0 6px; flex:2;"></div>
+        <div id="skillInfoStats" style="margin:8px 0 6px; flex:1; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; border:1px solid #334155; max-height:55vh; overflow-y:auto;"></div>
+      </div>
     </div>`;
   document.body.appendChild(m);
 
@@ -2861,6 +2879,17 @@ function quirkChanceUI(type){
 
 function showSkillDetails(type){
   if (!type) return;
+
+  // --- FIX: Close the Skills Menu (if open) before showing the Tree ---
+  const closeSkillsBtn = document.getElementById('closeSkillsModalBtn');
+  if (closeSkillsBtn) {
+      const sm = document.getElementById('skillsModalWrapper');
+      if (sm && sm.style.display !== 'none') {
+          closeSkillsBtn.click();
+      }
+  }
+  // -------------------------------------------------------------------
+
   // Use the robust modal builder already present in your code
   const modal = ensureSkillInfoModal();
   const title = document.getElementById('skillInfoTitle');
@@ -3014,6 +3043,13 @@ function showSkillDetails(type){
       color = '#d9e7f5';
       icon = ''; 
     }
+
+    // --- FIX 5: Find the actual name of the requirement ---
+    let reqName = 'Previous';
+    if (p.req) {
+        const reqPerk = perks.find(x => x.id === p.req);
+        if (reqPerk) reqName = reqPerk.name;
+    }
     
     html += `
       <button class="perk-btn" data-id="${p.id}" data-can="${canUnlock}" style="display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:${bg}; border:1px solid ${border}; color:${color}; padding:10px 12px; border-radius:10px; cursor:${cursor}; transition:transform 0.1s;">
@@ -3025,7 +3061,7 @@ function showSkillDetails(type){
           </div>
           <div style="font-size:12px; opacity:0.8;">${p.desc}</div>
         </div>
-        ${!reqMet ? `<div style="font-size:10px; color:#ef4444; max-width:60px; text-align:right;">Requires<br>Previous</div>` : ''}
+        ${!reqMet ? `<div style="font-size:10px; color:#ef4444; max-width:80px; text-align:right; line-height:1.2;">Requires<br><b style="color:#fca5a5;">${reqName}</b></div>` : ''}
       </button>
     `;
   });
@@ -3036,6 +3072,25 @@ function showSkillDetails(type){
   
   html += `</div>`;
   body.innerHTML = html;
+
+  // --- FIX 4 (Cont): Build the Stats Panel ---
+  const statsPanel = document.getElementById('skillInfoStats');
+  if (statsPanel) {
+      let statsHtml = `<div style="font-weight:800; color:#f9d65c; margin-bottom:12px; font-size:14px; border-bottom:1px solid #475569; padding-bottom:6px;">Active Bonuses</div>`;
+      let hasAny = false;
+      perks.forEach(p => {
+          const curLvl = s.perks[p.id] || 0;
+          if (curLvl > 0) {
+              statsHtml += `<div style="font-size:12px; color:#d9e7f5; margin-bottom:8px; line-height:1.3;">
+                              <span style="color:#4ade80; margin-right:4px;">✔</span> <b>${p.name} (Lv ${curLvl})</b><br>
+                              <span style="opacity:0.8; padding-left:16px; display:block;">${p.desc}</span>
+                            </div>`;
+              hasAny = true;
+          }
+      });
+      if (!hasAny) statsHtml += `<div style="font-size:12px; opacity:0.5; font-style:italic;">No perks unlocked yet.</div>`;
+      statsPanel.innerHTML = statsHtml;
+  }
   
   // Wire up clicks
   const btns = body.querySelectorAll('.perk-btn');

@@ -1183,7 +1183,7 @@ log(`You throw a bomb! Hit ${hitCount} foes.`);
        state.tiles[42][10]=5;
        
        hideBanner();
-       showBanner("Step 12: Pickup Lockpicks. Unlock the Door below (E). Note: It may fail!", 999999);
+       showBanner(`Step 12: Pickup Lockpicks. Unlock the Door below (${getInputName('interact')}). Note: It may fail!`, 999999);
     }
     // ----------------------------
 
@@ -1267,7 +1267,7 @@ function checkStep7Completion() {
       state.tiles[26][11]=5;
       
       hideBanner();
-      showBanner("Step 8: Pickup Arrows. Face the Rat and press B to shoot.", 999999);
+      showBanner(`Step 8: Pickup Arrows. Face the Rat and press (${getInputName('bow')}) to shoot.`, 999999);
    }
 }
 
@@ -1290,7 +1290,7 @@ function useTonic(){
        state.pickups['10,40'] = {kind:'bomb', payload:1};
        state.tiles[40][10]=5;
        hideBanner();
-       showBanner("Step 11: Pickup Bomb. Press 4 to throw it.", 999999);
+       showBanner(`Step 11: Pickup Bomb. Press (${getInputName('bomb')}) to throw it.`, 999999);
     }
 
     updateInvBody();
@@ -2374,7 +2374,10 @@ function closePauseMenu(){
     btnSettings.addEventListener('click', () => {
       // keep paused; open Settings full-screen overlay
       const s = document.getElementById('settingsOverlay');
-      if (s) s.style.display = 'flex';
+      if (s) {
+          s.style.zIndex = '10001'; // Ensure it sits visually above the pause menu
+          s.style.display = 'flex';
+      }
     });
   }
 
@@ -2445,13 +2448,38 @@ wrap.addEventListener('touchend',e=>{
 });
 
 // --- Controller & Input UI Support ---
-let lastInputType = 'keyboard'; // 'keyboard' | 'xbox' | 'playstation'
+window.lastInputType = 'keyboard'; // Attached to window so it never drops out of scope!
 let menuIdx = 0;
 const gpState = { buttons: {}, moving: false };
 
+// --- NEW: Global Input Label Helper ---
+window.getInputName = function(action) {
+  const type = window.lastInputType || 'keyboard';
+  const isPS = type === 'playstation';
+  const isGP = type !== 'keyboard';
+  switch(action) {
+      case 'interact': return isGP ? (isPS ? 'Square' : 'X') : 'E';
+      case 'attack': return isGP ? (isPS ? 'Cross' : 'A') : 'SPACE';
+      case 'cast': return isGP ? (isPS ? 'Circle' : 'B') : 'Q';
+      case 'cycle_spell': return isGP ? (isPS ? 'Triangle' : 'Y') : 'F';
+      case 'bow': return isGP ? (isPS ? 'L2' : 'LT') : 'B';
+      case 'art': return isGP ? (isPS ? 'R2' : 'RT') : 'R';
+      case 'inventory': return isGP ? (isPS ? 'Share' : 'Select') : 'I';
+      case 'spell_menu': return isGP ? (isPS ? 'R1' : 'RB') : 'P';
+      case 'sprint': return isGP ? (isPS ? 'L1' : 'LB') : 'SHIFT';
+      case 'move': return isGP ? 'L-Stick' : 'WASD/Arrows';
+      case 'potion': return isGP ? 'D-Pad Up' : '1';
+      case 'tonic': return isGP ? 'D-Pad Down' : '2';
+      case 'antidote': return isGP ? 'D-Pad Left' : '3';
+      case 'bomb': return isGP ? 'D-Pad Right' : '4';
+      case 'warp': return isGP ? '(Unmapped)' : '5';
+  }
+  return action;
+};
+
 function updateControlUI(type) {
-  if (lastInputType === type) return;
-  lastInputType = type;
+  if (window.lastInputType === type) return;
+  window.lastInputType = type;
   const grid = document.getElementById('helpGrid');
   const title = document.getElementById('helpTitle');
   if (!grid || !title) return;
@@ -2461,41 +2489,100 @@ function updateControlUI(type) {
   title.textContent = isGP ? (isPS ? 'PlayStation Controls' : 'Xbox Controls') : 'Keyboard Controls';
 
   const controls = isGP ? [
-    [isPS ? 'L-Stick / D-Pad' : 'L-Stick / D-Pad', 'Move / Navigate'],
-    [isPS ? 'Cross (✕)' : 'A Button', 'Attack / Select'],
-    [isPS ? 'Square (□)' : 'X Button', 'Interact / Open'],
-    [isPS ? 'Circle (○)' : 'B Button', 'Cast Spell'],
-    [isPS ? 'Triangle (△)' : 'Y Button', 'Cycle Spells'],
-    [isPS ? 'R2 / RT' : 'RT', 'Weapon Art'],
+    ['L-Stick', 'Move / Navigate'],
+    [isPS ? 'L1' : 'LB', 'Sprint (Hold)'],
+    [isPS ? 'Cross' : 'A', 'Attack / Select'],
+    [isPS ? 'Square' : 'X', 'Interact / Open'],
+    [isPS ? 'Circle' : 'B', 'Cast Spell'],
+    [isPS ? 'Triangle' : 'Y', 'Cycle Spells'],
+    [isPS ? 'R2' : 'RT', 'Weapon Art'],
+    [isPS ? 'L2' : 'LT', 'Bow (Shoot)'],
+    ['D-Pad Up', 'Use Potion'],
+    ['D-Pad Down', 'Use Tonic'],
+    ['D-Pad Left', 'Use Antidote'],
+    ['D-Pad Right', 'Use Bomb'],
+    ['R3', 'Skills Menu'],
     [isPS ? 'Share' : 'Select', 'Inventory / Pause'],
-    [isPS ? 'L2 / LT' : 'LT', 'Bow (Shoot)'],
-    [isPS ? 'L1 / LB' : 'LB', 'Toggle Help'],
-    ['R-Stick', 'Quick Consumables']
+    ['L3', 'Toggle Help']
   ] : [
-    ['WASD / Arrows', 'Move'], ['Space', 'Attack'], ['E', 'Interact'], ['Q', 'Cast'],
-    ['F', 'Cycle Spells'], ['R', 'Weapon Art'], ['I', 'Inventory'], ['P', 'Spells'],
-    ['B', 'Bow'], ['H', 'Show Help'], ['1/2/3', 'Consumables']
+    ['WASD / Arrows', 'Move'], ['Shift + Move', 'Sprint'], ['Space', 'Attack'], ['E', 'Interact'], ['Q', 'Cast'],
+    ['F', 'Cycle Spells'], ['R', 'Weapon Art'], ['B', 'Bow'], 
+    ['1', 'Use Potion'], ['2', 'Use Tonic'], ['3', 'Use Antidote'], ['4', 'Use Bomb'], ['5', 'Warp Stone'],
+    ['I', 'Inventory'], ['P', 'Spells'], ['K', 'Skills Menu'], ['H', 'Show Help']
   ];
 
   grid.innerHTML = controls.map(c => `<div><b>${c[0]}</b></div><div>${c[1]}</div>`).join('');
 }
 
 function getVisibleModal() {
-  const modals = document.querySelectorAll('.modal, .fullOverlay');
-  for (const m of modals) {
-    if (m.style.display === 'flex' || m.style.display === 'block') return m;
-  }
-  return null;
+  const modals = Array.from(document.querySelectorAll('.modal, .fullOverlay')).filter(m => {
+    const style = window.getComputedStyle(m);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+  });
+  
+  if (modals.length === 0) return null;
+  
+  // Sort strictly by computed z-index (highest wins). If tie, last in DOM wins.
+  modals.sort((a, b) => {
+    const zA = parseInt(window.getComputedStyle(a).zIndex) || 0;
+    const zB = parseInt(window.getComputedStyle(b).zIndex) || 0;
+    if (zA === zB) {
+      return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+    }
+    return zA - zB;
+  });
+  
+  return modals[modals.length - 1];
 }
+
+window.openSkillsModal = function() {
+    let sm = document.getElementById('skillsModalWrapper');
+    if (!sm) {
+        sm = document.createElement('div');
+        sm.id = 'skillsModalWrapper';
+        sm.className = 'modal';
+        sm.style.zIndex = '10005';
+        sm.innerHTML = `
+          <div class="sheet" style="max-height:80vh; overflow-y:auto; width:min(600px, 94vw);">
+            <div class="row"><div class="title">Skills</div><button class="btn" id="closeSkillsModalBtn">Close</button></div>
+            <div id="skillsModalBody"></div>
+          </div>`;
+        document.body.appendChild(sm);
+        
+        const origParent = document.getElementById('skillsList').parentNode;
+        document.getElementById('closeSkillsModalBtn').onclick = () => {
+            origParent.appendChild(document.getElementById('skillsList'));
+            sm.style.display = 'none';
+            state._inputLocked = false;
+            if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+        };
+    }
+    const list = document.getElementById('skillsList');
+    if (list) document.getElementById('skillsModalBody').appendChild(list);
+    sm.style.display = 'flex';
+    state._inputLocked = true;
+    if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
+};
+
+// --- Virtual Cursor State ---
+let vCursor = null;
+let vcX = null;
+let vcY = null;
 
 function pollGamepad() {
   const gamepads = navigator.getGamepads();
   const gp = gamepads[0] || gamepads[1] || gamepads[2] || gamepads[3];
   if (!gp) return requestAnimationFrame(pollGamepad);
 
-  const id = gp.id.toLowerCase();
-  const type = (id.includes('dualshock') || id.includes('dualsense') || id.includes('playstation') || id.includes('wireless controller')) ? 'playstation' : 'xbox';
-  updateControlUI(type);
+  // --- NEW: Wrap everything in a try-catch so a text error NEVER kills the loop! ---
+  try {
+      const id = gp.id.toLowerCase();
+      const type = (id.includes('dualshock') || id.includes('dualsense') || id.includes('playstation') || id.includes('wireless controller')) ? 'playstation' : 'xbox';
+      
+      let padActive = false;
+  for(let i=0; i<gp.buttons.length; i++) { if(gp.buttons[i].pressed) padActive = true; }
+  for(let i=0; i<gp.axes.length; i++) { if(Math.abs(gp.axes[i]) > 0.2) padActive = true; }
+  if (padActive) updateControlUI(type);
 
   const openModal = getVisibleModal();
   const threshold = 0.5;
@@ -2507,41 +2594,134 @@ function pollGamepad() {
     } else { gpState.buttons[idx] = false; }
   };
 
-  // 1. MENU NAVIGATION
+ // 1. MENU NAVIGATION (Controller Snapping)
   if (openModal) {
-    // Collect interactive elements within the active modal
-    const navItems = Array.from(openModal.querySelectorAll('button, a, input'))
-                          .filter(el => el.offsetParent !== null && !el.disabled);
-    
-    let move = 0;
-    if (gp.buttons[12]?.pressed || gp.axes[1] < -threshold) move = -1; // Up
-    if (gp.buttons[13]?.pressed || gp.axes[1] > threshold) move = 1;  // Down
+    const thresh = 0.5;
 
-    if (move !== 0 && !gpState.moving) {
-      gpState.moving = true;
-      navItems[menuIdx]?.classList.remove('controller-focus');
-      menuIdx = (menuIdx + move + navItems.length) % navItems.length;
-      navItems[menuIdx]?.classList.add('controller-focus');
-      navItems[menuIdx]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      setTimeout(() => { gpState.moving = false; }, 200);
+    // Gather Navigable Elements
+    // ADDED: .menuLink to catch Endless Mode (which is a span) and removed aria-disabled block
+    const navs = Array.from(openModal.querySelectorAll('button, a, .btn, .tab-btn, .menuLink, input[type="range"], .card, .item, .slot, .item-slot, .perk-btn, .menu-btn, .menu-item, [onclick], [tabindex="0"]'))
+      .filter(el => {
+        const r = el.getBoundingClientRect();
+        const comp = window.getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && comp.visibility !== 'hidden' && comp.opacity !== '0';
+      });
+
+    let focusEl = document.querySelector('.controller-focus');
+
+    // --- Spatial UI Navigation (Left Stick / D-Pad) ---
+    let lsX = 0, lsY = 0;
+    if (gp.axes[0] < -thresh || gp.buttons[14]?.pressed) lsX = -1;
+    else if (gp.axes[0] > thresh || gp.buttons[15]?.pressed) lsX = 1;
+    if (gp.axes[1] < -thresh || gp.buttons[12]?.pressed) lsY = -1;
+    else if (gp.axes[1] > thresh || gp.buttons[13]?.pressed) lsY = 1;
+
+    if (lsX !== 0 || lsY !== 0) {
+        if (!gpState.navMoving) {
+            gpState.navMoving = true;
+
+            if (focusEl && focusEl.tagName === 'INPUT' && focusEl.type === 'range' && lsX !== 0) {
+               // Slider adjustment
+               const min = focusEl.min ? Number(focusEl.min) : 0;
+               const max = focusEl.max ? Number(focusEl.max) : 100;
+               const step = (max - min) * 0.05 || 5;
+               focusEl.value = Math.max(min, Math.min(max, Number(focusEl.value) + lsX * step));
+               focusEl.dispatchEvent(new Event('input'));
+            } else if (navs.length > 0) {
+               if (!navs.includes(focusEl)) {
+                   // If lost or first move, snap to the very first item
+                   document.querySelectorAll('.controller-focus').forEach(e => e.classList.remove('controller-focus'));
+                   focusEl = navs[0];
+                   focusEl.classList.add('controller-focus');
+                   focusEl.scrollIntoView({behavior:'smooth', block:'nearest'});
+               } else {
+                   // Find best neighbor
+                   const cx = focusEl.getBoundingClientRect().left + focusEl.getBoundingClientRect().width/2;
+                   const cy = focusEl.getBoundingClientRect().top + focusEl.getBoundingClientRect().height/2;
+                   let best = null, bestDist = Infinity;
+                   navs.forEach(el => {
+                       if(el === focusEl) return;
+                       const r = el.getBoundingClientRect();
+                       const ex = r.left + r.width/2;
+                       const ey = r.top + r.height/2;
+                       const dx = ex - cx, dy = ey - cy;
+                       let valid = false;
+                       
+                       // WIDENED CONE: Full 180 degrees to guarantee finding tabs directly above wide sliders
+                       if (lsX === 1 && dx > 0) valid = true;
+                       else if (lsX === -1 && dx < 0) valid = true;
+                       else if (lsY === 1 && dy > 0) valid = true;
+                       else if (lsY === -1 && dy < 0) valid = true;
+
+                       if (valid) {
+                           const dist = Math.sqrt(dx*dx + dy*dy);
+                           // Penalize items not aligned to the stick's axis to keep navigation predictable
+                           const align = (lsX !== 0) ? Math.abs(dy) : Math.abs(dx);
+                           const score = dist + align*4;
+                           if(score < bestDist){ bestDist = score; best = el; }
+                       }
+                   });
+                   if (best) {
+                       focusEl.classList.remove('controller-focus');
+                       best.classList.add('controller-focus');
+                       best.scrollIntoView({behavior:'smooth', block:'nearest'});
+                   }
+               }
+            }
+            setTimeout(() => { gpState.navMoving = false; }, 180);
+        }
+    } else {
+        if (gpState.navMoving) gpState.navMoving = false; 
     }
 
     // Select (A / Cross)
     btn(0, () => { 
-        if (navItems[menuIdx]) {
-            navItems[menuIdx].click();
-            menuIdx = 0; // reset for next modal
+        let focusedEl = document.querySelector('.controller-focus');
+        
+        // Auto-target the first item if nothing is focused (Fixes Main Menu bug)
+        if (!focusedEl && navs.length > 0) {
+            focusedEl = navs[0];
+            focusedEl.classList.add('controller-focus');
+        }
+
+        if (focusedEl) {
+            focusedEl.click();
+        } else if (openModal) {
+            openModal.click();
         }
     });
 
     // Close/Back (B / Circle)
     btn(1, () => {
-        const closeBtn = openModal.querySelector('[data-close], #mBack, #jBack, #cBack, #clBack, #gwClose');
+        const closeBtn = openModal.querySelector('[data-close], #mBack, #jBack, #cBack, #clBack, #gwClose, #closeSkillsModalBtn');
         if (closeBtn) closeBtn.click();
         else if (typeof closePauseMenu === 'function') closePauseMenu();
     });
 
+    // --- NEW: Bumper Tab Swapping (L1 / R1) ---
+    const cycleTabs = (dir) => {
+        const tabs = Array.from(openModal.querySelectorAll('.tab-btn, .settings-tab, button[id*="tab"]'))
+            .filter(el => {
+                const comp = window.getComputedStyle(el);
+                return comp.display !== 'none' && comp.visibility !== 'hidden' && comp.opacity !== '0';
+            });
+        if (tabs.length > 1) {
+            let activeIdx = tabs.findIndex(t => t.classList.contains('active') || t.disabled);
+            if (activeIdx === -1) activeIdx = 0;
+            tabs[(activeIdx + dir + tabs.length) % tabs.length].click();
+        }
+    };
+    btn(4, () => cycleTabs(-1)); // L1 / LB
+    btn(5, () => cycleTabs(1));  // R1 / RB
+
+    // Clean up old cursor if it's still stuck on screen
+    const oldCursor = document.getElementById('virtual-cursor');
+    if (oldCursor) oldCursor.style.display = 'none';
+
     return requestAnimationFrame(pollGamepad);
+  } else {
+    // Hide the virtual cursor when no menus are open
+    if (vCursor) vCursor.style.display = 'none';
   }
 
   // 2. WORLD GAMEPLAY
@@ -2561,7 +2741,7 @@ function pollGamepad() {
       spawnFloatText(state.equippedSpell.name, state.player.x, state.player.y, '#60a5fa');
     }
   });
-  btn(4, () => { const h = document.getElementById('helpModal'); if(h) h.style.display = h.style.display==='flex'?'none':'flex'; });
+  btn(10, () => { const h = document.getElementById('helpModal'); if(h) h.style.display = h.style.display==='flex'?'none':'flex'; });
   btn(5, () => { updateSpellBody(); document.getElementById('spellModal').style.display = 'flex'; setMobileControlsVisible(false); });
   btn(6, () => shootBow());
   btn(7, () => useWeaponArt());
@@ -2571,31 +2751,90 @@ function pollGamepad() {
   // World Movement
   const x = gp.axes[0], y = gp.axes[1];
   let dx = 0, dy = 0;
-  if (gp.buttons[12]?.pressed || y < -threshold) dy = -1;
-  else if (gp.buttons[13]?.pressed || y > threshold) dy = 1;
-  else if (gp.buttons[14]?.pressed || x < -threshold) dx = -1;
-  else if (gp.buttons[15]?.pressed || x > threshold) dx = 1;
+  if (y < -threshold) dy = -1;
+  else if (y > threshold) dy = 1;
+  else if (x < -threshold) dx = -1;
+  else if (x > threshold) dx = 1;
+
+  const isSprinting = gp.buttons[4]?.pressed; // L1 / LB
 
   if ((dx !== 0 || dy !== 0) && !gpState.moving) {
     gpState.moving = true;
-    tryMove(dx, dy);
+    
+    // --- CRASH PREVENTION: Queue the unlock BEFORE any game logic runs! ---
+    // This guarantees the joystick never gets permanently stuck if an error occurs below.
     setTimeout(() => { gpState.moving = false; }, 150);
+
+    // --- FIX: Allow Controller to pass Tutorial Step 1 ---
+    if (typeof state !== 'undefined' && state.gameMode === 'tutorial' && state.tutorialStep === 1) {
+        if (!state._tutMoveWASD) state._tutMoveWASD = {};
+        if (dy === -1) state._tutMoveWASD.w = true;
+        if (dx === -1) state._tutMoveWASD.a = true;
+        if (dy === 1)  state._tutMoveWASD.s = true;
+        if (dx === 1)  state._tutMoveWASD.d = true;
+
+        if (state._tutMoveWASD.w && state._tutMoveWASD.a && state._tutMoveWASD.s && state._tutMoveWASD.d) {
+            state.tutorialStep = 2;
+            if (typeof hideBanner === 'function') hideBanner();
+            // Fallback ensures no ReferenceError if the function drops out of scope
+            if (typeof showBanner === 'function') showBanner(`Step 2: Sprinting. Hold (${window.getInputName ? window.getInputName('sprint') : 'Sprint'}) while moving.`, 999999);
+        }
+    }
+    // ----------------------------------------------------
+
+    if (isSprinting) {
+        const key = dx === 1 ? 'd' : dx === -1 ? 'a' : dy === 1 ? 's' : 'w';
+        const ev = new KeyboardEvent('keydown', { key: key, shiftKey: true });
+        Object.defineProperty(ev, 'isGamepad', {value: true});
+        window.dispatchEvent(ev);
+    } else {
+        tryMove(dx, dy);
+    }
   }
 
-  // Quick Consumables (Right Stick)
-  const rx = gp.axes[2], ry = gp.axes[3];
-  if (ry < -threshold) { if(!gpState.rStick) { usePotion(); gpState.rStick=true; } }
-  else if (ry > threshold) { if(!gpState.rStick) { useTonic(); gpState.rStick=true; } }
-  else if (rx < -threshold) { if(!gpState.rStick) { useAntidote(); gpState.rStick=true; } }
-  else { gpState.rStick = false; }
+  // Quick Consumables (D-Pad)
+  if (gp.buttons[12]?.pressed) { if(!gpState.dpadU) { usePotion(); gpState.dpadU=true; } } else gpState.dpadU = false;
+  if (gp.buttons[13]?.pressed) { if(!gpState.dpadD) { useTonic(); gpState.dpadD=true; } } else gpState.dpadD = false;
+  if (gp.buttons[14]?.pressed) { if(!gpState.dpadL) { useAntidote(); gpState.dpadL=true; } } else gpState.dpadL = false;
+  if (gp.buttons[15]?.pressed) { if(!gpState.dpadR) { useBomb(); gpState.dpadR=true; } } else gpState.dpadR = false;
 
+  // Skills Menu (R3)
+  btn(11, () => {
+      if (typeof window.openSkillsModal === 'function') window.openSkillsModal();
+  });
+
+  } catch (error) {
+      console.warn("Caught Controller Error (Loop Saved):", error);
+  }
+
+  // Safely queue the next frame exactly once
   requestAnimationFrame(pollGamepad);
 }
 requestAnimationFrame(pollGamepad);
 
+// --- FIX 2: Monkey Easter Egg ---
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'm' && document.activeElement.tagName !== 'INPUT') {
+    const audio = new Audio('https://cdn.jsdelivr.net/gh/MrCaptainNoodles/LightsLastBreath@main/monkey.mp3');
+    audio.volume = 0.6;
+    audio.play().catch(err => console.warn("Browser blocked audio auto-play:", err));
+    
+    let img = document.getElementById('monkeyEasterEggImg');
+    if (!img) {
+      img = document.createElement('img');
+      img.id = 'monkeyEasterEggImg';
+      img.src = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/LightsLastBreath@main/monkey.png';
+      img.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999999; max-width:80vmin; max-height:80vmin; pointer-events:none;';
+      document.body.appendChild(img);
+    }
+    img.style.display = 'block';
+    setTimeout(() => { if (img) img.style.display = 'none'; }, 1500);
+  }
+});
+
 // keyboard controls (desktop)
 window.addEventListener('keydown', (e) => {
-  updateControlUI('keyboard');
+  if (!e.isGamepad) updateControlUI('keyboard');
   // Don’t hijack keys while typing in inputs/textareas
   if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
 
@@ -2652,10 +2891,11 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 1){
   if (k === 'd' || k === 'arrowright') state._tutMoveWASD.d = true;
 
   if (state._tutMoveWASD.w && state._tutMoveWASD.a && state._tutMoveWASD.s && state._tutMoveWASD.d){
-    state.tutorialStep = 2;
-    hideBanner();
-    showBanner("Step 2: Sprinting. Hold SHIFT while moving to Sprint. Be careful this consumes stamina.", 999999);
-  }
+            state.tutorialStep = 2;
+            hideBanner();
+            // Use fallback ternary to ensure it safely resolves in all scopes
+            showBanner(`Step 2: Sprinting. Hold (${window.getInputName ? window.getInputName('sprint') : 'Sprint'}) while moving to Sprint. Be careful this consumes stamina.`, 999999);
+          }
 }
 
 // --- normal controls (Updated for Sprint) ---
@@ -2719,7 +2959,7 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 1){
                  if (state.gameMode === 'tutorial' && state.tutorialStep === 2) {
                     state.tutorialStep = 3;
                     hideBanner();
-                    showBanner("Step 3: Break the Crate! Walk up to it and press SPACE. Be careful this consumes stamina", 999999);
+                    showBanner(`Step 3: Break the Crate! Walk up to it and press (${getInputName('attack')}). Be careful this consumes stamina`, 999999);
                  }
 
                  updateBars();
@@ -2771,6 +3011,9 @@ if (state.gameMode === 'tutorial' && (state._tutGotArrows || state._tutArrowsPic
 
   else if (k === 'q') cast();
   else if (k === 'r') useWeaponArt(); // --- NEW: Bind R for Ability ---
+  else if (k === 'k') {
+      if (typeof window.openSkillsModal === 'function') window.openSkillsModal();
+  }
 
   // --- NEW: Cycle Spells (F) ---
   else if (k === 'f') {

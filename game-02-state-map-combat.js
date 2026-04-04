@@ -2204,6 +2204,11 @@ function lockpickBonusFromSkill(){
 
 
 function rollHitFor(type){
+  // --- FIX: 100% Accuracy during the Tutorial ---
+  if (typeof state !== 'undefined' && state.gameMode === 'tutorial') {
+      return true;
+  }
+  
   if (type === 'magic'){
     // Magic accuracy: every 2 Magic levels improves hit chance
     const tiers = magicPowerBonus();   // 0,1,2,... based on Magic lvl

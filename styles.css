@@ -16,6 +16,14 @@
 .stamina .fill{ background:linear-gradient(90deg,var(--stm1),var(--stm2)) }
 
 }
+
+/* --- FIX 1: Lock Event Log Scrolling --- */
+#logCard {
+  overflow-y: hidden !important; 
+}
+#logCard::-webkit-scrollbar {
+  display: none; 
+}
 /* base floating button stack — hidden by default (desktop) */
 .fabs{
   position:absolute;
@@ -754,3 +762,4 @@ input[type=range].custom-slider::-webkit-slider-thumb {
     max-height: none !important;
   }
 }
+

@@ -28,7 +28,7 @@ function collectIfPickup(){
         // --- TUTORIAL Step 4 (Pickup -> Equip) ---
       if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && it.payload.name === 'Warhammer'){
         hideBanner();
-        showBanner("Warhammer acquired! Press I and go to weapons to equip it.", 999999);
+        showBanner(`Warhammer acquired! Press (${getInputName('inventory')}) and go to weapons to equip it.`, 999999);
       }
       // -----------------------------------------
 
@@ -209,9 +209,9 @@ function tryMove(dx,dy){
     return; 
   }
   if(enemyAt(nx,ny)) { log('An enemy blocks the way.'); return; }
-  if(t===2) { log('A door blocks the way. Press E to open/unlock.'); return; }
-  if(t===3) { log('A chest blocks the way. Press E to open.'); return; }
-  if(t===6) { log('A mystical shrine blocks the way. Press E to interact.'); return; }
+  if(t===2) { log(`A door blocks the way. Press ${getInputName('interact')} to open/unlock.`); return; }
+  if(t===3) { log(`A chest blocks the way. Press ${getInputName('interact')} to open.`); return; }
+  if(t===6) { log(`A mystical shrine blocks the way. Press ${getInputName('interact')} to interact.`); return; }
   
   // 1. ADDED: Block movement into scenery
   
@@ -323,8 +323,8 @@ function tryMove(dx,dy){
       state.gameTurn = (state.gameTurn || 0) + 1;
       draw();
       return;
-    } else {
-      log(`A ${pType} blocks the way. Press SPACE to smash it!`);
+} else {
+      log(`A ${pType} blocks the way. Press ${getInputName('attack')} to smash it!`);
       return;
     }
   }
@@ -383,7 +383,7 @@ function tryMove(dx,dy){
      const w = state.goldWell;
      // Block movement into the 2x2 area (x,y to x+1,y+1)
      if (nx >= w.x && nx <= w.x+1 && ny >= w.y && ny <= w.y+1) {
-        log("A Golden Well blocks the way. Press E to interact.");
+        log(`A Golden Well blocks the way. Press ${getInputName('interact')} to interact.`);
         return;
      }
   }
@@ -1031,7 +1031,7 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
             if (state.tutorialStep === 12) {
               state.tutorialStep = 13;
               hideBanner();
-              showBanner("Step 13: Open the Chest with E to finish!", 999999);
+              showBanner(`Step 13: Open the Chest with (${getInputName('interact')}) to finish!`, 999999);
             }
           }
         } else {
@@ -1619,7 +1619,7 @@ function equipWeaponByName(name){
       state.tutorialStep = 5;
       state.player.stamina = 10; // refill stamina for Art
       hideBanner();
-      showBanner("Step 5: Weapon Arts. Walk to the 3 rats and press R (Cleave).", 999999);
+      showBanner(`Step 5: Weapon Arts: Walk to the 3 rats and press (${getInputName('art')}).`, 999999);
     }
 
 
@@ -1698,7 +1698,7 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
       state.tutorialStep === 2 &&
       name === 'Shortsword') {
     state.tutorialStep = 3;
-    say("Weapon equipped. Now move next to a rat and press SPACE to attack it. Be careful this consumes stamina");
+    say(`Weapon equipped. Now move next to a rat and press ${getInputName('attack')} to attack it. Be careful this consumes stamina`);
   }
 
 
@@ -1885,7 +1885,7 @@ if (state.skills?.bow?.perks?.['bow_a1']) range += state.skills.bow.perks['bow_a
             state.enemies.push({x:10, y:38, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true});
             
             hideBanner();
-            showBanner("Step 9: Pickup Scroll. Press (P) to open your spell book. Press (F) to swap between spells. Cast Magic (Q) on the Rat.", 999999);
+            showBanner(`Step 9: Pickup Scroll. Press (${getInputName('spell_menu')}) to open your spell book. Press (${getInputName('cycle_spell')}) to swap between spells. Cast Magic with (${getInputName('cast')}) on the Rat.`, 999999);
          }
       }
       // ----------------------------------------
@@ -2162,7 +2162,7 @@ log(`You hit the ${target.type} for ${dmg}.${note}`);
         state.tiles[25][10]=5; state.tiles[25][11]=5;
         
         hideBanner();
-        showBanner("Step 7: Pick up and USE the Antidote (3) and Potion (1).", 999999);
+        showBanner(`Step 7: Pick up and USE the Antidote (${getInputName('antidote')}) and Potion (${getInputName('potion')}).`, 999999);
      }
   }
 
@@ -2252,7 +2252,7 @@ handleSuccessfulHitDurabilityTick();
         state._tutStep6Started = true;
         state.tutorialStep = 6;
         hideBanner();
-        showBanner("You’re poisoned. Press 3 to use an antidote, then press 1 to drink a potion.", 999999);
+        showBanner(`You’re poisoned. Press ${getInputName('antidote')} to use an antidote, then press ${getInputName('potion')} to drink a potion.`, 999999);
     }
     if (state.gameMode === 'tutorial' && state._tutStep6Started && !state._tutArtTargetSpawned) {
         state._tutArtTargetSpawned = true;
@@ -2654,7 +2654,7 @@ function useWeaponArt(){
          state.enemies.push({x:10, y:22, type:'Rat', hp:2, atk:[1,2], xp:0, tutorialDummy:false});
          
          hideBanner();
-         showBanner("Step 6: Melee. Attack the next rat with SPACE. Beware poison!", 999999);
+         showBanner(`Step 6: Melee. Attack the next rat with (${getInputName('attack')}). Beware poison!`, 999999);
       }
     }
     
@@ -2809,7 +2809,7 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 9) {
   state.tiles[37][10]=5;
   
   hideBanner();
-  showBanner("Step 10: Low Mana! Pickup and use the Tonic (2) for instant recharge.", 999999);
+  showBanner(`Step 10: Low Mana! Pickup and use the Tonic (${getInputName('tonic')}) for instant recharge.`, 999999);
 }
 
 
