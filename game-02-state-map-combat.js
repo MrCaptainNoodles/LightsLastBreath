@@ -1875,8 +1875,14 @@ const pool=[
   let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
 
   // --- NEW: Affix System (25% chance) ---
+  // --- FIX: Appraiser Perk (+15% affix chance per level) ---
+  let affixChance = 0.25;
+  if (state.skills?.lockpicking?.perks?.['loc_b3']) {
+      affixChance += (0.15 * state.skills.lockpicking.perks['loc_b3']);
+  }
+
   // MODIFIED: Exclude Key of Destiny AND Shields from getting random affixes
-  if (choice.name !== 'Key of Destiny' && choice.type !== 'shield' && Math.random() < 0.25) {
+  if (choice.name !== 'Key of Destiny' && choice.type !== 'shield' && Math.random() < affixChance) {
     const roll = Math.random();
     
     // --- NEW: Cursed Weapons (5% chance within affix roll) ---
@@ -2129,6 +2135,17 @@ function damageAfterDR(raw){
       }
   }
 
+  // --- FIX: Spear Parrying (Phalanx & Impenetrable) ---
+  if (!usedShield && state.player.weapon?.type === 'spear' && state.skills?.spear?.perks?.['spear_b1']) {
+      const spearBlockChance = 0.05 * state.skills.spear.perks['spear_b1'];
+      if (Math.random() < spearBlockChance) {
+          // If Impenetrable is unlocked, block 100% of damage. Otherwise standard block.
+          dr += state.skills.spear.perks['spear_b2'] ? 1.0 : 0.30; 
+          log(`You parried the attack with your polearm!`);
+      }
+  }
+  // ----------------------------------------------------
+
   // Cleric Blessing: +20% Damage Reduction
 if (state.player.blessTicks > 0) { dr += 0.20; }
 // Trinket: Stone Charm (+10% DR)
@@ -2156,7 +2173,7 @@ if (state.player.blessTicks > 0) { dr += 0.20; }
     dmg += 2;
   }
 
-  if (usedShield && dmg > 0){              // only when it actually reduced real damage           // only when it actually reduced real damage
+  if (usedShield && dmg > 0){              // only when it actually reduced real damage 
   state._shieldParity = (state._shieldParity + 1);
   if (state._shieldParity % 2 === 0){    // every other hit taken
     sh.dur = Math.max(0, (sh.dur|0) - 1);
@@ -2214,7 +2231,14 @@ function rollHitFor(type){
     const tiers = magicPowerBonus();   // 0,1,2,... based on Magic lvl
     const base  = 0.75;
     const bonus = tiers * 0.02;       // +2% per 2 Magic levels
-    const p = Math.max(0.05, Math.min(0.99, base + bonus));
+    
+    // --- FIX: Add the base +5% per level perk! ---
+    let perkBonus = 0;
+    if (state.skills?.magic?.perks?.['mag_base']) {
+        perkBonus = state.skills.magic.perks['mag_base'] * 0.05;
+    }
+    
+    const p = Math.max(0.05, Math.min(0.99, base + bonus + perkBonus));
     return Math.random() < p;
   }
 
@@ -2263,7 +2287,10 @@ function applyBleed(e, ticks=BLEED_TICKS, perTick=BLEED_DMG){
 }
 function applySlow(e, ticks=SLOW_TICKS){
   let bonusTicks = 0;
-  if (state.skills?.axe?.perks && state.skills.axe.perks['axe_a2']) bonusTicks += 2;
+  // --- FIX: Axe Executioner (axe_a2) adds 2 ticks per perk level ---
+  if (state.skills?.axe?.perks && state.skills.axe.perks['axe_a2']) {
+      bonusTicks += (2 * state.skills.axe.perks['axe_a2']);
+  }
   e.slowTicks = Math.max(e.slowTicks|0, 0) + ticks + bonusTicks;
   e._skipMove = false; // used for every-other-turn slow
 }

@@ -1090,6 +1090,24 @@ if (adjacent){
           }
           if (dmg === 0) attackLanded = false;
       }
+
+      // --- FIX: Hand-to-Hand Defense (Deflect & Counter-Throw) ---
+      if (attackLanded && state.player.weapon?.type === 'hand') {
+          if (state.skills?.hand?.perks?.['hand_a1'] && Math.random() < (0.10 * state.skills.hand.perks['hand_a1'])) {
+              dmg = Math.max(0, dmg - 2);
+              spawnFloatText("DEFLECT", state.player.x, state.player.y, '#cbd5e1');
+              if (dmg === 0) attackLanded = false;
+          }
+          if (attackLanded && state.skills?.hand?.perks?.['hand_b2'] && Math.random() < 0.15) {
+              const tempX = state.player.x; const tempY = state.player.y;
+              state.player.x = e.x; state.player.y = e.y;
+              state.player.rx = e.x; state.player.ry = e.y;
+              e.x = tempX; e.y = tempY;
+              spawnFloatText("THROW!", state.player.x, state.player.y, '#fcd34d');
+              log("You threw the enemy to the ground and swapped places!");
+          }
+      }
+      // -----------------------------------------------------------
       
       // Perk: Phalanx (Spear Block)
       if (attackLanded && state.player.shield && state.skills?.spear?.perks?.['spear_b1'] && Math.random() < (0.05 * state.skills.spear.perks['spear_b1'])) {

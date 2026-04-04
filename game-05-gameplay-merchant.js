@@ -463,6 +463,17 @@ function tryMove(dx,dy){
 
       // --- NEW: Advance Turn & Check Toggle Spikes ---
   state.gameTurn = (state.gameTurn || 0) + 1;
+  
+  // --- FIX: Troll Blood (Heal 1 HP every 10 turns) ---
+  if (state.gameTurn % 10 === 0 && state.skills?.survivability?.perks?.['sur_b3']) {
+      if (state.player.hp < state.player.hpMax) {
+          state.player.hp = Math.min(state.player.hpMax, state.player.hp + state.skills.survivability.perks['sur_b3']);
+          spawnFloatText("+1", state.player.x, state.player.y, '#4ade80');
+          updateBars();
+      }
+  }
+  // --------------------------------------------------
+  
   const spikesActive = Math.floor(state.gameTurn / 3) % 2 !== 0;
   
   // Check if we stepped onto a tile that is now active (Tile 9)
@@ -702,14 +713,15 @@ if (tintEl) tintEl.style.background = newBgColor;
 
 log('You descend.');
 
-// Perk: Regeneration (Recover 50% HP instead of 25% on descend)
-let healPct = 0.25;
-if (state.skills?.survivability?.perks?.['sur_b1']) {
-    healPct = 0.50;
-}
+// recover HP (Base 25%)
+let heal = Math.ceil(state.player.hpMax * 0.25);
 
-// recover HP
-const heal = Math.ceil(state.player.hpMax * healPct);
+// --- FIX: Survivability Regeneration (Heal 1 HP per level per floor) ---
+if (state.skills?.survivability?.perks?.['sur_b1']) {
+    heal += state.skills.survivability.perks['sur_b1'];
+}
+// -----------------------------------------------------------------------
+
 state.player.hp = Math.min(state.player.hp + heal, state.player.hpMax);
 log(`You recover ${heal} HP.`);
 
@@ -1812,9 +1824,9 @@ if (state.skills?.bow?.perks?.['bow_a1']) range += state.skills.bow.perks['bow_a
 
   // spend the loaded arrow immediately
   let keepArrow = false;
-  // Perk: 10% chance per level to not consume the arrow
-  if (state.skills?.bow?.perks?.['bow_b1']) {
-      keepArrow = Math.random() < (0.10 * state.skills.bow.perks['bow_b1']);
+  // Perk (Fletching): 20% chance per level to not consume the arrow
+  if (state.skills?.bow?.perks?.['bow_c1']) {
+      keepArrow = Math.random() < (0.20 * state.skills.bow.perks['bow_c1']);
   }
   
   if (keepArrow) {
@@ -1830,6 +1842,11 @@ if (state.skills?.bow?.perks?.['bow_a1']) range += state.skills.bow.perks['bow_a
   state.lastPlayerAction = { type: 'bow' };
   // ---------------------------------
 
+  // Perk (Bodkin): Pierces 1 Enemy per level
+  let pierceAllowed = state.skills?.bow?.perks?.['bow_b1'] || 0;
+  let enemiesPierced = 0;
+  let hitAnything = false;
+
   // walk cells out to max range, blocked by walls/closed doors
   for (let r=1; r<=range; r++){
     const x = state.player.x + dx*r;
@@ -1840,105 +1857,145 @@ if (state.skills?.bow?.perks?.['bow_a1']) range += state.skills.bow.perks['bow_a
 
     const e = enemyAt(x,y);
     if (e){
+      hitAnything = true;
       ensureSkill('bow');
+      
       if (!rollHitFor('bow')){
         spawnFloatText("Miss", e.x, e.y, '#9ca3af'); // <--- ADDED
         SFX.miss();
-        log('Your arrow misses.');
-        enemyStep(); draw(); return;
-      }
-      const bonus = skillDamageBonus('bow');
-      // Buffed: Was 2-4, now 3-6 (rewarding ammo usage)
-      let dmg = (window._instaKill) ? 99999 : rand(3+bonus, 6+bonus);
-      
-      let isCrit = false;
-      // Perk: 5% Critical Hit Chance per level
-      if (state.skills?.bow?.perks?.['bow_a2'] && Math.random() < (0.05 * state.skills.bow.perks['bow_a2'])) {
-          dmg *= 2;
-          isCrit = true;
-          // Perk: Headshot (Insta-kill non-bosses on Crit)
-          if (state.skills.bow.perks['bow_a3'] && !e.boss) {
-              dmg = 99999;
-              spawnFloatText("HEADSHOT", e.x, e.y, '#ef4444');
+        log(`Your arrow misses the ${e.type}.`);
+      } else {
+          const bonus = skillDamageBonus('bow');
+          // Buffed: Was 2-4, now 3-6 (rewarding ammo usage)
+          let dmg = (window._instaKill) ? 99999 : rand(3+bonus, 6+bonus);
+          
+          let isCrit = false;
+          // Perk (Sniper): 10% Critical Hit Chance per level
+          if (state.skills?.bow?.perks?.['bow_a2'] && Math.random() < (0.10 * state.skills.bow.perks['bow_a2'])) {
+              dmg *= 2;
+              isCrit = true;
+              // Perk (Headshot): Insta-kill non-bosses on Crit
+              if (state.skills.bow.perks['bow_a3'] && !e.boss) {
+                  dmg = 99999;
+                  spawnFloatText("HEADSHOT", e.x, e.y, '#ef4444');
+              }
+          }
+
+          SFX.rangedZap();                      
+          e.hp -= dmg;
+          
+          // --- FIX: Show Bow Damage Text ---
+          spawnFloatText(dmg + (isCrit ? "!" : ""), e.x, e.y, isCrit ? '#ff0' : '#fff');
+          if (typeof flashEnemy === 'function') flashEnemy(e, 'red'); // Add flash too
+          // --------------------------------
+
+          log(`You shoot an arrow for ${dmg}.`);
+
+          // --- TUTORIAL OVERRIDE (Step 8 -> 9) ---
+          if (state.gameMode === 'tutorial' && state.tutorialStep === 8 && e.type === 'Rat') {
+             if (e.hp - dmg <= 0) {
+                state.tutorialStep = 9;
+                // Spawn Magic Scroll at Y=35
+                state.pickups['10,35'] = {kind:'spell', payload:{name:'Spark', cost:1, tier:1}};
+                state.tiles[35][10]=5;
+
+                // FIX: Spawn a Magic Target at Y=38
+                state.enemies.push({x:10, y:38, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true});
+                
+                hideBanner();
+                showBanner(`Step 9: Pickup Scroll. Press (${getInputName('spell_menu')}) to open your spell book. Press (${getInputName('cycle_spell')}) to swap between spells. Cast Magic with (${getInputName('cast')}) on the Rat.`, 999999);
+             }
+          }
+          // ----------------------------------------
+
+          if (e.hp <= 0) {
+              handleEnemyDeath(e, 'bow');
           }
       }
 
-      SFX.rangedZap();                      
-      e.hp -= dmg;
+      enemiesPierced++;
       
-      // --- FIX: Show Bow Damage Text ---
-      spawnFloatText(dmg + (isCrit ? "!" : ""), e.x, e.y, isCrit ? '#ff0' : '#fff');
-      if (typeof flashEnemy === 'function') flashEnemy(e, 'red'); // Add flash too
-      // --------------------------------
-
-      log(`You shoot an arrow for ${dmg}.`);
-
-      // --- TUTORIAL OVERRIDE (Step 8 -> 9) ---
-      if (state.gameMode === 'tutorial' && state.tutorialStep === 8 && e.type === 'Rat') {
-         if (e.hp - dmg <= 0) {
-            state.tutorialStep = 9;
-            // Spawn Magic Scroll at Y=35
-            state.pickups['10,35'] = {kind:'spell', payload:{name:'Spark', cost:1, tier:1}};
-            state.tiles[35][10]=5;
-
-            // FIX: Spawn a Magic Target at Y=38
-            state.enemies.push({x:10, y:38, type:'Rat', hp:1, atk:[0,0], xp:0, stunTicks:9999, tutorialDummy:true});
+      // If we have pierced our limit, stop the arrow
+      if (enemiesPierced > pierceAllowed) {
+          
+          const onDone = ()=>{ 
+            // Perks (Multishot & Volley): Fire extra arrows at random visible enemies
+            let extraArrows = 0;
+            if (state.skills?.bow?.perks?.['bow_b3']) extraArrows = 2; // Volley
+            else if (state.skills?.bow?.perks?.['bow_b2']) extraArrows = 1; // Multishot
             
-            hideBanner();
-            showBanner(`Step 9: Pickup Scroll. Press (${getInputName('spell_menu')}) to open your spell book. Press (${getInputName('cycle_spell')}) to swap between spells. Cast Magic with (${getInputName('cast')}) on the Rat.`, 999999);
-         }
-      }
-      // ----------------------------------------
-
-      const isFatal = e.hp <= 0;
-
-      const onDone = ()=>{ 
-        if (isFatal) {
-          handleEnemyDeath(e, 'bow');
-        }
-        
-        // Perk: Multishot (Fire an extra arrow at a random visible enemy on hit)
-        if (state.skills?.bow?.perks?.['bow_b3'] && Math.random() < 0.30) {
-           const targets = state.enemies.filter(en => en.hp > 0 && en !== e && state.seen.has(key(en.x, en.y)));
-           if (targets.length > 0) {
-               const extraTarget = targets[Math.floor(Math.random() * targets.length)];
-               const splashDmg = Math.max(1, Math.floor(dmg / 2));
-               extraTarget.hp -= splashDmg;
-               spawnFloatText(splashDmg, extraTarget.x, extraTarget.y, '#fff');
-               if (extraTarget.hp <= 0) handleEnemyDeath(extraTarget, 'bow');
-               
-               spawnProjectileEffect({
-                   kind: 'arrow', fromX: e.x, fromY: e.y, toX: extraTarget.x, toY: extraTarget.y,
-                   onDone: () => { enemyStep(); draw(); }
-               });
-               return; // Delay enemy step until 2nd arrow hits
-           }
-        }
-        enemyStep();
-        draw(); 
-      };
-      
-      spawnProjectileEffect({
-        kind: 'arrow',
-        fromX: state.player.x,
-        fromY: state.player.y,
-        toX: e.x,
-        toY: e.y,
-        dx, dy,
-        onDone
-      });
-      
-      // Perk: Pierce (Arrows go through enemies instead of stopping)
-      if (state.skills?.bow?.perks?.['bow_b2']) {
-         continue; 
+            if (extraArrows > 0) {
+               const targets = state.enemies.filter(en => en.hp > 0 && en !== e && state.seen.has(key(en.x, en.y)));
+               if (targets.length > 0) {
+                   // Shuffle targets to hit different ones
+                   const shuffledTargets = shuffle([...targets]).slice(0, extraArrows);
+                   
+                   shuffledTargets.forEach(extraTarget => {
+                       const splashDmg = Math.max(1, Math.floor(rand(3+skillDamageBonus('bow'), 6+skillDamageBonus('bow')) / 2));
+                       extraTarget.hp -= splashDmg;
+                       spawnFloatText(splashDmg, extraTarget.x, extraTarget.y, '#fff');
+                       if (extraTarget.hp <= 0) handleEnemyDeath(extraTarget, 'bow');
+                       
+                       spawnProjectileEffect({
+                           kind: 'arrow', fromX: state.player.x, fromY: state.player.y, toX: extraTarget.x, toY: extraTarget.y
+                       });
+                   });
+               }
+            }
+            enemyStep();
+            draw(); 
+          };
+          
+          spawnProjectileEffect({
+            kind: 'arrow',
+            fromX: state.player.x,
+            fromY: state.player.y,
+            toX: e.x,
+            toY: e.y,
+            dx, dy,
+            onDone
+          });
+          return;
       } else {
-         return; 
+          // The arrow pierced! Draw a partial animation for this segment
+          spawnProjectileEffect({
+            kind: 'arrow',
+            fromX: state.player.x,
+            fromY: state.player.y,
+            toX: e.x,
+            toY: e.y,
+            dx, dy
+          });
       }
     }
   }
 
-  // nothing hit
-  log('You loose an arrow into the hall.');
+  // If the arrow didn't hit anything, or pierced everything and kept going
+  if (!hitAnything) {
+      log('You loose an arrow into the hall.');
+  }
+  
+  // Resolve multishot even if main arrow didn't hit (or pierced all)
+  let extraArrows = 0;
+  if (state.skills?.bow?.perks?.['bow_b3']) extraArrows = 2;
+  else if (state.skills?.bow?.perks?.['bow_b2']) extraArrows = 1;
+  
+  if (extraArrows > 0) {
+     const targets = state.enemies.filter(en => en.hp > 0 && state.seen.has(key(en.x, en.y)));
+     if (targets.length > 0) {
+         const shuffledTargets = shuffle([...targets]).slice(0, extraArrows);
+         shuffledTargets.forEach(extraTarget => {
+             const splashDmg = Math.max(1, Math.floor(rand(3+skillDamageBonus('bow'), 6+skillDamageBonus('bow')) / 2));
+             extraTarget.hp -= splashDmg;
+             spawnFloatText(splashDmg, extraTarget.x, extraTarget.y, '#fff');
+             if (extraTarget.hp <= 0) handleEnemyDeath(extraTarget, 'bow');
+             spawnProjectileEffect({
+                 kind: 'arrow', fromX: state.player.x, fromY: state.player.y, toX: extraTarget.x, toY: extraTarget.y
+             });
+         });
+     }
+  }
+  
   enemyStep(); draw();
 }
 
@@ -2074,6 +2131,18 @@ if (isEffectActive('ArcaneFlux')) { // Note: Removed 'else' to allow stacking if
         
         // Colossus Perk (Stun on Crit)
         if (state.skills?.two?.perks?.['two_c1']) applyStun(target, 1);
+
+        // --- FIX: Stagger Perk (Push enemy back 1 tile on crit) ---
+        if (state.skills?.two?.perks?.['two_a2']) {
+            const pushX = target.x + Math.sign(target.x - state.player.x);
+            const pushY = target.y + Math.sign(target.y - state.player.y);
+            if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
+                target.x = pushX;
+                target.y = pushY;
+                spawnFloatText("PUSHED", pushX, pushY, '#9ca3af');
+            }
+        }
+        // ----------------------------------------------------------
         
         // Trigger Fear on Crit
         state.enemies.forEach(en => {
@@ -2089,18 +2158,27 @@ if (isEffectActive('ArcaneFlux')) { // Note: Removed 'else' to allow stacking if
             dmg *= 2;
             note = " (CRITICAL!)";
             isCrit = true;
+            
+            // Trigger Fear on Crit (Fixed: Moved inside the successful crit check!)
+            state.enemies.forEach(en => {
+              if (en !== target && dist(en.x, en.y, state.player.x, state.player.y) <= 5) {
+                en.fearTicks = 3;
+                spawnFloatText("FEAR", en.x, en.y, '#9ca3af');
+              }
+            });
          }
-      
-        isCrit = true;
-        
-        // Trigger Fear on Crit
-        state.enemies.forEach(en => {
-          if (en !== target && dist(en.x, en.y, state.player.x, state.player.y) <= 5) {
-            en.fearTicks = 3;
-            spawnFloatText("FEAR", en.x, en.y, '#9ca3af');
-          }
-        });
       }
+
+      // --- FIX: Two-Handed Sunder (+50% Dmg to Bosses/Elites) ---
+      if (w.type === 'two' && state.skills?.two?.perks?.['two_b2']) {
+          if (target.boss || target.elite) {
+              dmg = Math.floor(dmg * 1.5);
+              if (typeof spawnFloatText === 'function') {
+                  spawnFloatText("SUNDER!", target.x, target.y, '#facc15');
+              }
+          }
+      }
+      // ---------------------------------------------------------
 
   target.hp -= dmg;
   if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); 
@@ -2180,16 +2258,38 @@ if (dmg > 0) {
   }
 }
 
-// Spear: bleed
-if (w.type === 'spear' && proc(quirkChance('spear'))){
-  applyBleed(target, BLEED_TICKS, BLEED_DMG);
-  log('The foe is bleeding!');
+// Spear: Bleed, Barbed Tip & Impale
+let spearBleed = proc(quirkChance('spear'));
+if (w.type === 'spear' && spearBleed) {
+    let spearBleedDmg = BLEED_DMG;
+    if (state.skills?.spear?.perks?.['spear_a2']) spearBleedDmg += state.skills.spear.perks['spear_a2'];
+    applyBleed(target, BLEED_TICKS, spearBleedDmg);
+    log('The foe is bleeding!');
+}
+if (w.type === 'spear' && state.skills?.spear?.perks?.['spear_a3'] && Math.random() < (0.15 * state.skills.spear.perks['spear_a3'])) {
+    const dx = target.x - state.player.x;
+    const dy = target.y - state.player.y;
+    const behindTarget = enemyAt(target.x + dx, target.y + dy);
+    if (behindTarget) {
+        behindTarget.hp -= dmg;
+        spawnFloatText(dmg, behindTarget.x, behindTarget.y, '#fff');
+        if (typeof flashEnemy === 'function') flashEnemy(behindTarget, 'red');
+        log("Your spear impales through to the next enemy!");
+        if (behindTarget.hp <= 0) handleEnemyDeath(behindTarget, 'spear');
+    }
 }
 
-// Axe: cripple & Whirlwind
-if (w.type === 'axe' && proc(quirkChance('axe'))){
+// Axe: Cripple, Deep Wounds, & Whirlwind
+let axeSlow = proc(quirkChance('axe'));
+if (state.skills?.axe?.perks?.['axe_a2'] && Math.random() < (0.15 * state.skills.axe.perks['axe_a2'])) axeSlow = true;
+
+if (w.type === 'axe' && axeSlow){
   applySlow(target, SLOW_TICKS);
   log('You cripple the foe!');
+}
+if (w.type === 'axe' && state.skills?.axe?.perks?.['axe_a1'] && Math.random() < (0.15 * state.skills.axe.perks['axe_a1'])) {
+    applyBleed(target, BLEED_TICKS, BLEED_DMG);
+    log('You cause a deep wound!');
 }
 if (w.type === 'axe' && state.skills?.axe?.perks?.['axe_b3'] && Math.random() < (0.10 * state.skills.axe.perks['axe_b3'])) {
   const nbs = neighbors4(state.player.x, state.player.y);
@@ -2204,10 +2304,26 @@ if (w.type === 'axe' && state.skills?.axe?.perks?.['axe_b3'] && Math.random() < 
   log("Whirlwind strikes all adjacent foes!");
 }
 
-// Hand-to-hand: knockout & Combo
+// Hand-to-hand: Knockout, Disarm, Earthbreaker, & Combo
 if (w.type === 'hand' && proc(quirkChance('hand'))){
   applyStun(target, STUN_TICKS);
   log('Knockout! The foe is dazed!');
+}
+if (w.type === 'hand' && state.skills?.hand?.perks?.['hand_a2'] && Math.random() < (0.05 * state.skills.hand.perks['hand_a2'])) {
+    target.atk[0] = Math.max(0, target.atk[0] - 1);
+    target.atk[1] = Math.max(1, target.atk[1] - 1);
+    spawnFloatText("DISARMED", target.x, target.y, '#9ca3af');
+    log('You disarm the enemy, lowering their attack!');
+}
+if (w.type === 'hand' && isCrit && state.skills?.hand?.perks?.['hand_b3']) {
+    state.enemies.forEach(en => {
+        if (en !== target && Math.abs(en.x - target.x) <= 1 && Math.abs(en.y - target.y) <= 1) {
+            en.hp -= Math.max(1, Math.floor(dmg / 2));
+            spawnFloatText(Math.max(1, Math.floor(dmg / 2)), en.x, en.y, '#facc15');
+            if (en.hp <= 0) handleEnemyDeath(en, 'hand');
+        }
+    });
+    log("Your critical strike shatters the earth!");
 }
 if (w.type === 'hand' && state.skills?.hand?.perks?.['hand_c1'] && target.hp > 0) {
   if (Math.random() < (0.10 * state.skills.hand.perks['hand_c1'])) {
@@ -2218,9 +2334,18 @@ if (w.type === 'hand' && state.skills?.hand?.perks?.['hand_c1'] && target.hp > 0
   }
 }
 
+// One-Handed: Lacerate
+if (w.type === 'one' && state.skills?.one?.perks?.['one_a2'] && Math.random() < (0.10 * state.skills.one.perks['one_a2'])) {
+    applyBleed(target, BLEED_TICKS, BLEED_DMG);
+    log("You lacerate the enemy!");
+}
+
 // One-handed: follow-up strikes (Relentless)
+// --- FIX: Add base 5% per level from one_a1 (Lethal Momentum) ---
 let followUp = quirkChance('one');
-if (state.skills?.one?.perks?.['one_a1']) followUp += (0.05 * state.skills.one.perks['one_a1']);
+if (state.skills?.one?.perks?.['one_a1']) {
+    followUp += (0.05 * state.skills.one.perks['one_a1']);
+}
 
 if (w.type === 'one' && target.hp > 0 && Math.random() < followUp){
   let hits = 1;
@@ -2245,6 +2370,22 @@ handleSuccessfulHitDurabilityTick();
     if (w.type === 'axe' && state.skills?.axe?.perks?.['axe_b2']) {
         state.player.rampageTicks = 5; // Lasts 5 actions/turns
         spawnFloatText("RAMPAGE!", state.player.x, state.player.y, '#ef4444');
+    }
+
+    // --- FIX: Axe Bloodlust (+1 HP on kill) ---
+    if (w.type === 'axe' && state.skills?.axe?.perks?.['axe_b1']) {
+        const heal = state.skills.axe.perks['axe_b1'];
+        state.player.hp = Math.min(state.player.hpMax, state.player.hp + heal);
+        spawnFloatText("+" + heal + " HP", state.player.x, state.player.y, '#4ade80');
+        updateBars();
+    }
+
+    // --- FIX: Magic Siphon (Melee kills restore 1 MP) ---
+    if (w.type !== 'staff' && state.skills?.magic?.perks?.['mag_c1']) {
+        const mpGain = state.skills.magic.perks['mag_c1'];
+        state.player.mp = Math.min(state.player.mpMax, state.player.mp + mpGain);
+        spawnFloatText("+" + mpGain + " MP", state.player.x, state.player.y, '#60a5fa');
+        updateBars();
     }
     
     // Tutorial overrides (Keep these for tutorial flow)
@@ -2510,12 +2651,15 @@ function useWeaponArt(){
   
   // 3. BACKSTAB (Shortsword/One-Handed): Teleport behind enemy and Crit
   else if (t === 'one') {
-    const dirs = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
-    const [dx,dy] = dirs[state.player.facing || 'down'];
-    const tx = state.player.x + dx, ty = state.player.y + dy;
-    const e = enemyAt(tx, ty);
+    // --- FIX: Auto-target any adjacent enemy regardless of which way the player is facing ---
+    const nbs = neighbors4(state.player.x, state.player.y);
+    const e = state.enemies.find(en => nbs.some(n => n.x===en.x && n.y===en.y));
     
     if (e) {
+      // Calc direction from player to enemy dynamically
+      const dx = e.x - state.player.x;
+      const dy = e.y - state.player.y;
+      
       // Calc spot behind enemy
       const bx = e.x + dx, by = e.y + dy;
       if (inBounds(bx, by) && state.tiles[by][bx] === 1 && !enemyAt(bx, by)) {
@@ -2745,16 +2889,12 @@ if (!target){ log('No enemy in line of sight.'); return; }
 if (state.player.mp < st.cost){ log('Not enough MP.'); return; }
 SFX.spell();
 
-let finalCost = st.cost;
-// Perk: 10% chance per level for spells to cost 0 MP
-if (state.skills?.magic?.perks?.['mag_b2']) {
-    if (Math.random() < (0.10 * state.skills.magic.perks['mag_b2'])) {
-        finalCost = 0;
-        spawnFloatText("FREE", state.player.x, state.player.y, '#60a5fa');
-    }
+// --- FIX: Archmage (0 MP Cost) is natively handled by st.cost returning 0 ---
+if (st.cost === 0) {
+    spawnFloatText("FREE", state.player.x, state.player.y, '#60a5fa');
 }
 
-state.player.mp -= finalCost; updateBars();
+state.player.mp -= st.cost; updateBars();
 
 // --- NEW: Record spell for Shadow ---
 state.lastPlayerAction = { type: 'spell', name: spell.name };
@@ -2773,6 +2913,19 @@ state.lastPlayerAction = { type: 'spell', name: spell.name };
 // upgraded damage pulled from scaling table
 const { min, max } = getSpellStats(spell.name);
 let dmg = rand(min, max);
+
+// --- FIX: Magic Empower (+1 Dmg per level) ---
+if (state.skills?.magic?.perks?.['mag_a1']) {
+    dmg += state.skills.magic.perks['mag_a1'];
+}
+
+// --- FIX: Magic Overcharge (10% chance for Double Dmg) ---
+let isOvercharged = false;
+if (state.skills?.magic?.perks?.['mag_a2'] && Math.random() < (0.10 * state.skills.magic.perks['mag_a2'])) {
+    dmg *= 2;
+    isOvercharged = true;
+    spawnFloatText("OVERCHARGE", state.player.x, state.player.y, '#c084fc');
+}
 
 // --- NEW: Staff Elemental Boost ---
 const wName = state.player.weapon ? state.player.weapon.name : '';
@@ -2796,6 +2949,21 @@ target.hp -= dmg;
   // --- FIX: Show Magic Damage Text (Blue) ---
   spawnFloatText(dmg, target.x, target.y, '#60a5fa');
   // ------------------------------------------
+
+  // --- FIX: Magic Aether Nova (Overcharge Explodes) ---
+  if (isOvercharged && state.skills?.magic?.perks?.['mag_a3']) {
+      state.enemies.forEach(en => {
+          if (en !== target && Math.abs(en.x - target.x) <= 1 && Math.abs(en.y - target.y) <= 1) {
+              const splashDmg = Math.max(1, Math.floor(dmg / 2));
+              en.hp -= splashDmg;
+              spawnFloatText(splashDmg, en.x, en.y, '#c084fc');
+              if (en.hp <= 0) handleEnemyDeath(en, 'magic');
+          }
+      });
+      spawnParticles(target.x, target.y, '#c084fc', 8);
+      log("The overcharged spell erupts in an Aether Nova!");
+  }
+  // ----------------------------------------------------
 
   log(`Your ${spell.name} hits for ${dmg}.`);
 
@@ -2822,10 +2990,11 @@ if (target.hp <= 0){
 // After hit / kill logic, let a projectile travel if the enemy
 // is not right next to us. Heal already returned earlier.
 const onDone = ()=>{ 
-    // Perk: Resonance/Echo (Chance to trigger a free 2nd cast at half damage)
+    // --- FIX: Magic Echo (10% per level) and Resonance (3rd cast) ---
     let echoChance = 0;
-    if (state.skills?.magic?.perks?.['mag_b3']) echoChance += 0.20; // 20% Echo
-    else if (state.skills?.magic?.perks?.['mag_b2']) echoChance += 0.10; // 10% Resonance
+    if (state.skills?.magic?.perks?.['mag_b2']) {
+        echoChance = 0.10 * state.skills.magic.perks['mag_b2'];
+    }
 
     if (Math.random() < echoChance && target.hp > 0) {
         spawnFloatText("ECHO!", target.x, target.y, '#a78bfa');
@@ -2837,7 +3006,23 @@ const onDone = ()=>{
         spawnProjectileEffect({
             kind: 'magic', element: spell.name,
             fromX: state.player.x, fromY: state.player.y, toX: target.x, toY: target.y,
-            onDone: () => { enemyStep(); draw(); }
+            onDone: () => { 
+                // Resonance (mag_b3) triggers a 3rd cast!
+                if (state.skills?.magic?.perks?.['mag_b3'] && Math.random() < echoChance && target.hp > 0) {
+                     spawnFloatText("RESONANCE!", target.x, target.y, '#c084fc');
+                     const resDmg = Math.ceil(echoDmg / 2);
+                     target.hp -= resDmg;
+                     spawnFloatText(resDmg, target.x, target.y, '#60a5fa');
+                     if (target.hp <= 0) handleEnemyDeath(target, 'magic');
+                     spawnProjectileEffect({
+                        kind: 'magic', element: spell.name,
+                        fromX: state.player.x, fromY: state.player.y, toX: target.x, toY: target.y,
+                        onDone: () => { enemyStep(); draw(); }
+                     });
+                } else {
+                    enemyStep(); draw(); 
+                }
+            }
         });
     } else {
         enemyStep(); draw(); 

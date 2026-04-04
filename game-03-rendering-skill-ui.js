@@ -2642,6 +2642,35 @@ ctx.fillStyle = grad;
 
 
 function updateBars(){
+  // --- FIX: Juggernaut (Status Immunity) ---
+  if (state.skills?.survivability?.perks?.['sur_a2']) {
+      state.player.poisoned = false;
+      state.player.poisonTicks = 0;
+  }
+  // -----------------------------------------
+  
+  // --- FIX: Ensure Max Stats include Perks (Fixes save/load bug) ---
+  if (!state._maxStatsRecalculated) {
+      state._maxStatsRecalculated = true;
+      
+      // Base stats derived from level
+      let expectedHpMax = 20 + ((state.player.level - 1) * 2); // Assuming +2 HP per level
+      let expectedMpMax = 10 + (state.player.level - 1);       // Assuming +1 MP per level
+      let expectedStaminaMax = 10;
+
+      // Add Skill Perks
+      if (state.skills?.survivability?.perks?.['sur_base']) expectedHpMax += (2 * state.skills.survivability.perks['sur_base']);
+      if (state.skills?.hand?.perks?.['hand_b1']) expectedHpMax += (1 * state.skills.hand.perks['hand_b1']);
+      if (state.skills?.magic?.perks?.['mag_b1']) expectedMpMax += (2 * state.skills.magic.perks['mag_b1']);
+      if (state.skills?.survivability?.perks?.['sur_c1']) expectedStaminaMax += (1 * state.skills.survivability.perks['sur_c1']); // It's +1 per level, not +5
+
+      // Only apply if there's a discrepancy to avoid infinite loops
+      if (state.player.hpMax < expectedHpMax) state.player.hpMax = expectedHpMax;
+      if (state.player.mpMax < expectedMpMax) state.player.mpMax = expectedMpMax;
+      if (state.player.staminaMax < expectedStaminaMax) state.player.staminaMax = expectedStaminaMax;
+  }
+  // -----------------------------------------------------------------
+
   document.querySelector('.bar.hp')?.classList.toggle('poison', !!state.player.poisoned); // <— add
   document.getElementById('hpText').textContent = state.player.hp + '/' + state.player.hpMax;
   document.getElementById('mpText').textContent = state.player.mp + '/' + state.player.mpMax;
@@ -2843,16 +2872,16 @@ function ensureSkillInfoModal(){
   m.id = 'skillInfoModal';
   m.className = 'modal';
   m.style.display = 'none';
- // --- FIX 4: Widen modal and add side-by-side flex layout for Stats ---
-  m.innerHTML = `
-    <div class="sheet" style="max-width: 800px; width: 95%;">
-      <div class="row">
+// --- FIX 4: Widen modal and add side-by-side flex layout for Stats ---
+ m.innerHTML = `
+    <div class="sheet" style="max-width: 1100px; width: 95%; height: 85vh; display: flex; flex-direction: column;">
+      <div class="row" style="flex-shrink: 0;">
         <div class="title" id="skillInfoTitle">Skill Details</div>
         <button class="btn" id="btnCloseSkillInfo">Close</button>
       </div>
-      <div style="display:flex; flex-direction:row; gap:12px; align-items:flex-start;">
-        <div id="skillInfoBody" style="margin:8px 0 6px; flex:2;"></div>
-        <div id="skillInfoStats" style="margin:8px 0 6px; flex:1; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; border:1px solid #334155; max-height:55vh; overflow-y:auto;"></div>
+      <div style="display:flex; flex-direction:row; gap:12px; flex: 1; min-height: 0; margin-top: 10px;">
+        <div id="skillInfoBody" style="flex:2; display: flex; flex-direction: column; min-height: 0;"></div>
+        <div id="skillInfoStats" style="flex:1; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; border:1px solid #334155; overflow-y:auto; height: 100%;"></div>
       </div>
     </div>`;
   document.body.appendChild(m);
@@ -3001,75 +3030,105 @@ function showSkillDetails(type){
   const perks = trees[type] || [];
   title.textContent = `${typeNice(type)} Mastery`;
   
+  // --- NEW: Map perks to a hierarchical visual tree structure ---
+  const perkMap = {};
+  const roots = [];
+  perks.forEach(p => { perkMap[p.id] = { ...p, children: [] }; });
+  perks.forEach(p => {
+      // Find parent, push to children array. If none, it's a root.
+      if (p.req && perkMap[p.req]) perkMap[p.req].children.push(perkMap[p.id]);
+      else roots.push(perkMap[p.id]);
+  });
+
   let html = `
-    <div style="text-align:center; margin-bottom:12px; font-size:14px;">
+    <style>
+      .st-tree { display:flex; justify-content:center; padding:10px 10px 20px 10px; flex:1; overflow:auto; min-height:0; }
+      .st-children { display:flex; justify-content:center; padding-top:20px; position:relative; }
+      .st-child-wrap { display:flex; flex-direction:column; align-items:center; float:left; text-align:center; position:relative; padding:20px 10px 0 10px; }
+      
+      /* Horizontal Lines connecting siblings */
+      .st-child-wrap::before, .st-child-wrap::after {
+          content:''; position:absolute; top:0; right:50%; border-top:2px solid #475569; width:50%; height:20px;
+      }
+      .st-child-wrap::after { right:auto; left:50%; border-left:2px solid #475569; }
+      
+      /* Clean up edges so lines don't overhang */
+      .st-child-wrap:only-child::after, .st-child-wrap:only-child::before { display:none; }
+      .st-child-wrap:only-child { padding-top:0; }
+      .st-child-wrap:first-child::before, .st-child-wrap:last-child::after { border:0 none; }
+      .st-child-wrap:last-child::before { border-right:2px solid #475569; border-radius:0 6px 0 0; }
+      .st-child-wrap:first-child::after { border-radius:6px 0 0 0; }
+      
+      /* Vertical Line going down from parent */
+      .st-children::before {
+          content:''; position:absolute; top:0; left:50%; border-left:2px solid #475569; width:0; height:20px; transform:translateX(-50%);
+      }
+    </style>
+    <div style="text-align:center; margin-bottom:12px; font-size:14px; flex-shrink:0;">
       Level ${L} | Skill Points: <span style="color:#f9d65c; font-weight:900; font-size:16px;">${available}</span>
     </div>
-    <div style="display:flex; flex-direction:column; gap:10px; max-height: 55vh; overflow-y: auto; padding-right: 4px;">
+    <div class="st-tree">
   `;
 
-  perks.forEach(p => {
-    const curLvl = s.perks[p.id] || 0;
-    const maxed = curLvl >= p.max;
-    // A requirement is met if the required perk is at least level 1
-    const reqMet = !p.req || (s.perks[p.req] && s.perks[p.req] >= 1);
-    const canUnlock = !maxed && reqMet && available > 0;
-    
-    let border = 'var(--chipBorder)';
-    let bg = 'rgba(255,255,255,0.03)';
-    let color = '#9ca3af';
-    let cursor = 'not-allowed';
-    let icon = '';
-    
-    if (maxed) {
-      bg = '#15803d'; // Green
-      border = '#22c55e';
-      color = '#fff';
-      icon = '';
-    } else if (curLvl > 0) {
-      // Partially leveled but can still unlock more
-      bg = canUnlock ? '#1b2a3a' : 'rgba(255,255,255,0.05)';
-      border = canUnlock ? '#f9d65c' : 'var(--chipBorder)';
-      color = '#d9e7f5';
-      cursor = canUnlock ? 'pointer' : 'not-allowed';
-      icon = canUnlock ? '' : ''; 
-    } else if (canUnlock) {
-      bg = '#1b2a3a';
-      border = '#f9d65c';
-      color = '#d9e7f5';
-      cursor = 'pointer';
-      icon = '';
-    } else if (reqMet) {
-      color = '#d9e7f5';
-      icon = ''; 
-    }
+  // Recursive UI Builder
+  function buildNode(node) {
+      const curLvl = s.perks[node.id] || 0;
+      const maxed = curLvl >= node.max;
+      
+      // --- FIX: Strict Max-Level Requirement Check ---
+      let reqMet = true;
+      if (node.req) {
+          const reqPerkData = perks.find(x => x.id === node.req);
+          if (!reqPerkData || (s.perks[node.req] || 0) < reqPerkData.max) reqMet = false;
+      }
+      const canUnlock = !maxed && reqMet && available > 0;
+      
+      let border = 'var(--chipBorder)';
+      let bg = 'rgba(255,255,255,0.03)';
+      let color = '#9ca3af';
+      let cursor = 'not-allowed';
+      
+      if (maxed) {
+        bg = '#15803d'; border = '#22c55e'; color = '#fff';
+      } else if (curLvl > 0) {
+        bg = canUnlock ? '#1b2a3a' : 'rgba(255,255,255,0.05)';
+        border = canUnlock ? '#f9d65c' : 'var(--chipBorder)';
+        color = '#d9e7f5'; cursor = canUnlock ? 'pointer' : 'not-allowed';
+      } else if (canUnlock) {
+        bg = '#1b2a3a'; border = '#f9d65c'; color = '#d9e7f5'; cursor = 'pointer';
+      } else if (reqMet) {
+        color = '#d9e7f5';
+      }
 
-    // --- FIX 5: Find the actual name of the requirement ---
-    let reqName = 'Previous';
-    if (p.req) {
-        const reqPerk = perks.find(x => x.id === p.req);
-        if (reqPerk) reqName = reqPerk.name;
-    }
-    
-    html += `
-      <button class="perk-btn" data-id="${p.id}" data-can="${canUnlock}" style="display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:${bg}; border:1px solid ${border}; color:${color}; padding:10px 12px; border-radius:10px; cursor:${cursor}; transition:transform 0.1s;">
-        <div style="font-size:20px; min-width:24px; text-align:center;">${icon}</div>
-        <div style="flex:1;">
-          <div style="display:flex; justify-content:space-between; align-items:baseline;">
-            <div style="font-weight:800; font-size:14px; margin-bottom:2px;">${p.name}</div>
-            <div style="font-size:11px; font-weight:bold; color:#f9d65c;">${curLvl}/${p.max}</div>
-          </div>
-          <div style="font-size:12px; opacity:0.8;">${p.desc}</div>
-        </div>
-        ${!reqMet ? `<div style="font-size:10px; color:#ef4444; max-width:80px; text-align:right; line-height:1.2;">Requires<br><b style="color:#fca5a5;">${reqName}</b></div>` : ''}
-      </button>
-    `;
-  });
-  
-  if (perks.length === 0) {
-    html += `<div style="opacity:0.5; text-align:center; padding:10px;">No skill tree available for this category.</div>`;
+      let reqName = 'Previous';
+      if (node.req) {
+          const rP = perks.find(x => x.id === node.req);
+          if (rP) reqName = rP.name;
+      }
+
+      // Compact "Card" style button for the tree
+      const card = `
+        <button class="perk-btn" data-id="${node.id}" data-can="${canUnlock}" style="position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; width:135px; min-height:100px; text-align:center; background:${bg}; border:2px solid ${border}; color:${color}; padding:8px; border-radius:10px; cursor:${cursor}; transition:transform 0.1s; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+          <div style="font-weight:800; font-size:13px; margin-bottom:4px; line-height:1.2;">${node.name}</div>
+          <div style="font-size:11px; font-weight:bold; color:#f9d65c; margin-bottom:6px; background:rgba(0,0,0,0.4); padding:2px 6px; border-radius:4px;">Lv ${curLvl}/${node.max}</div>
+          <div style="font-size:10px; opacity:0.85; line-height:1.3; flex:1;">${node.desc}</div>
+          ${!reqMet ? `<div style="margin-top:6px; font-size:9px; color:#fca5a5; line-height:1.1; border-top:1px dashed rgba(255,255,255,0.2); padding-top:4px; width:100%;">Req Max:<br><b style="color:#ef4444;">${reqName}</b></div>` : ''}
+        </button>
+      `;
+
+      let childrenHtml = '';
+      if (node.children && node.children.length > 0) {
+          childrenHtml = `<div class="st-children">` + node.children.map(c => `<div class="st-child-wrap">${buildNode(c)}</div>`).join('') + `</div>`;
+      }
+      return card + childrenHtml;
   }
-  
+
+  // Draw the tree starting from the roots
+  if (roots.length > 0) {
+      html += `<div style="display:flex; gap:20px;">` + roots.map(r => `<div style="display:flex; flex-direction:column; align-items:center;">${buildNode(r)}</div>`).join('') + `</div>`;
+  } else {
+      html += `<div style="opacity:0.5; text-align:center; padding:10px; width:100%;">No skill tree available for this category.</div>`;
+  }
   html += `</div>`;
   body.innerHTML = html;
 
