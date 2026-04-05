@@ -165,12 +165,12 @@ function spawnProjectileEffect(opts){
   if (!Array.isArray(state.projectiles)) state.projectiles = [];
   state.projectiles.push(proj);
   state._projectileAnimating = true;
-
-  const wasLocked = !!state._inputLocked;
-  state._inputLocked = true;
+  state._inputLocked = true; // Lock inputs while ANY projectile is flying
 
   function step(now){
-    if (!state._projectileAnimating) return;
+    // FIX: If the projectile was removed externally, don't trap the animation loop
+    if (!state.projectiles.includes(proj)) return;
+    
     const elapsed = now - proj.startTime;
     proj.t = Math.min(1, elapsed / proj.duration);
 
@@ -180,11 +180,23 @@ function spawnProjectileEffect(opts){
     if (proj.t >= 1){
       // reach target → clean up
       state.projectiles = state.projectiles.filter(p => p !== proj);
-      state._projectileAnimating = false;
+      
+      // FIX: Only turn off the animating flag if NO projectiles are left
+      if (state.projectiles.length === 0) {
+          state._projectileAnimating = false;
+      }
 
-      // let enemies take their turn, then unlock input
+      // Execute effect logic
       if (typeof proj.onDone === 'function') proj.onDone();
-      state._inputLocked = wasLocked;
+      
+      // FIX: Only unlock inputs if NO projectiles are left, AND we aren't leveling up
+      if (state.projectiles.length === 0) {
+          const lvlModal = document.getElementById('lvlupModal');
+          if (!lvlModal || lvlModal.style.display === 'none') {
+              state._inputLocked = false;
+          }
+      }
+      
       draw();
     } else {
       requestAnimationFrame(step);
@@ -2642,8 +2654,8 @@ ctx.fillStyle = grad;
 
 
 function updateBars(){
-  // --- FIX: Juggernaut (Status Immunity) ---
-  if (state.skills?.survivability?.perks?.['sur_a2']) {
+  // --- FIX: Purifier (Status Immunity) ---
+  if (state.skills?.survivability?.perks?.['sur_b2']) {
       state.player.poisoned = false;
       state.player.poisonTicks = 0;
   }
@@ -2873,15 +2885,15 @@ function ensureSkillInfoModal(){
   m.className = 'modal';
   m.style.display = 'none';
 // --- FIX 4: Widen modal and add side-by-side flex layout for Stats ---
- m.innerHTML = `
-    <div class="sheet" style="max-width: 1100px; width: 95%; height: 85vh; display: flex; flex-direction: column;">
+m.innerHTML = `
+    <div class="sheet" style="max-width: 1600px; width: 99%; height: 85vh; display: flex; flex-direction: column;">
       <div class="row" style="flex-shrink: 0;">
         <div class="title" id="skillInfoTitle">Skill Details</div>
         <button class="btn" id="btnCloseSkillInfo">Close</button>
       </div>
       <div style="display:flex; flex-direction:row; gap:12px; flex: 1; min-height: 0; margin-top: 10px;">
-        <div id="skillInfoBody" style="flex:2; display: flex; flex-direction: column; min-height: 0;"></div>
-        <div id="skillInfoStats" style="flex:1; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; border:1px solid #334155; overflow-y:auto; height: 100%;"></div>
+        <div id="skillInfoBody" style="flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;"></div>
+        <div id="skillInfoStats" style="width: 280px; flex-shrink: 0; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; border:1px solid #334155; overflow-y:auto; height: 100%;"></div>
       </div>
     </div>`;
   document.body.appendChild(m);
@@ -2935,97 +2947,187 @@ function showSkillDetails(type){
 
   // Define Skyrim-like branched trees for each category with Max Levels
   const trees = {
-    one: [
-      { id: 'one_base', name: 'Nimble Strike', desc: '+5% Accuracy per level', req: null, max: 3 },
-      { id: 'one_a1', name: 'Lethal Momentum', desc: '+5% Follow-Up Chance per level', req: 'one_base', max: 2 },
-      { id: 'one_a2', name: 'Flurry', desc: '+1 Min/Max Damage', req: 'one_a1', max: 2 },
-      { id: 'one_a3', name: 'Relentless', desc: 'Follow-Ups can trigger Follow-Ups', req: 'one_a2', max: 1 },
-      { id: 'one_b1', name: 'Evasion', desc: '+5% Dodge Chance per level', req: 'one_base', max: 2 },
-      { id: 'one_b2', name: 'Counter Attack', desc: 'Retaliate automatically after Dodging', req: 'one_b1', max: 1 },
-      { id: 'one_b3', name: 'Shadow Step', desc: 'Take 0 Damage when Dodging', req: 'one_b2', max: 1 },
-      { id: 'one_c1', name: 'Assassin', desc: '+20% Damage vs Full HP enemies', req: 'one_a1', max: 1 },
-    ],
-    two: [
-      { id: 'two_base', name: 'Heavy Grip', desc: '+5% Accuracy per level', req: null, max: 3 },
-      { id: 'two_a1', name: 'Crushing Blow', desc: '+5% Crit Chance per level', req: 'two_base', max: 2 },
-      { id: 'two_a2', name: 'Devastate', desc: '+2 Max Damage per level', req: 'two_a1', max: 2 },
-      { id: 'two_a3', name: 'Execution', desc: 'Crits deal 3x Damage instead of 2x', req: 'two_a2', max: 1 },
-      { id: 'two_b1', name: 'Cleave', desc: '15% Splash Damage per level', req: 'two_base', max: 2 },
-      { id: 'two_b2', name: 'Sunder', desc: 'Ignores 50% Enemy Armor', req: 'two_b1', max: 1 },
-      { id: 'two_b3', name: 'Earthshaker', desc: 'Splash damage radius increased', req: 'two_b2', max: 1 },
-      { id: 'two_c1', name: 'Colossus', desc: 'Crits stun enemies for 1 turn', req: 'two_a1', max: 1 },
-    ],
-    spear: [
-      { id: 'spear_base', name: 'Focused Thrust', desc: '+5% Accuracy per level', req: null, max: 3 },
-      { id: 'spear_a1', name: 'Deep Wound', desc: '+5% Bleed Chance per level', req: 'spear_base', max: 2 },
-      { id: 'spear_a2', name: 'Arterial Cut', desc: '+1 Bleed Dmg/Tick per level', req: 'spear_a1', max: 2 },
-      { id: 'spear_a3', name: 'Hemorrhage', desc: 'Bleed lasts 3 extra ticks', req: 'spear_a2', max: 1 },
-      { id: 'spear_b1', name: 'Phalanx', desc: '+5% Block Chance per level', req: 'spear_base', max: 2 },
-      { id: 'spear_b2', name: 'Impenetrable', desc: 'Blocking reduces Damage to 0', req: 'spear_b1', max: 1 },
-      { id: 'spear_b3', name: 'Spiked Shield', desc: 'Blocking deals 1 damage back', req: 'spear_b2', max: 1 },
-      { id: 'spear_c1', name: 'Lunge', desc: '+2 Damage if moving before attacking', req: 'spear_a1', max: 1 },
-    ],
-    axe: [
-      { id: 'axe_base', name: 'Savage Chop', desc: '+5% Accuracy per level', req: null, max: 3 },
-      { id: 'axe_a1', name: 'Hamstring', desc: '+5% Cripple Chance per level', req: 'axe_base', max: 2 },
-      { id: 'axe_a2', name: 'Executioner', desc: 'Slows last 2 extra ticks', req: 'axe_a1', max: 1 },
-      { id: 'axe_a3', name: 'Maim', desc: 'Crippled enemies deal half damage', req: 'axe_a2', max: 1 },
-      { id: 'axe_b1', name: 'Bloodlust', desc: 'Heal 1 HP on Kill per level', req: 'axe_base', max: 2 },
-      { id: 'axe_b2', name: 'Rampage', desc: '+1 Atk for 3 ticks after Kill', req: 'axe_b1', max: 1 },
-      { id: 'axe_b3', name: 'Whirlwind', desc: '10% chance to hit all adjacent', req: 'axe_b2', max: 2 },
-      { id: 'axe_c1', name: 'Desperation', desc: '+1 Dmg for every 5 HP missing', req: 'axe_b1', max: 1 },
-    ],
-    hand: [
-      { id: 'hand_base', name: 'Iron Fists', desc: '+5% Accuracy per level', req: null, max: 3 },
-      { id: 'hand_a1', name: 'Concussion', desc: '+5% Knockout Chance per level', req: 'hand_base', max: 2 },
-      { id: 'hand_a2', name: 'Shatter', desc: 'Knockout lasts 2 extra ticks', req: 'hand_a1', max: 1 },
-      { id: 'hand_a3', name: 'Pressure Points', desc: 'Knocked out enemies take 2x Dmg', req: 'hand_a2', max: 1 },
-      { id: 'hand_b1', name: 'Chi Focus', desc: '+1 Max HP per level', req: 'hand_base', max: 5 },
-      { id: 'hand_b2', name: 'Martial Arts', desc: '+1 Min/Max Damage', req: 'hand_b1', max: 2 },
-      { id: 'hand_b3', name: 'Iron Body', desc: '+5% passive Damage Reduction', req: 'hand_b2', max: 2 },
-      { id: 'hand_c1', name: 'Combo', desc: '10% chance to strike instantly again', req: 'hand_a1', max: 2 },
-    ],
-    bow: [
-      { id: 'bow_base', name: 'Eagle Eye', desc: '+5% Accuracy per level', req: null, max: 3 },
-      { id: 'bow_a1', name: 'Tension', desc: '+1 Range per level', req: 'bow_base', max: 2 },
-      { id: 'bow_a2', name: 'Sniper', desc: '+10% Crit Chance per level', req: 'bow_a1', max: 2 },
-      { id: 'bow_a3', name: 'Headshot', desc: 'Crits instantly kill non-bosses', req: 'bow_a2', max: 1 },
-      { id: 'bow_b1', name: 'Bodkin', desc: 'Pierces 1 Enemy per level', req: 'bow_base', max: 2 },
-      { id: 'bow_b2', name: 'Multishot', desc: 'Fires 2 Arrows at once', req: 'bow_b1', max: 1 },
-      { id: 'bow_b3', name: 'Volley', desc: 'Fires 3 Arrows at once', req: 'bow_b2', max: 1 },
-      { id: 'bow_c1', name: 'Fletching', desc: '20% chance to save Arrow on fire', req: 'bow_a1', max: 2 },
-    ],
-    magic: [
-      { id: 'mag_base', name: 'Arcane Focus', desc: '+5% Spell Accuracy per level', req: null, max: 3 },
-      { id: 'mag_a1', name: 'Mana Flow', desc: 'Spells cost 1 less MP (Min 1)', req: 'mag_base', max: 2 },
-      { id: 'mag_a2', name: 'Overcharge', desc: '+1 Spell Damage per level', req: 'mag_a1', max: 3 },
-      { id: 'mag_a3', name: 'Archmage', desc: 'Spells cost 0 MP while at Full HP', req: 'mag_a2', max: 1 },
-      { id: 'mag_b1', name: 'Leyline', desc: '+2 Max MP per level', req: 'mag_base', max: 3 },
-      { id: 'mag_b2', name: 'Echo', desc: '10% Chance to cast twice', req: 'mag_b1', max: 2 },
-      { id: 'mag_b3', name: 'Resonance', desc: 'Echo can trigger a third cast', req: 'mag_b2', max: 1 },
-      { id: 'mag_c1', name: 'Siphon', desc: 'Heal 1 MP on Spell Kill', req: 'mag_a1', max: 2 },
-    ],
-    lockpicking: [
-      { id: 'loc_base', name: 'Steady Hands', desc: '+5% Unlock Chance per level', req: null, max: 3 },
-      { id: 'loc_a1', name: 'Tinker', desc: '5% chance to save pick per level', req: 'loc_base', max: 3 },
-      { id: 'loc_a2', name: 'Master Thief', desc: 'Guaranteed success', req: 'loc_a1', max: 1 },
-      { id: 'loc_a3', name: 'Skeleton Key', desc: 'Lockpicks never break', req: 'loc_a2', max: 1 },
-      { id: 'loc_b1', name: 'Scavenger', desc: 'Find extra gold in chests', req: 'loc_base', max: 3 },
-      { id: 'loc_b2', name: 'Hoarder', desc: 'Find extra items in chests', req: 'loc_b1', max: 1 },
-      { id: 'loc_b3', name: 'Appraiser', desc: 'Chests drop better quality weapons', req: 'loc_b2', max: 1 },
-      { id: 'loc_c1', name: 'Sixth Sense', desc: 'See chests through walls', req: 'loc_b1', max: 1 },
-    ],
-    survivability: [
-      { id: 'sur_base', name: 'Toughness', desc: '+2 Max HP per level', req: null, max: 5 },
-      { id: 'sur_a1', name: 'Thick Skin', desc: '+2% Damage Reduction per level', req: 'sur_base', max: 5 },
-      { id: 'sur_a2', name: 'Juggernaut', desc: 'Immune to Status Effects', req: 'sur_a1', max: 1 },
-      { id: 'sur_a3', name: 'Immortal', desc: 'Survive 1 fatal hit per run (1 HP)', req: 'sur_a2', max: 1 },
-      { id: 'sur_b1', name: 'Regeneration', desc: 'Heal 1 HP per floor', req: 'sur_base', max: 3 },
-      { id: 'sur_b2', name: 'Phoenix', desc: 'Revive once with 50% HP', req: 'sur_b1', max: 1 },
-      { id: 'sur_b3', name: 'Troll Blood', desc: 'Heal 1 HP every 10 turns', req: 'sur_b2', max: 1 },
-      { id: 'sur_c1', name: 'Athleticism', desc: '+1 Max Stamina per level', req: 'sur_base', max: 3 },
-    ]
-  };
+  one: [
+    { id: 'one_base', name: 'Blade Mastery', max: 5, desc: '+1 Base Damage per level.', req: null },
+    
+    { id: 'one_a1', name: 'Evasion', max: 5, desc: '5% chance per level to Dodge.', req: 'one_base' },
+    { id: 'one_a2', name: 'Lacerate', max: 5, desc: '10% chance per level to Bleed enemies.', req: 'one_base' },
+    
+    { id: 'one_b1', name: 'Shadow Step', max: 1, desc: 'Take 0 damage when you dodge instead of partial.', req: 'one_a1' },
+    { id: 'one_b2', name: 'Fleet Footed', max: 1, desc: 'Moving 3 tiles without stopping grants +50% Dodge chance for 1 turn.', req: 'one_a1' },
+    { id: 'one_b3', name: 'Relentless', max: 5, desc: '10% chance per level for a free follow-up attack.', req: 'one_a2' },
+    { id: 'one_b4', name: 'Deep Cuts', max: 5, desc: 'Bleed deals +2 extra damage per tick per level.', req: 'one_a2' },
+    
+    { id: 'one_c1', name: 'Phantom Strike', max: 1, desc: 'Dodging guarantees your next attack is a Critical Hit.', req: 'one_b1' },
+    { id: 'one_c2', name: 'Riposte', max: 1, desc: 'Dodging triggers an immediate, free counter-attack.', req: 'one_b1' },
+    { id: 'one_c3', name: 'Afterimage', max: 1, desc: 'Moving 3 tiles without stopping guarantees you dodge the next attack.', req: 'one_b2' },
+    { id: 'one_c4', name: 'Momentum', max: 1, desc: 'Moving 3 tiles without stopping doubles your next attack damage.', req: 'one_b2' },
+    { id: 'one_c5', name: 'Flurry', max: 1, desc: 'Follow-up attacks can trigger a second follow-up.', req: 'one_b3' },
+    { id: 'one_c6', name: 'Thousand Cuts', max: 5, desc: 'Each consecutive hit on the same target adds +1 Damage per level.', req: 'one_b3' },
+    { id: 'one_c7', name: 'Hemorrhage', max: 1, desc: 'Bleeding enemies take 50% more damage from all your attacks.', req: 'one_b4' },
+    { id: 'one_c8', name: 'Bloodthirst', max: 5, desc: 'Attacking a bleeding enemy heals you for 1 HP per level.', req: 'one_b4' }
+  ],
+  two: [
+    { id: 'two_base', name: 'Heavy Grip', max: 5, desc: '+1 Base Damage per level.', req: null },
+    
+    { id: 'two_a1', name: 'Follow-Through', max: 1, desc: 'Excess overkill damage is dealt to an adjacent enemy.', req: 'two_base' },
+    { id: 'two_a2', name: 'Sunder', max: 1, desc: '+50% Damage to Bosses and Warlords.', req: 'two_base' },
+    
+    { id: 'two_b1', name: 'Brutal Force', max: 1, desc: 'Overkill damage ignores enemy Armor and Damage Reduction.', req: 'two_a1' },
+    { id: 'two_b2', name: 'Stagger', max: 1, desc: 'Critical hits push enemies back 1 tile.', req: 'two_a1' },
+    { id: 'two_b3', name: 'Crush', max: 5, desc: 'Attacks deal +10% damage per level to Bosses and Elites.', req: 'two_a2' },
+    { id: 'two_b4', name: 'Ruthless', max: 5, desc: 'Killing an enemy grants +2 Damage per level to your next attack.', req: 'two_a2' },
+    
+    { id: 'two_c1', name: 'Shockwave', max: 1, desc: 'Regular attacks also damage the tile directly behind the target.', req: 'two_b1' },
+    { id: 'two_c2', name: 'Meteor Strike', max: 1, desc: 'Your Weapon Art permanently Stuns all 8 surrounding enemies for 2 turns.', req: 'two_b1' },
+    { id: 'two_c3', name: 'Colossus', max: 1, desc: 'Enemies knocked back are also Stunned for 1 turn.', req: 'two_b2' },
+    { id: 'two_c4', name: 'Executioner', max: 1, desc: 'Knocking enemies into a wall deals triple damage.', req: 'two_b2' },
+    { id: 'two_c5', name: 'Giant Slayer', max: 1, desc: 'Attacks against Bosses/Warlords cannot miss and roll max damage.', req: 'two_b3' },
+    { id: 'two_c6', name: 'Obliterate', max: 1, desc: 'Critical hits deal 3x damage instead of 2x.', req: 'two_b3' },
+    { id: 'two_c7', name: 'Rampage', max: 1, desc: 'Kills instantly restore 2 Stamina.', req: 'two_b4' },
+    { id: 'two_c8', name: 'Decimate', max: 1, desc: 'Deal double damage if the enemy is at full HP.', req: 'two_b4' }
+  ],
+  axe: [
+    { id: 'axe_base', name: 'Chopper', max: 5, desc: '+1 Base Damage per level.', req: null },
+    
+    { id: 'axe_a1', name: 'Savage Strikes', max: 5, desc: '+10% Critical Hit Chance per level.', req: 'axe_base' },
+    { id: 'axe_a2', name: 'Cripple', max: 5, desc: '10% chance per level to Slow enemies.', req: 'axe_base' },
+    
+    { id: 'axe_b1', name: 'Bloodlust', max: 5, desc: 'Melee kills heal you for 1 HP per level.', req: 'axe_a1' },
+    { id: 'axe_b2', name: 'Berserker', max: 5, desc: 'Gain +1 Damage per level for every 20% missing HP.', req: 'axe_a1' },
+    { id: 'axe_b3', name: 'Executioner\'s Mark', max: 5, desc: 'Slowed enemies take +2 Damage from your attacks per level.', req: 'axe_a2' },
+    { id: 'axe_b4', name: 'Deep Wounds', max: 5, desc: '10% chance per level to Bleed enemies.', req: 'axe_a2' },
+    
+    { id: 'axe_c1', name: 'Vampirism', max: 1, desc: 'Bloodlust now heals 10% of Max HP.', req: 'axe_b1' },
+    { id: 'axe_c2', name: 'Feast', max: 1, desc: 'Killing a Warlord or Boss permanently increases Max HP by 1.', req: 'axe_b1' },
+    { id: 'axe_c3', name: 'Death Wish', max: 1, desc: 'Dropping below 20% HP grants 100% Crit Chance.', req: 'axe_b2' },
+    { id: 'axe_c4', name: 'Unstoppable', max: 1, desc: 'While below 50% HP, you are immune to Stun and Slow.', req: 'axe_b2' },
+    { id: 'axe_c5', name: 'Decapitate', max: 1, desc: 'Crits against Slowed enemies instantly kill non-bosses.', req: 'axe_b3' },
+    { id: 'axe_c6', name: 'Shatter', max: 1, desc: 'Attacking a Slowed enemy completely strips their Armor.', req: 'axe_b3' },
+    { id: 'axe_c7', name: 'Agony', max: 1, desc: 'Bleeding enemies are automatically Slowed as well.', req: 'axe_b4' },
+    { id: 'axe_c8', name: 'Carnage', max: 1, desc: 'Killing a Bleeding enemy causes them to explode, dealing Bleed damage to adjacent enemies.', req: 'axe_b4' }
+  ],
+  spear: [
+    { id: 'spear_base', name: 'Reach', max: 4, desc: '+5% Base Accuracy per level.', req: null },
+    
+    { id: 'spear_a1', name: 'First Strike', max: 5, desc: 'Your attacks against enemies at 100% HP deal +2 damage per level.', req: 'spear_base' },
+    { id: 'spear_a2', name: 'Phalanx', max: 5, desc: '5% chance per level to Parry incoming damage.', req: 'spear_base' },
+    
+    { id: 'spear_b1', name: 'Impale', max: 5, desc: '15% chance per level to pierce and hit the enemy directly behind your target.', req: 'spear_a1' },
+    { id: 'spear_b2', name: 'Keep Away', max: 1, desc: 'Hitting an enemy forcefully pushes them back 1 tile.', req: 'spear_a1' },
+    { id: 'spear_b3', name: 'Impenetrable', max: 1, desc: 'Parries block 100% of damage instead of a percentage.', req: 'spear_a2' },
+    { id: 'spear_b4', name: 'Sweeping Strike', max: 5, desc: 'Hitting an enemy has a 20% chance per level to hit all diagonally adjacent enemies.', req: 'spear_a2' },
+    
+    { id: 'spear_c1', name: 'Gungnir', max: 1, desc: 'Impale pierces infinitely in a straight line.', req: 'spear_b1' },
+    { id: 'spear_c2', name: 'Skewer', max: 1, desc: 'Pierced enemies are pinned and Stunned for 1 turn.', req: 'spear_b1' },
+    { id: 'spear_c3', name: 'Pinning Strike', max: 1, desc: 'Pushing an enemy into a wall Stuns them for 2 turns.', req: 'spear_b2' },
+    { id: 'spear_c4', name: 'Hit and Run', max: 1, desc: 'Killing an enemy refunds 1 Stamina and lets you move 1 tile for free.', req: 'spear_b2' },
+    { id: 'spear_c5', name: 'Phalanx Commander', max: 1, desc: 'Successfully Parrying triggers a free counter-attack.', req: 'spear_b3' },
+    { id: 'spear_c6', name: 'Perfect Stance', max: 1, desc: 'While you have full Stamina, your Parry chance is doubled.', req: 'spear_b3' },
+    { id: 'spear_c7', name: 'Dragoon', max: 1, desc: 'Moving straight toward an enemy for 2+ tiles guarantees your attack is a Crit.', req: 'spear_b4' },
+    { id: 'spear_c8', name: 'Zoning', max: 5, desc: 'Enemies that step into your melee range take 1 damage automatically per level.', req: 'spear_b4' }
+  ],
+  hand: [
+    { id: 'hand_base', name: 'Iron Fists', max: 5, desc: '+1 Base Damage per level.', req: null },
+    
+    { id: 'hand_a1', name: 'Knockout', max: 5, desc: '5% chance per level to Stun enemies.', req: 'hand_base' },
+    { id: 'hand_a2', name: 'Deflect', max: 5, desc: '10% chance per level to reduce incoming damage by 50%.', req: 'hand_base' },
+    
+    { id: 'hand_b1', name: 'Disarm', max: 5, desc: '5% chance per level to permanently reduce enemy Attack power.', req: 'hand_a1' },
+    { id: 'hand_b2', name: 'Earthbreaker', max: 1, desc: 'Crits trigger a 3x3 shockwave damaging nearby enemies.', req: 'hand_a1' },
+    { id: 'hand_b3', name: 'Counter-Throw', max: 5, desc: '15% chance per level when attacked to swap places with enemy.', req: 'hand_a2' },
+    { id: 'hand_b4', name: 'Chi Focus', max: 5, desc: 'Permanently gain +5 Max HP per level.', req: 'hand_a2' },
+    
+    { id: 'hand_c1', name: 'Pressure Points', max: 1, desc: 'Crits apply Slow and halve enemy damage for 3 turns.', req: 'hand_b1' },
+    { id: 'hand_c2', name: 'Nerve Strike', max: 1, desc: 'Stunned enemies take double damage from all sources.', req: 'hand_b1' },
+    { id: 'hand_c3', name: 'Quake', max: 1, desc: 'Earthbreaker shockwave now also Stuns any enemies hit.', req: 'hand_b2' },
+    { id: 'hand_c4', name: 'Palm Strike', max: 1, desc: 'Attacking a Stunned enemy forcefully throws them 2 tiles away.', req: 'hand_b2' },
+    { id: 'hand_c5', name: 'Judo', max: 1, desc: 'Counter-Throw also Stuns the thrown enemy for 2 turns.', req: 'hand_b3' },
+    { id: 'hand_c6', name: 'Redirection', max: 1, desc: 'Deflecting an attack reflects the blocked damage back to the attacker.', req: 'hand_b3' },
+    { id: 'hand_c7', name: 'Flowing Water', max: 5, desc: 'Successfully Deflecting or Dodging an attack restores 2 HP per level.', req: 'hand_b4' },
+    { id: 'hand_c8', name: 'Iron Body', max: 1, desc: '10% of Max HP converts into flat Damage Reduction.', req: 'hand_b4' }
+  ],
+  bow: [
+    { id: 'bow_base', name: 'Eagle Eye', max: 5, desc: '+2% Base Accuracy per level.', req: null },
+    
+    { id: 'bow_a1', name: 'Tension', max: 5, desc: '+1 Range per level.', req: 'bow_base' },
+    { id: 'bow_a2', name: 'Fletching', max: 5, desc: '5% chance per level to not consume an arrow.', req: 'bow_base' },
+    
+    { id: 'bow_b1', name: 'Sniper', max: 5, desc: '+10% Critical Hit Chance per level.', req: 'bow_a1' },
+    { id: 'bow_b2', name: 'Bodkin', max: 1, desc: 'Arrows pierce through 1 enemy.', req: 'bow_a1' },
+    { id: 'bow_b3', name: 'Multishot', max: 5, desc: 'Fire 1 extra arrow at a random visible enemy per level.', req: 'bow_a2' },
+    { id: 'bow_b4', name: 'Scavenger (Arrows)', max: 1, desc: 'Enemies killed by arrows have 50% chance to drop an arrow.', req: 'bow_a2' },
+    
+    { id: 'bow_c1', name: 'Headshot', max: 1, desc: 'Crits instantly kill non-bosses.', req: 'bow_b1' },
+    { id: 'bow_c2', name: 'Assassin', max: 1, desc: 'Shooting an enemy at maximum range deals double damage.', req: 'bow_b1' },
+    { id: 'bow_c3', name: 'Railgun', max: 1, desc: 'Bodkin arrows deal full damage to all pierced targets.', req: 'bow_b2' },
+    { id: 'bow_c4', name: 'Pinning Shot', max: 1, desc: 'Piercing an enemy pins them to a wall, Stunning for 3 turns.', req: 'bow_b2' },
+    { id: 'bow_c5', name: 'Volley', max: 1, desc: 'Multishot fires twice as many extra arrows.', req: 'bow_b3' },
+    { id: 'bow_c6', name: 'Seeker Arrows', max: 1, desc: 'Arrows fired into empty space automatically seek out the nearest visible enemy.', req: 'bow_b3' },
+    { id: 'bow_c7', name: 'Endless Quiver', max: 1, desc: 'Fletching chance increases to 50%.', req: 'bow_b4' },
+    { id: 'bow_c8', name: 'Explosive Tipped', max: 1, desc: 'Arrows explode on impact, dealing half damage to adjacent tiles.', req: 'bow_b4' }
+  ],
+  magic: [
+    { id: 'mag_base', name: 'Arcane Focus', max: 5, desc: '+5% Spell Accuracy per level.', req: null },
+    
+    { id: 'mag_a1', name: 'Empower', max: 5, desc: '+1 Spell Damage per level.', req: 'mag_base' },
+    { id: 'mag_a2', name: 'Leyline', max: 5, desc: '+2 Max MP per level.', req: 'mag_base' },
+    
+    { id: 'mag_b1', name: 'Overcharge', max: 5, desc: '10% chance per level for a spell to deal double damage.', req: 'mag_a1' },
+    { id: 'mag_b2', name: 'Echo', max: 5, desc: '10% chance per level to cast a second time for free at half damage.', req: 'mag_a1' },
+    { id: 'mag_b3', name: 'Siphon', max: 5, desc: 'Melee kills restore 1 MP per level.', req: 'mag_a2' },
+    { id: 'mag_b4', name: 'Channeling', max: 5, desc: 'Spells cost 1 less MP per level.', req: 'mag_a2' },
+    
+    { id: 'mag_c1', name: 'Devastation', max: 1, desc: 'Overcharge deals 3x damage instead of 2x.', req: 'mag_b1' },
+    { id: 'mag_c2', name: 'Arcane Chain', max: 1, desc: 'Overcharged spells automatically bounce to a second nearby enemy.', req: 'mag_b1' },
+    { id: 'mag_c3', name: 'Resonance', max: 1, desc: 'Echo triggers a 3rd cast at quarter damage.', req: 'mag_b2' },
+    { id: 'mag_c4', name: 'Archmage', max: 1, desc: 'Spells ignore Line of Sight and can be cast through walls.', req: 'mag_b2' },
+    { id: 'mag_c5', name: 'Blood Magic', max: 1, desc: 'Cast spells using HP if you are out of MP.', req: 'mag_b3' },
+    { id: 'mag_c6', name: 'Mana Shield', max: 1, desc: 'Take damage to MP instead of HP while above 0 MP.', req: 'mag_b3' },
+    { id: 'mag_c7', name: 'Elemental Weaver', max: 1, desc: 'Casting a spell reduces your next different spell\'s cost to 0.', req: 'mag_b4' },
+    { id: 'mag_c8', name: 'Mana Surge', max: 1, desc: 'Descending the stairs to a new floor completely restores your MP to max.', req: 'mag_b4' }
+  ],
+  survivability: [
+    { id: 'sur_base', name: 'Thick Skin', max: 5, desc: '+2 Max HP per level.', req: null },
+    
+    { id: 'sur_a1', name: 'Hardened', max: 5, desc: '-1 Flat Damage Taken per level.', req: 'sur_base' },
+    { id: 'sur_a2', name: 'Athleticism', max: 5, desc: '+5 Max Stamina per level.', req: 'sur_base' },
+    
+    { id: 'sur_b1', name: 'Spiked Armor', max: 5, desc: 'Enemies take 1 damage per level when they hit you.', req: 'sur_a1' },
+    { id: 'sur_b2', name: 'Purifier', max: 1, desc: 'Immune to Poison and Status effects.', req: 'sur_a1' },
+    { id: 'sur_b3', name: 'Troll Blood', max: 5, desc: 'Heal 1 HP per level every 10 turns.', req: 'sur_a2' },
+    { id: 'sur_b4', name: 'Alchemist', max: 1, desc: 'Potions heal 50% more.', req: 'sur_a2' },
+    
+    { id: 'sur_c1', name: 'Retribution', max: 1, desc: 'Reflect 50% of blocked/reduced damage back to the attacker.', req: 'sur_b1' },
+    { id: 'sur_c2', name: 'Titan\'s Grip', max: 1, desc: 'Allows you to equip a Shield alongside a Two-Handed weapon.', req: 'sur_b1' },
+    { id: 'sur_c3', name: 'Indomitable', max: 1, desc: 'Take half damage from Bosses.', req: 'sur_b2' },
+    { id: 'sur_c4', name: 'Juggernaut', max: 1, desc: 'Take 50% less damage from Traps and Hazards.', req: 'sur_b2' },
+    { id: 'sur_c5', name: 'Second Wind', max: 1, desc: 'Once per floor, dropping below 20% HP instantly heals 50% HP.', req: 'sur_b3' },
+    { id: 'sur_c6', name: 'Regeneration', max: 5, desc: 'Heal +5 HP per level when using stairs.', req: 'sur_b3' },
+    { id: 'sur_c7', name: 'Iron Stomach', max: 1, desc: 'Drinking a potion also grants you a +2 Damage buff for 10 turns.', req: 'sur_b4' },
+    { id: 'sur_c8', name: 'Immortal', max: 1, desc: 'Once per run, survive a fatal blow at 1 HP.', req: 'sur_b4' }
+  ],
+  lockpicking: [
+    { id: 'loc_base', name: 'Tinkerer', max: 5, desc: '+10% Lockpick Success Chance per level.', req: null },
+    
+    { id: 'loc_a1', name: 'Scavenger', max: 5, desc: 'Find 20% more gold per level.', req: 'loc_base' },
+    { id: 'loc_a2', name: 'Trap Sense', max: 1, desc: 'Spike Traps deal half damage to you.', req: 'loc_base' },
+    
+    { id: 'loc_b1', name: 'Appraiser', max: 1, desc: 'Chests have a +25% chance to drop Affixed weapons.', req: 'loc_a1' },
+    { id: 'loc_b2', name: 'Haggle', max: 1, desc: 'Merchant prices are permanently reduced by 20%.', req: 'loc_a1' },
+    { id: 'loc_b3', name: 'Saboteur', max: 1, desc: 'Walking over Spike Traps permanently breaks them.', req: 'loc_a2' },
+    { id: 'loc_b4', name: 'Scout', max: 1, desc: 'Field of vision in the darkness is permanently increased by 2 tiles.', req: 'loc_a2' },
+    
+    { id: 'loc_c1', name: 'Bounty', max: 1, desc: 'Warlords and Bosses drop 3x the normal amount of gold.', req: 'loc_b1' },
+    { id: 'loc_c2', name: 'Alchemist\'s Bag', max: 1, desc: 'Using any consumable has a 25% chance to not be consumed.', req: 'loc_b1' },
+    { id: 'loc_c3', name: 'Silver Tongue', max: 1, desc: 'Sell items to the merchant for 50% more gold.', req: 'loc_b2' },
+    { id: 'loc_c4', name: 'Mercenary', max: 5, desc: 'Deal +1% bonus weapon damage for every 100 gold you are carrying per level.', req: 'loc_b2' },
+    { id: 'loc_c5', name: 'Master Thief', max: 1, desc: 'Lockpicks never break.', req: 'loc_b3' },
+    { id: 'loc_c6', name: 'Trapmaster', max: 1, desc: 'Safely walk over traps, "arming" them to deal double damage to enemies.', req: 'loc_b3' },
+    { id: 'loc_c7', name: 'Shadow Walk', max: 1, desc: 'Enemies cannot spot or aggro onto you unless you are within 2 tiles of them.', req: 'loc_b4' },
+    { id: 'loc_c8', name: 'Lucky Coin', max: 1, desc: 'Flat 10% chance to take 0 damage from any source.', req: 'loc_b4' }
+  ]
+};
 
   const perks = trees[type] || [];
   title.textContent = `${typeNice(type)} Mastery`;
@@ -3044,7 +3146,7 @@ function showSkillDetails(type){
     <style>
       .st-tree { display:flex; justify-content:center; padding:10px 10px 20px 10px; flex:1; overflow:auto; min-height:0; }
       .st-children { display:flex; justify-content:center; padding-top:20px; position:relative; }
-      .st-child-wrap { display:flex; flex-direction:column; align-items:center; float:left; text-align:center; position:relative; padding:20px 10px 0 10px; }
+      .st-child-wrap { display:flex; flex-direction:column; align-items:center; float:left; text-align:center; position:relative; padding:20px 2px 0 2px; }
       
       /* Horizontal Lines connecting siblings */
       .st-child-wrap::before, .st-child-wrap::after {
@@ -3108,11 +3210,11 @@ function showSkillDetails(type){
 
       // Compact "Card" style button for the tree
       const card = `
-        <button class="perk-btn" data-id="${node.id}" data-can="${canUnlock}" style="position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; width:135px; min-height:100px; text-align:center; background:${bg}; border:2px solid ${border}; color:${color}; padding:8px; border-radius:10px; cursor:${cursor}; transition:transform 0.1s; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
-          <div style="font-weight:800; font-size:13px; margin-bottom:4px; line-height:1.2;">${node.name}</div>
-          <div style="font-size:11px; font-weight:bold; color:#f9d65c; margin-bottom:6px; background:rgba(0,0,0,0.4); padding:2px 6px; border-radius:4px;">Lv ${curLvl}/${node.max}</div>
-          <div style="font-size:10px; opacity:0.85; line-height:1.3; flex:1;">${node.desc}</div>
-          ${!reqMet ? `<div style="margin-top:6px; font-size:9px; color:#fca5a5; line-height:1.1; border-top:1px dashed rgba(255,255,255,0.2); padding-top:4px; width:100%;">Req Max:<br><b style="color:#ef4444;">${reqName}</b></div>` : ''}
+        <button class="perk-btn" data-id="${node.id}" data-can="${canUnlock}" style="position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; width:110px; min-height:90px; text-align:center; background:${bg}; border:2px solid ${border}; color:${color}; padding:6px; border-radius:8px; cursor:${cursor}; transition:transform 0.1s; box-shadow:0 4px 6px rgba(0,0,0,0.3);">
+          <div style="font-weight:800; font-size:11px; margin-bottom:4px; line-height:1.1;">${node.name}</div>
+          <div style="font-size:9.5px; font-weight:bold; color:#f9d65c; margin-bottom:4px; background:rgba(0,0,0,0.4); padding:2px 6px; border-radius:4px;">Lv ${curLvl}/${node.max}</div>
+          <div style="font-size:9px; opacity:0.85; line-height:1.2; flex:1;">${node.desc}</div>
+          ${!reqMet ? `<div style="margin-top:4px; font-size:8.5px; color:#fca5a5; line-height:1.1; border-top:1px dashed rgba(255,255,255,0.2); padding-top:4px; width:100%;">Req Max:<br><b style="color:#ef4444;">${reqName}</b></div>` : ''}
         </button>
       `;
 
@@ -3185,6 +3287,12 @@ function showSkillDetails(type){
                               <div style="font-weight:800; color:#f9d65c; margin-bottom:8px; font-size:13px;">Total Tree Bonuses</div>`;
               totalsKeys.forEach(k => {
                   const t = totalsMap[k];
+                  
+                  // --- FIX: Endless Quiver Override ---
+                  if (type === 'bow' && s.perks['bow_c7'] && k.toLowerCase().includes('consume an arrow')) {
+                      t.val = 50;
+                  }
+                  
                   let displayVal = `${t.prefix}${parseFloat(t.val.toFixed(2))}${t.hasPct?'%':''}`;
                   
                   // --- FIX: Add Base Stat Math & Context for Accuracy ---
@@ -3198,7 +3306,8 @@ function showSkillDetails(type){
                       } catch(e){}
                       
                       const total = base + t.val;
-                      displayVal = `<b style="color:#4ade80;">${total}%</b> <span style="font-size:10px; color:#9ca3af; font-weight:normal;">(${base}% base + ${t.val}% bonus)</span>`;
+                      const cappedTotal = Math.min(100, total); // Cap visual at 100%
+                      displayVal = `<b style="color:#4ade80;">${cappedTotal}%</b> <span style="font-size:10px; color:#9ca3af; font-weight:normal;">(${base}% base + ${t.val}% bonus)</span>`;
                   } else {
                       displayVal = `<b style="color:#4ade80;">${displayVal}</b>`;
                   }
@@ -3225,27 +3334,35 @@ function showSkillDetails(type){
         s.spentPoints += 1;
         
         // Immediate generic stat application logic
-        if (pId === 'sur_base' || pId === 'hand_b1') {
-          const hpBoost = pId === 'sur_base' ? 2 : 1;
-          state.player.hpMax += hpBoost;
-          state.player.hp += hpBoost;
+        if (pId === 'sur_base') { // Thick Skin (+2 Max HP)
+          state.player.hpMax += 2;
+          state.player.hp += 2;
           if (typeof updateBars === 'function') updateBars();
         }
-        if (pId === 'mag_b1') {
+        if (pId === 'hand_b4') { // Chi Focus (+5 Max HP)
+          state.player.hpMax += 5;
+          state.player.hp += 5;
+          if (typeof updateBars === 'function') updateBars();
+        }
+        if (pId === 'mag_a2') { // Leyline (+2 Max MP)
           state.player.mpMax += 2;
           state.player.mp += 2;
           if (typeof updateBars === 'function') updateBars();
         }
-        
-        if (pId === 'sur_c1') {
-          // Perk: Athleticism (+5 Max Stamina)
+        if (pId === 'sur_a2') { // Athleticism (+5 Max Stamina)
           state.player.staminaMax = (state.player.staminaMax || 10) + 5;
-          state.player.stamina = state.player.staminaMax;
+          state.player.stamina += 5;
           if (typeof updateBars === 'function') updateBars();
         }
+        if (pId === 'loc_b4') { // Scout (+2 Vision)
+          state.fovRadius = (state.fovRadius || 5) + 2;
+          if (typeof draw === 'function') draw();
+        }
         
-        if (typeof recomputeWeapon === 'function') recomputeWeapon();
-        
+        if (typeof recomputeWeapon === 'function') {
+            recomputeWeapon();
+            if (typeof updateEquipUI === 'function') updateEquipUI(); // FIX: Update main HUD for base damage perks like Iron Fists
+        }
         // Play SFX and re-render
         if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
         showSkillDetails(type); 

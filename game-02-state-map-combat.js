@@ -1256,6 +1256,8 @@ if (inPuzzleEnemy) continue;
 // pick kind and build enemy
   const k = kinds[Math.floor(Math.random() * kinds.length)];
   const e = { x, y, size:1, boss:false, type:k.type, hp:k.hp, atk:[...k.atk], xp:k.xp };
+  if (Math.random() < Math.min(0.60, state.floor * 0.015)) e.armor = Math.floor(state.floor / 5) + 1;
+  else e.armor = 0;
 
   // SHADOW LABYRINTH: 40% chance to spawn a Heartless instead
   if (state.floorEffect?.includes('ShadowLabyrinth') && Math.random() < 0.40) {
@@ -1824,11 +1826,11 @@ function baseForTier(name, tier){
   const tiersAbove = Math.max(0, (tier|0) - 1);
   let cost = Math.max(1, def.cost + tiersAbove * (typeof SPELL_COST_STEP_PER_TIER === 'number' ? SPELL_COST_STEP_PER_TIER : 1));
 
-  // PERK: Mana Flow & Archmage
+  // PERK: Channeling & Elemental Weaver
   const magPerks = state.skills?.magic?.perks;
   if (magPerks) {
-    if (magPerks['mag_a1']) cost = Math.max(1, cost - magPerks['mag_a1']);
-    if (magPerks['mag_a3'] && state.player.hp === state.player.hpMax) cost = 0;
+    if (magPerks['mag_b4']) cost = Math.max(1, cost - magPerks['mag_b4']);
+    if (magPerks['mag_c7'] && state.player._weaverSpell && state.player._weaverSpell !== name) cost = 0;
   }
 
   // NEW: flat damage bump per tier
@@ -1875,10 +1877,10 @@ const pool=[
   let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
 
   // --- NEW: Affix System (25% chance) ---
-  // --- FIX: Appraiser Perk (+15% affix chance per level) ---
+  // --- FIX: Appraiser Perk (+25% affix chance) ---
   let affixChance = 0.25;
-  if (state.skills?.lockpicking?.perks?.['loc_b3']) {
-      affixChance += (0.15 * state.skills.lockpicking.perks['loc_b3']);
+  if (state.skills?.lockpicking?.perks?.['loc_b1']) {
+      affixChance += 0.25;
   }
 
   // MODIFIED: Exclude Key of Destiny AND Shields from getting random affixes
@@ -1986,10 +1988,6 @@ function getSpellStats(name){
   const t    = currentSpellTier(name);
   const base = baseForTier(name, t);
 
-  const up   = (state.spellUpgrades && state.spellUpgrades[name]) || { dmg:0, range:0 };
-  const dmgBonus = Math.min(MAX_SPELL_BONUS, up.dmg|0);
-  const rngBonus = Math.min(MAX_SPELL_BONUS, up.range|0);
-
 // New: Heal uses percentage instead of flat values
     if (name === 'Heal'){
       // Scale with Magic Skill: +2% Heal per magic bonus point (approx +1% per level)
@@ -2002,18 +2000,18 @@ function getSpellStats(name){
       };
     }
 
-// Offensive spells: shards + Magic level both boost damage
-const pow = magicPowerBonus();  // +1 power every 2 Magic levels
+// Offensive spells: add Empower perk damage
+// Note: Scroll Upgrades and Magic Level bonuses are already calculated inside baseForTier!
 let perkDmg = 0;
-if (state.skills?.magic?.perks && state.skills.magic.perks['mag_a2']) {
-  perkDmg = state.skills.magic.perks['mag_a2'];
+if (state.skills?.magic?.perks && state.skills.magic.perks['mag_a1']) {
+  perkDmg = state.skills.magic.perks['mag_a1'];
 }
 
 return {
   cost:  base.cost,
-  min:   base.baseMin + dmgBonus + pow + perkDmg,
-  max:   base.baseMax + dmgBonus + pow + perkDmg,
-  range: base.baseRange + rngBonus
+  min:   base.baseMin + perkDmg,
+  max:   base.baseMax + perkDmg,
+  range: base.baseRange
 };
 }
 
@@ -2099,10 +2097,17 @@ function goldFor(enemy){
   const depthBonus = Math.floor((state.floor|0)/3);
 
   let base = rand(lo + depthBonus, hi + depthBonus);
-  // Trinket: Thief's Band (+30% Gold)
-  if (state.player.trinket?.name === "Thief's Band") { base = Math.ceil(base * 1.30); }
   
-  // --- NEW: Idol of Greed (+50% Gold) ---
+  // Treasure Hunter (loc_a1): +20% gold per level
+  if (state.skills?.lockpicking?.perks?.['loc_a1']) {
+      base = Math.ceil(base * (1 + (0.20 * state.skills.lockpicking.perks['loc_a1'])));
+  }
+  // Bounty (loc_c1): Bosses/Warlords/Elites drop 3x Gold
+  if (state.skills?.lockpicking?.perks?.['loc_c1'] && (enemy.boss || enemy.miniBoss || enemy.elite)) {
+      base *= 3;
+  }
+
+  if (state.player.trinket?.name === "Thief's Band") { base = Math.ceil(base * 1.30); }
   if (state.inventory.idols?.['Idol of Greed']) { base = Math.ceil(base * 1.50); }
 
   if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt'){
@@ -2115,75 +2120,115 @@ function goldFor(enemy){
 
 // ---- Survivability damage reduction: +5% DR every 5 levels (5,10,15,...)
 function damageAfterDR(raw){
+  // --- NEW: God Mode ---
+  if (window._godMode) return 0;
+
+  // NEW: Lucky Coin (loc_c8)
+  if (state.skills?.lockpicking?.perks?.['loc_c8'] && Math.random() < 0.10) {
+      if (typeof spawnFloatText === 'function') spawnFloatText("LUCKY!", state.player.x, state.player.y, '#facc15');
+      return 0; 
+  }
+
   let dr = 0;
+  let flatReduction = 0;
+
+  // Survivability: Base DR and Hardened Perk
   const sv = state.skills?.survivability;
   if (sv){ 
     dr += Math.min(0.05 * (sv.lvl||0), 0.50); 
-    // Perk: Thick Skin (+2% DR per level)
-    if (sv.perks && sv.perks['sur_a1']) dr += 0.02 * sv.perks['sur_a1'];
+    if (sv.perks && sv.perks['sur_a1']) flatReduction += (1 * sv.perks['sur_a1']); // Hardened: -1 Flat Dmg
   }
 
   let usedShield = false;
+  let damageBlockedPct = 0;
   const sh = state.player?.shield;
   if (sh && sh.dur > 0){ 
-      // Use specific block chance (Buckler 15%, Tower 35%, etc)
       const chance = state.player.blockChance || 0.20; 
       if (Math.random() < chance) {
           dr += SHIELD_DR; 
           usedShield = true;
+          damageBlockedPct = SHIELD_DR;
           log(`Blocked with ${state.player.shieldName}!`);
       }
   }
 
-  // --- FIX: Spear Parrying (Phalanx & Impenetrable) ---
-  if (!usedShield && state.player.weapon?.type === 'spear' && state.skills?.spear?.perks?.['spear_b1']) {
-      const spearBlockChance = 0.05 * state.skills.spear.perks['spear_b1'];
+  // --- Polearm Parrying (Phalanx) ---
+  if (!usedShield && state.player.weapon?.type === 'spear' && state.skills?.spear?.perks?.['spear_a2']) {
+      const baseParry = 0.05 * state.skills.spear.perks['spear_a2'];
+      const isPerfect = state.skills.spear.perks['spear_c6'] && state.player.stamina === state.player.staminaMax;
+      const spearBlockChance = isPerfect ? baseParry * 2 : baseParry; // Perfect Stance
+      
       if (Math.random() < spearBlockChance) {
-          // If Impenetrable is unlocked, block 100% of damage. Otherwise standard block.
-          dr += state.skills.spear.perks['spear_b2'] ? 1.0 : 0.30; 
+          const parryDR = state.skills.spear.perks['spear_b3'] ? 1.0 : 0.30; // Impenetrable
+          dr += parryDR;
+          damageBlockedPct = parryDR;
           log(`You parried the attack with your polearm!`);
+          
+          if (state.skills.spear.perks['spear_c5']) state.player._freeCounterAttack = true; // Phalanx Commander
       }
   }
-  // ----------------------------------------------------
 
-  // Cleric Blessing: +20% Damage Reduction
-if (state.player.blessTicks > 0) { dr += 0.20; }
-// Trinket: Stone Charm (+10% DR)
+  // --- Hand-to-Hand Deflect ---
+  if (!usedShield && state.player.weapon?.type === 'hand' && state.skills?.hand?.perks?.['hand_a2']) {
+      const deflectChance = 0.10 * state.skills.hand.perks['hand_a2'];
+      if (Math.random() < deflectChance) {
+          dr += 0.50;
+          damageBlockedPct = 0.50;
+          log(`You deflected the attack!`);
+          
+          if (state.skills.hand.perks['hand_c7']) { // Flowing Water
+              const heal = 2 * state.skills.hand.perks['hand_c7'];
+              state.player.hp = Math.min(state.player.hpMax, state.player.hp + heal);
+              if (typeof spawnFloatText === 'function') spawnFloatText("+" + heal, state.player.x, state.player.y, '#4ade80');
+          }
+          if (state.skills.hand.perks['hand_c6']) state.player._reflectDamage = 0.50; // Redirection
+      }
+  }
+
+  // --- Iron Body (Hand-to-Hand) ---
+  if (state.skills?.hand?.perks?.['hand_c8']) {
+      flatReduction += Math.floor(state.player.hpMax * 0.10);
+  }
+
+  if (state.player.blessTicks > 0) { dr += 0.20; }
   if (state.player.trinket?.name === "Stone Charm") { dr += 0.10; }
-  
-  // --- NEW: Idol of Stone (+15% DR) ---
   if (state.inventory.idols?.['Idol of Stone']) { dr += 0.15; }
 
-  // Perk: Iron Body (Hand-to-Hand)
-  if (state.skills?.hand?.perks && state.skills.hand.perks['hand_b3']) {
-    dr += 0.05 * state.skills.hand.perks['hand_b3'];
-  }
-
-  dr = Math.min(dr, 0.80);                 // cap total DR at 80%
-
+  dr = Math.min(dr, 0.80); // Cap total percentage DR at 80%
   let dmg = Math.ceil(raw * (1 - dr));
+  
+  // Retribution (sur_c1) - Reflect 50% of blocked damage
+  if (state.skills?.survivability?.perks?.['sur_c1'] && damageBlockedPct > 0) {
+      state.player._reflectDamage = damageBlockedPct * 0.50;
+  }
+  
+  // Apply flat damage reduction last
+  dmg -= flatReduction;
 
-  // --- NEW: Idol of Greed (+50% Damage Taken) ---
-  if (state.inventory.idols?.['Idol of Greed']) { 
-      dmg = Math.ceil(dmg * 1.5); 
+  if (state.inventory.idols?.['Idol of Greed']) { dmg = Math.ceil(dmg * 1.5); }
+  if (state.player.weapon?.curseType === 'frailty' && dmg > 0) { dmg += 2; }
+  
+  dmg = Math.max(0, dmg);
+
+  // --- Mana Shield (mag_c6) ---
+  if (dmg > 0 && state.skills?.magic?.perks?.['mag_c6'] && state.player.mp > 0) {
+      const absorb = Math.min(dmg, state.player.mp);
+      state.player.mp -= absorb;
+      dmg -= absorb;
+      if (typeof spawnFloatText === 'function') spawnFloatText("MANA SHIELD", state.player.x, state.player.y, '#60a5fa');
   }
 
-  // Frailty Curse: You take +2 damage from everything
-  if (state.player.weapon?.curseType === 'frailty' && dmg > 0) {
-    dmg += 2;
-  }
-
-  if (usedShield && dmg > 0){              // only when it actually reduced real damage 
-  state._shieldParity = (state._shieldParity + 1);
-  if (state._shieldParity % 2 === 0){    // every other hit taken
-    sh.dur = Math.max(0, (sh.dur|0) - 1);
-    if (sh.dur <= 0){
-      state.player.shield = null;
-      log('Your shield shatters!');
+  if (usedShield && dmg > 0){ 
+    state._shieldParity = (state._shieldParity + 1);
+    if (state._shieldParity % 2 === 0){ 
+      sh.dur = Math.max(0, (sh.dur|0) - 1);
+      if (sh.dur <= 0){
+        state.player.shield = null;
+        log('Your shield shatters!');
+      }
+      if (typeof updateEquipUI === 'function') updateEquipUI();
     }
-    updateEquipUI?.();
   }
-}
 
   return dmg;
 }
@@ -2198,23 +2243,27 @@ function accuracyBonusFromSkill(type){
   const s = state.skills[type];
   if (!s) return 0;
   const extra = Math.max(0, (s.lvl || 1) - 1);
-  const base = 0.02 * extra;                   // all melee skills
-  const bowBonus = (type === 'bow') ? 0.01*extra : 0; // +1%/level more for Bow
+  const base = 0.02 * extra;                   
+  const bowBonus = (type === 'bow') ? 0.01*extra : 0; 
   
-  // Perk: +5% Accuracy per level from base perks
-  const perkBonus = (s.perks && s.perks[type + '_base']) ? (s.perks[type + '_base'] * 0.05) : 0;
-  
+  // NEW: Base Accuracy Tree Perks (+5% Acc per level)
+  let perkBonus = 0;
+  if (s.perks) {
+    if (type === 'spear' && s.perks['spear_base']) perkBonus += s.perks['spear_base'] * 0.05;
+    if (type === 'bow' && s.perks['bow_base']) perkBonus += s.perks['bow_base'] * 0.02;
+    if (type === 'magic' && s.perks['mag_base']) perkBonus += s.perks['mag_base'] * 0.05;
+  }
   return base + bowBonus + perkBonus;
 }
-// +5% success per level after 1 (L2=+5%, L3=+10%, ...)
+
+// +10% success per level from Tinkerer (Level scaling removed for pure perk reliance)
 function lockpickBonusFromSkill(){
   const s = state.skills?.lockpicking;
-  const L = (s?.lvl || 1);
-  let bonus = 0.05 * Math.max(0, L - 1);
+  let bonus = 0;
   
-  // Perk: Steady Hands
+  // NEW: Tinkerer (+10% Lockpick Chance per level)
   if (s && s.perks && s.perks['loc_base']) {
-    bonus += 0.05 * s.perks['loc_base'];
+    bonus += 0.10 * s.perks['loc_base'];
   }
   return bonus;
 }
@@ -2238,13 +2287,13 @@ function rollHitFor(type){
         perkBonus = state.skills.magic.perks['mag_base'] * 0.05;
     }
     
-    const p = Math.max(0.05, Math.min(0.99, base + bonus + perkBonus));
+    const p = Math.max(0.05, Math.min(1.0, base + bonus + perkBonus));
     return Math.random() < p;
   }
 
-  // Weapons: use baseAccuracy + skill bonus, clamped so we never hit 100%
+  // Weapons: use baseAccuracy + skill bonus, allowing 100% hits
   const raw = baseAccuracy(type) + accuracyBonusFromSkill(type);
-  const p   = Math.max(0.05, Math.min(0.99, raw));
+  const p   = Math.max(0.05, Math.min(1.0, raw));
   return Math.random() < p;
 }
 
@@ -2255,21 +2304,19 @@ const BLEED_DMG   = 1;
 const SLOW_TICKS  = 3;        // axe
 const STUN_TICKS  = 3;        // hand-to-hand
 
-// 2% per skill level (beyond 1), capped (feel free to tweak the 0.02)
 function quirkChance(type){
   const s = state.skills?.[type];
   const lvl = (s?.lvl || 1);
   const extra = Math.max(0, lvl - 1);
   let chance = Math.min(QUIRK_CAP, 0.02 * extra);
 
-  // Apply Skill Tree Perks (+5% per level for A1 traits)
+  // NEW: Apply specific tree quirk perks
   if (s && s.perks) {
-    const pKey = type + '_a1';
-    if (s.perks[pKey]) {
-      chance += (s.perks[pKey] * 0.05);
-    }
+    if (type === 'hand' && s.perks['hand_a1']) chance += s.perks['hand_a1'] * 0.05; // Knockout
+    if (type === 'axe' && s.perks['axe_a2']) chance += s.perks['axe_a2'] * 0.10;    // Cripple
+    if (type === 'axe' && s.perks['axe_b4']) chance += s.perks['axe_b4'] * 0.10;    // Deep Wounds (Hafted)
+    if (type === 'one' && s.perks['one_a2']) chance += s.perks['one_a2'] * 0.10;    // Lacerate
   }
-
   return chance;
 }
 const proc = (p)=> Math.random() < p;
@@ -2278,27 +2325,22 @@ const proc = (p)=> Math.random() < p;
 function applyBleed(e, ticks=BLEED_TICKS, perTick=BLEED_DMG){
   let bonusTicks = 0;
   let bonusDmg = 0;
-  if (state.skills?.spear?.perks) {
-    if (state.skills.spear.perks['spear_a3']) bonusTicks += 3;
-    if (state.skills.spear.perks['spear_a2']) bonusDmg += state.skills.spear.perks['spear_a2'];
+  
+  // Deep Cuts (One-Handed)
+  if (state.skills?.one?.perks && state.skills.one.perks['one_b4']) {
+      bonusDmg += (2 * state.skills.one.perks['one_b4']);
   }
+  
   e.bleedTicks = Math.max(e.bleedTicks|0, 0) + ticks + bonusTicks;
   e.bleedDmg   = perTick + bonusDmg;
 }
 function applySlow(e, ticks=SLOW_TICKS){
-  let bonusTicks = 0;
-  // --- FIX: Axe Executioner (axe_a2) adds 2 ticks per perk level ---
-  if (state.skills?.axe?.perks && state.skills.axe.perks['axe_a2']) {
-      bonusTicks += (2 * state.skills.axe.perks['axe_a2']);
-  }
-  e.slowTicks = Math.max(e.slowTicks|0, 0) + ticks + bonusTicks;
-  e._skipMove = false; // used for every-other-turn slow
+  e.slowTicks = Math.max(e.slowTicks|0, 0) + ticks;
+  e._skipMove = false;
 }
 function applyStun(e, ticks=STUN_TICKS){
   if (e.boss) return; // Bosses are immune
-  let bonusTicks = 0;
-  if (state.skills?.hand?.perks && state.skills.hand.perks['hand_a2']) bonusTicks += 2;
-  e.stunTicks = Math.max(e.stunTicks|0, 0) + ticks + bonusTicks;
+  e.stunTicks = Math.max(e.stunTicks|0, 0) + ticks;
 }
 
 
@@ -2320,15 +2362,20 @@ function ensureSkill(type){
 }
 
 function skillDamageBonus(type){
-  const s=state.skills[type];
-  if(!s) return 0;
-  let bonus = Math.floor((s.lvl-1)/2);
+  const s = state.skills[type];
+  let bonus = s ? Math.floor((s.lvl-1)/2) : 0;
   
-  // Apply Skill Tree Perks for Damage
-  if (s.perks) {
-    if (type === 'one' && s.perks['one_a2']) bonus += s.perks['one_a2'];
-    if (type === 'two' && s.perks['two_a2']) bonus += s.perks['two_a2'];
-    if (type === 'hand' && s.perks['hand_b2']) bonus += s.perks['hand_b2'];
+  // NEW: Base Damage Tree Perks (+1 Dmg per level)
+  if (s && s.perks) {
+    if (type === 'one' && s.perks['one_base']) bonus += s.perks['one_base'];
+    if (type === 'two' && s.perks['two_base']) bonus += s.perks['two_base'];
+    if (type === 'axe' && s.perks['axe_base']) bonus += s.perks['axe_base'];
+    if (type === 'hand' && s.perks['hand_base']) bonus += s.perks['hand_base'];
+  }
+  
+  // Mercenary (loc_c4)
+  if (state.skills?.lockpicking?.perks?.['loc_c4']) {
+      bonus += Math.floor((state.inventory.gold || 0) / 100) * state.skills.lockpicking.perks['loc_c4'];
   }
   
   return bonus;
@@ -2352,13 +2399,20 @@ function awardKill(type,amount){
   // If killed by infighting, grant NO XP and do NOT count stats
   if (type === 'infighting') return;
 
-  // --- PERKS: On-Kill Effects ---
-  if (type === 'axe' && state.skills?.axe?.perks?.['axe_b1']) {
-    const healAmt = state.skills.axe.perks['axe_b1'];
+  // --- NEW PERKS: On-Kill Effects ---
+  if (type === 'axe' && state.skills?.axe?.perks?.['axe_b1']) { // Bloodlust
+    let healAmt = state.skills.axe.perks['axe_b1'];
+    if (state.skills.axe.perks['axe_c1']) healAmt = Math.max(healAmt, Math.floor(state.player.hpMax * 0.10)); // Vampirism
     state.player.hp = Math.min(state.player.hpMax, state.player.hp + healAmt);
   }
-  if (type === 'magic' && state.skills?.magic?.perks?.['mag_c1']) {
-    state.player.mp = Math.min(state.player.mpMax, state.player.mp + 1);
+  if (type !== 'magic' && state.skills?.magic?.perks?.['mag_b3']) { // Siphon
+    state.player.mp = Math.min(state.player.mpMax, state.player.mp + state.skills.magic.perks['mag_b3']);
+  }
+  if (state.skills?.spear?.perks?.['spear_c4']) { // Hit and Run
+      state.player.stamina = Math.min(state.player.staminaMax, state.player.stamina + 1);
+  }
+  if (type === 'two' && state.skills?.two?.perks?.['two_c7']) { // Rampage
+      state.player.stamina = Math.min(state.player.staminaMax, state.player.stamina + 2);
   }
 
   incrementMetaStat('kills_' + type);
@@ -2423,9 +2477,10 @@ function awardKill(type,amount){
   if(up){ log(typeNice(type)+' advanced to '+s.lvl+'.'); }
 
   // NEW: Survivability also gains XP from kills
+  // Reduced to 33% so it acts as a background passive instead of outpacing weapons
   ensureSkill('survivability');
   const sv = state.skills['survivability'];
-  sv.xp += amount;
+  sv.xp += Math.max(1, Math.floor(amount / 3));
   if(!sv.shown){ sv.shown = true; }
   let upS = false;
   while(sv.xp >= sv.next){

@@ -257,17 +257,17 @@ function flashEnemy(e, color='red', ms=100){
 // ===== Per-floor enemy templates =====
 function floorEnemyKinds(){
   const f = state.floor | 0;
-  const scale = 1 + Math.max(0, f - 1) * 0.12; // +12% per floor
+  const scale = 1 + Math.max(0, f - 1) * 0.30; // Increased to 30% per floor
 
   // base (floor 1) stats, then scale every floor
   const base = {
-    Rat:      { hp: 4, atk:[1,2], xp: 3 },
-    Bat:      { hp: 3, atk:[1,2], xp: 3 }, // Weak but heals
-    Spider:   { hp: 5, atk:[2,3], xp: 4 }, // Slows you
-    Slime:    { hp: 5, atk:[1,3], xp: 4 },
-    Goblin:   { hp: 6, atk:[2,4], xp: 5 },
-    Skeleton: { hp: 7, atk:[2,5], xp: 6 },
-    Mage:     { hp: 8, atk:[3,6], xp: 7 }
+    Rat:      { hp: 4, atk:[2,3], xp: 3 },
+    Bat:      { hp: 3, atk:[2,3], xp: 3 }, // Weak but heals
+    Spider:   { hp: 5, atk:[3,4], xp: 4 }, // Slows you
+    Slime:    { hp: 5, atk:[2,4], xp: 4 },
+    Goblin:   { hp: 6, atk:[3,5], xp: 5 },
+    Skeleton: { hp: 7, atk:[3,6], xp: 6 },
+    Mage:     { hp: 8, atk:[4,7], xp: 7 }
   };
 
   // progressive availability
@@ -285,13 +285,15 @@ function floorEnemyKinds(){
     const b = base[name];
     return {
       type: name,
-      hp: Math.max(1, Math.round(b.hp * scale)),
+      // Boosted HP: Base scale + flat 1 per floor
+      hp: Math.max(1, Math.round(b.hp * scale) + Math.floor((f - 1) * 1)),
       atk: [
-        Math.max(0, Math.floor(b.atk[0] * scale)),
-        Math.max(1, Math.floor(b.atk[1] * scale))
+        // Added flat +1 Min Damage every 2 floors
+        Math.max(0, Math.floor(b.atk[0] * scale) + Math.floor((f - 1) / 2)),
+        // Added flat +1 Max Damage EVERY floor (Guarantees they outpace Hardened quickly)
+        Math.max(1, Math.floor(b.atk[1] * scale) + Math.floor((f - 1) * 1))
       ],
       xp: Math.max(1, Math.round(b.xp * (1 + Math.max(0, f - 1) * 0.10)))
-
     };
   });
 
@@ -332,6 +334,9 @@ if (state.safeRect){
     const k = kinds[Math.floor(Math.random() * kinds.length)];
 
     const e = { x, y, type: k.type, hp: k.hp, atk: [...k.atk], xp: k.xp };
+    if (Math.random() < Math.min(0.60, state.floor * 0.015)) e.armor = Math.floor(state.floor / 5) + 1;
+    else e.armor = 0;
+
     if (k.type === 'Rat')      e.poisonChance = 0.20;
     if (k.type === 'Goblin') { e.fast = true; e.stealChance = 0.20; }
     if (k.type === 'Slime')  { e.slow = true; e._skipMove = false; }
@@ -490,6 +495,15 @@ function enemyStep(){
   if (state.player.rampageTicks > 0) {
     state.player.rampageTicks--;
     if (state.player.rampageTicks === 0) log("Your rampage subsides.");
+  }
+
+  if (state.player.ironStomachTicks > 0) {
+    state.player.ironStomachTicks--;
+    if (state.player.ironStomachTicks === 0) {
+        state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - 2);
+        if (typeof recomputeWeapon === 'function') recomputeWeapon();
+        log("Your Iron Stomach buff fades.");
+    }
   }
 
   if (state.player.artCooldown > 0) {
@@ -666,11 +680,23 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     // 1. FIXED: Calculate distance inline (Math.abs) and use unique name (d2p) to avoid errors
     const d2p = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
 
+    // --- NEW: Zoning (spear_c8) ---
+    if (d2p === 1 && state.player.weapon?.type === 'spear' && state.skills?.spear?.perks?.['spear_c8']) {
+        e.hp -= 1;
+        if (typeof spawnFloatText === 'function') spawnFloatText("1", e.x, e.y, '#fff');
+        if (e.hp <= 0) {
+            handleEnemyDeath(e, 'spear');
+            continue; // Skip the rest of their turn since they walked onto your spear and died
+        }
+    }
+
     // --- NEW: Aggro/Vision Check ---
     // If enemy is far away (8+ tiles) and healthy, they stay idle.
     // (Exceptions: Bosses, Elites, or if they've been damaged)
-    const AGGRO_RANGE = 8;
-    if (d2p > AGGRO_RANGE && !e.boss && !e.elite && e.hp >= e.hpMax) {
+    let aggroRange = 8;
+    if (state.skills?.lockpicking?.perks?.['loc_c7']) aggroRange = 2; // Shadow Walk
+
+    if (d2p > aggroRange && !e.boss && !e.elite && e.hp >= e.hpMax) {
       continue; // Skip turn (Idle)
     }
 
@@ -999,32 +1025,63 @@ clearStraightLine(e.x, e.y, state.player.x, state.player.y)) {
       let attackLanded = true;
       SFX.rangedZap?.();
 
-      // Perk: Evasion
-      if (state.skills?.one?.perks?.['one_b1'] && Math.random() < (0.05 * state.skills.one.perks['one_b1'])) {
-          dmg = state.skills.one.perks['one_b3'] ? 0 : Math.ceil(dmg / 2);
+      // Indomitable (sur_c3)
+      if (state.skills?.survivability?.perks?.['sur_c3'] && (e.boss || e.elite)) {
+          dmg = Math.ceil(dmg / 2);
+      }
+
+      // Perk: Evasion & Movement Tracking (One-Handed)
+      let dodgeChance = state.skills?.one?.perks?.['one_a1'] ? (0.05 * state.skills.one.perks['one_a1']) : 0;
+      if (state.player._fleetFooted) dodgeChance += 0.50; // Fleet Footed (one_b2)
+      
+      if (state.player._afterimage || (dodgeChance > 0 && Math.random() < dodgeChance)) {
+          dmg = state.skills?.one?.perks?.['one_b1'] ? 0 : Math.ceil(dmg / 2); // Shadow Step
           spawnFloatText("DODGE", state.player.x, state.player.y, '#60a5fa');
+          
+          if (state.skills?.one?.perks?.['one_c1']) state.player._phantomStrikeReady = true; // Phantom Strike
+          state.player._afterimage = false; // Consume guaranteed dodge
+          
+          // Flowing Water (hand_c7) dodge integration
+          if (state.player.weapon?.type === 'hand' && state.skills?.hand?.perks?.['hand_c7']) {
+              const heal = 2 * state.skills.hand.perks['hand_c7'];
+              state.player.hp = Math.min(state.player.hpMax, state.player.hp + heal);
+              if (typeof spawnFloatText === 'function') spawnFloatText("+" + heal, state.player.x, state.player.y, '#4ade80');
+          }
           if (dmg === 0) attackLanded = false;
       }
       
-      // Perk: Phalanx
-      if (attackLanded && state.player.shield && state.skills?.spear?.perks?.['spear_b1'] && Math.random() < (0.05 * state.skills.spear.perks['spear_b1'])) {
-          dmg = state.skills.spear.perks['spear_b2'] ? 0 : Math.ceil(dmg / 2);
-          spawnFloatText("BLOCK", state.player.x, state.player.y, '#cbd5e1');
-          if (dmg === 0) attackLanded = false;
+      // Reflect from Hand-to-Hand / Retribution
+      if (attackLanded && state.player._reflectDamage) {
+          const refDmg = Math.max(1, Math.floor(dmgRoll * state.player._reflectDamage));
+          e.hp -= refDmg;
+          spawnFloatText(refDmg + " (Reflect)", e.x, e.y, '#fcd34d');
+          if (e.hp <= 0) handleEnemyDeath(e, 'magic');
+          state.player._reflectDamage = 0; // Clear it
       }
 
-      // Perk: Immortal
-      if (attackLanded && state.player.hp - dmg <= 0 && state.skills?.survivability?.perks?.['sur_a3'] && !state.run.immortalUsed) {
+      // Perk: Immortal (sur_c8)
+      if (attackLanded && state.player.hp - dmg <= 0 && state.skills?.survivability?.perks?.['sur_c8'] && !state.run.immortalUsed) {
           state.run.immortalUsed = true;
           dmg = Math.max(0, state.player.hp - 1);
           spawnFloatText("IMMORTAL", state.player.x, state.player.y, '#facc15');
-          log("Your Immortal perk saves you from a fatal spell!");
+          log("Your Immortal perk saves you from a fatal blow!");
       }
 
       if (attackLanded) {
           state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
+          
+          // Second Wind (sur_c5)
+          if (state.skills?.survivability?.perks?.['sur_c5'] && state.player.hp > 0 && (state.player.hp / state.player.hpMax) <= 0.20 && !state.run.secondWindUsed) {
+              state.run.secondWindUsed = true;
+              const healAmt = Math.floor(state.player.hpMax * 0.50);
+              state.player.hp = Math.min(state.player.hpMax, state.player.hp + healAmt);
+              spawnFloatText("SECOND WIND", state.player.x, state.player.y, '#4ade80');
+              log("Second Wind triggers! You recover 50% HP.");
+          }
+
           flashDamage();
-          log(`${e.type} zaps you from afar for ${dmg}.`);
+          SFX.enemyHit?.();
+          log(`${e.type} hits you for ${dmg}.`);
           updateBars();
           if (state.player.hp <= 0){ triggerGameOver(); return; }
       }
@@ -1075,56 +1132,87 @@ if (adjacent){
       let dmg = damageAfterDR(dmgRoll);
       let attackLanded = true;
 
-      // Perk: Evasion (One-Handed)
-      if (state.skills?.one?.perks?.['one_b1'] && Math.random() < (0.05 * state.skills.one.perks['one_b1'])) {
-          dmg = state.skills.one.perks['one_b3'] ? 0 : Math.ceil(dmg / 2); // Shadow Step negates all dmg
+      // Indomitable (sur_c3)
+      if (state.skills?.survivability?.perks?.['sur_c3'] && (e.boss || e.elite)) {
+          dmg = Math.ceil(dmg / 2);
+      }
+
+      // Perk: Evasion & Movement Tracking (One-Handed)
+      let dodgeChance = state.skills?.one?.perks?.['one_a1'] ? (0.05 * state.skills.one.perks['one_a1']) : 0;
+      if (state.player._fleetFooted) dodgeChance += 0.50; // Fleet Footed (one_b2)
+      
+      if (state.player._afterimage || (dodgeChance > 0 && Math.random() < dodgeChance)) {
+          dmg = state.skills?.one?.perks?.['one_b1'] ? 0 : Math.ceil(dmg / 2); // Shadow Step
           spawnFloatText("DODGE", state.player.x, state.player.y, '#60a5fa');
           
-          // Perk: Counter Attack
-          if (state.skills.one.perks['one_b2']) {
-             const counterDmg = rand(state.player.weapon.min, state.player.weapon.max);
-             e.hp -= counterDmg;
-             spawnFloatText(counterDmg, e.x, e.y, '#fff');
-             log(`You dodge and counter-attack for ${counterDmg}!`);
-             if (e.hp <= 0) handleEnemyDeath(e, 'one');
-          }
-          if (dmg === 0) attackLanded = false;
-      }
-
-      // --- FIX: Hand-to-Hand Defense (Deflect & Counter-Throw) ---
-      if (attackLanded && state.player.weapon?.type === 'hand') {
-          if (state.skills?.hand?.perks?.['hand_a1'] && Math.random() < (0.10 * state.skills.hand.perks['hand_a1'])) {
-              dmg = Math.max(0, dmg - 2);
-              spawnFloatText("DEFLECT", state.player.x, state.player.y, '#cbd5e1');
-              if (dmg === 0) attackLanded = false;
-          }
-          if (attackLanded && state.skills?.hand?.perks?.['hand_b2'] && Math.random() < 0.15) {
-              const tempX = state.player.x; const tempY = state.player.y;
-              state.player.x = e.x; state.player.y = e.y;
-              state.player.rx = e.x; state.player.ry = e.y;
-              e.x = tempX; e.y = tempY;
-              spawnFloatText("THROW!", state.player.x, state.player.y, '#fcd34d');
-              log("You threw the enemy to the ground and swapped places!");
-          }
-      }
-      // -----------------------------------------------------------
-      
-      // Perk: Phalanx (Spear Block)
-      if (attackLanded && state.player.shield && state.skills?.spear?.perks?.['spear_b1'] && Math.random() < (0.05 * state.skills.spear.perks['spear_b1'])) {
-          dmg = state.skills.spear.perks['spear_b2'] ? 0 : Math.ceil(dmg / 2); // Impenetrable negates all dmg
-          spawnFloatText("BLOCK", state.player.x, state.player.y, '#cbd5e1');
+          if (state.skills?.one?.perks?.['one_c1']) state.player._phantomStrikeReady = true; // Phantom Strike
+          state.player._afterimage = false; // Consume guaranteed dodge
           
-          // Perk: Spiked Shield
-          if (state.skills.spear.perks['spear_b3']) {
-              e.hp -= 1;
-              spawnFloatText("1", e.x, e.y, '#fff');
-              if (e.hp <= 0) handleEnemyDeath(e, 'spear');
-          }
+          // Riposte (one_c2)
+      if (state.skills?.one?.perks?.['one_c2'] && state.player.weapon?.type === 'one') {
+         let currentArmor = e.armor || 0;
+         if (e.slowTicks > 0 && state.skills?.axe?.perks?.['axe_c6']) {
+             currentArmor = 0; e.armor = 0;
+             spawnFloatText("SHATTERED", e.x, e.y, '#facc15');
+         }
+         let counterDmg = Math.max(1, rand(state.player.weapon.min, state.player.weapon.max) - currentArmor);
+         e.hp -= counterDmg;
+         let dmgColor = (currentArmor > 0) ? '#94a3b8' : '#fff';
+         spawnFloatText(counterDmg, e.x, e.y, dmgColor);
+         log(`You riposte for ${counterDmg}!`);
+         if (e.hp <= 0) handleEnemyDeath(e, 'one');
+      }
           if (dmg === 0) attackLanded = false;
       }
 
-      // Perk: Immortal (Survivability)
-      if (attackLanded && state.player.hp - dmg <= 0 && state.skills?.survivability?.perks?.['sur_a3'] && !state.run.immortalUsed) {
+      // Reflect from Hand-to-Hand / Retribution
+      if (attackLanded && state.player._reflectDamage) {
+          const refDmg = Math.max(1, Math.floor(dmgRoll * state.player._reflectDamage));
+          e.hp -= refDmg;
+          spawnFloatText(refDmg + " (Reflect)", e.x, e.y, '#fcd34d');
+          if (e.hp <= 0) handleEnemyDeath(e, 'hand');
+          state.player._reflectDamage = 0; // Clear it
+      }
+      // Phalanx Commander (spear_c5)
+      if (attackLanded && state.player._freeCounterAttack) {
+          let currentArmor = e.armor || 0;
+          if (e.slowTicks > 0 && state.skills?.axe?.perks?.['axe_c6']) {
+              currentArmor = 0; e.armor = 0;
+              spawnFloatText("SHATTERED", e.x, e.y, '#facc15');
+          }
+          let cDmg = Math.max(1, rand(state.player.weapon.min, state.player.weapon.max) - currentArmor);
+          e.hp -= cDmg;
+          let dmgColor = (currentArmor > 0) ? '#94a3b8' : '#cbd5e1';
+          spawnFloatText(cDmg + " (Counter)", e.x, e.y, dmgColor);
+          if (e.hp <= 0) handleEnemyDeath(e, 'spear');
+          state.player._freeCounterAttack = false;
+      }
+      // Spiked Armor (sur_b1)
+      if (attackLanded && state.skills?.survivability?.perks?.['sur_b1']) {
+          const spikeDmg = state.skills.survivability.perks['sur_b1'];
+          e.hp -= spikeDmg;
+          spawnFloatText(spikeDmg + " (Spikes)", e.x, e.y, '#fca5a5');
+          
+          if (e.hp <= 0) {
+              handleEnemyDeath(e, 'survivability');
+              continue; // If spikes killed the enemy, end their turn before they finish hitting you!
+          }
+      }
+
+      // Counter-Throw (hand_b3)
+      if (attackLanded && state.player.weapon?.type === 'hand' && state.skills?.hand?.perks?.['hand_b3'] && Math.random() < (0.15 * state.skills.hand.perks['hand_b3'])) {
+          const tempX = state.player.x; const tempY = state.player.y;
+          state.player.x = e.x; state.player.y = e.y;
+          state.player.rx = e.x; state.player.ry = e.y;
+          e.x = tempX; e.y = tempY;
+          spawnFloatText("THROW!", state.player.x, state.player.y, '#fcd34d');
+          log("You threw the enemy to the ground and swapped places!");
+          
+          if (state.skills?.hand?.perks?.['hand_c5'] && typeof applyStun === 'function') applyStun(e, 2); // Judo
+      }
+
+      // Perk: Immortal (sur_c8)
+      if (attackLanded && state.player.hp - dmg <= 0 && state.skills?.survivability?.perks?.['sur_c8'] && !state.run.immortalUsed) {
           state.run.immortalUsed = true;
           dmg = Math.max(0, state.player.hp - 1);
           spawnFloatText("IMMORTAL", state.player.x, state.player.y, '#facc15');
@@ -1142,10 +1230,13 @@ if (adjacent){
 
       // on-hit poison (rats, etc.)
       if (e.poisonChance && Math.random() < e.poisonChance){
-        if (state.skills?.survivability?.perks?.['sur_a2']) {
-             // Juggernaut Immunity
+        if (state.skills?.survivability?.perks?.['sur_b2']) {
+             // Purifier Immunity (Silently block)
         } else {
-            if (!state.player.poisoned) log('You are poisoned!');
+            if (!state.player.poisoned) {
+                log('You are poisoned!');
+                spawnFloatText("POISON", state.player.x, state.player.y, '#22c55e');
+            }
             state.player.poisoned = true;
             state.player.poisonTicks = Math.max(state.player.poisonTicks|0, 15);
         }
@@ -1167,8 +1258,11 @@ if (adjacent){
 
       // SPIDER: Web/Slow (100% chance or adjust as needed)
       if (e.type === 'Spider') {
-         if (state.skills?.survivability?.perks?.['sur_a2']) {
-             // Juggernaut Immunity
+         if (state.skills?.survivability?.perks?.['sur_b2']) {
+             // Purifier Immunity
+         } else if (state.skills?.axe?.perks?.['axe_c4'] && state.player.hp <= (state.player.hpMax * 0.50)) {
+             // Unstoppable Immunity
+             spawnFloatText("UNSTOPPABLE", state.player.x, state.player.y, '#f87171');
          } else {
              if (!state.player.slowed) {
                  state.player.slowed = true;
@@ -1181,26 +1275,17 @@ if (adjacent){
       }
 
       // Goblins: chance to steal on hit
-      if (e.type === 'Goblin' &&
-          e.stealChance &&
-          typeof goblinStealOne === 'function' &&
-          Math.random() < e.stealChance) {
-
+      if (e.type === 'Goblin' && e.stealChance && typeof goblinStealOne === 'function' && Math.random() < e.stealChance) {
         const stolen = goblinStealOne();
         if (stolen){
-          // Support both single and multi-steal for compatibility
           if (!e.stolenItems) e.stolenItems = [];
           e.stolenItems.push(stolen);
-
-          // Keep the older single-slot field around too
           if (!e.stolen) e.stolen = stolen;
-
           log('The Goblin steals something from you!');
           if (typeof updateInvBody === 'function') updateInvBody();
         }
       }
 
-      // melee ends their action; no follow-up move this tick
       continue;
     }
 

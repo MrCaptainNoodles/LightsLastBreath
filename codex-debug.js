@@ -294,9 +294,70 @@ if (clsBtn) clsBtn.addEventListener('click', ()=>{
   });
   
   saveMeta(m);
+  
+  // FIX: Explicitly set the Endless Mode unlock flag!
+  localStorage.setItem('endlessUnlocked', '1');
+
   hideDebug?.();
-  log('[debug] All Classes unlocked. Click Restart to see the menu.');
+  log('[debug] All Classes & Endless Mode unlocked. Click Restart to see the menu.');
 });
+
+// --- NEW: Max All Skills Cheat ---
+let skillBtn = document.getElementById('dbgMaxSkills');
+if (!skillBtn && clsBtn) {
+    // Dynamically inject the button if it doesn't exist in HTML
+    skillBtn = document.createElement('button');
+    skillBtn.id = 'dbgMaxSkills';
+    skillBtn.className = 'btn';
+    skillBtn.textContent = 'Max All Skills (Lv50)';
+    clsBtn.parentNode.appendChild(skillBtn);
+}
+if (skillBtn) {
+    skillBtn.addEventListener('click', ()=>{
+        const allTypes = ['hand', 'one', 'two', 'spear', 'axe', 'bow', 'magic', 'survivability', 'lockpicking'];
+        allTypes.forEach(type => {
+            if (typeof ensureSkill === 'function') ensureSkill(type);
+            if (!state.skills[type]) state.skills[type] = {lvl:1, xp:0, next:100, shown:true, perks:{}};
+            
+            state.skills[type].lvl = 50; // Sets to level 50, giving 50 perk points!
+            state.skills[type].shown = true;
+        });
+        
+        if (typeof renderSkills === 'function') renderSkills();
+        if (typeof updateEquipUI === 'function') updateEquipUI();
+        
+        hideDebug?.();
+        log('[debug] All skills set to Level 50! Open the Skill Menu to buy perks.');
+    });
+}
+
+// --- NEW: God Mode Cheat ---
+let godBtn = document.getElementById('dbgGodMode');
+if (!godBtn && skillBtn) {
+    godBtn = document.createElement('button');
+    godBtn.id = 'dbgGodMode';
+    godBtn.className = 'btn';
+    godBtn.textContent = 'Toggle God Mode';
+    skillBtn.parentNode.appendChild(godBtn);
+}
+if (godBtn) {
+    godBtn.addEventListener('click', ()=>{
+        window._godMode = !window._godMode;
+        if (window._godMode && state.player) {
+            state.player.hpMax = 9999;
+            state.player.hp = 9999;
+            state.player.mpMax = 9999;
+            state.player.mp = 9999;
+            state.player.staminaMax = 9999;
+            state.player.stamina = 9999;
+            state.player.poisoned = false;
+            state.player.poisonTicks = 0;
+        }
+        if (typeof updateBars === 'function') updateBars();
+        hideDebug?.();
+        log('[debug] God Mode is now ' + (window._godMode ? 'ON' : 'OFF') + '. You are invincible.');
+    });
+}
 
 
 // --- NEW: Cleric & Warp Debug Wiring ---

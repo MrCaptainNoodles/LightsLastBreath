@@ -1083,7 +1083,11 @@ left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${
 // --- NEW: Consumable Logic (Bomb & Warp Stone) ---
 function useBomb(){
   if ((state.inventory.bombs|0) > 0) {
-    state.inventory.bombs--;
+    if (state.skills?.lockpicking?.perks?.['loc_c2'] && Math.random() < 0.25) {
+      spawnFloatText("Saved!", state.player.x, state.player.y, '#facc15');
+    } else {
+      state.inventory.bombs--;
+    }
     SFX.weaponBreak(); // FIX: Explosion sound instead of stairs
     
     // --- FIX: Throw 3 tiles in facing direction ---
@@ -1194,7 +1198,11 @@ log(`You throw a bomb! Hit ${hitCount} foes.`);
 
 function useWarpStone(){
   if ((state.inventory.warpStones|0) > 0) {
-    state.inventory.warpStones--;
+    if (state.skills?.lockpicking?.perks?.['loc_c2'] && Math.random() < 0.25) {
+      spawnFloatText("Saved!", state.player.x, state.player.y, '#facc15');
+    } else {
+      state.inventory.warpStones--;
+    }
     SFX.spell();
     
     // Find random safe spot
@@ -1225,9 +1233,17 @@ function usePotion(){
       return;
   }
   if (state.inventory.potions > 0) {
-    state.inventory.potions--;
+    // Alchemist's Bag (loc_c2)
+    if (state.skills?.lockpicking?.perks?.['loc_c2'] && Math.random() < 0.25) {
+      spawnFloatText("Saved!", state.player.x, state.player.y, '#facc15');
+    } else {
+      state.inventory.potions--;
+    }
     const before = state.player.hp|0;
-    let gain = Math.max(1, Math.round(state.player.hpMax * POTION_PCT));
+    
+    // Alchemist (sur_b4)
+    let basePct = state.skills?.survivability?.perks?.['sur_b4'] ? 0.50 : (typeof POTION_PCT !== 'undefined' ? POTION_PCT : 0.25);
+    let gain = Math.max(1, Math.round(state.player.hpMax * basePct));
     
     // --- NEW CODE: Check for Poison Debuff ---
     if (state.player.poisoned) {
@@ -1245,6 +1261,16 @@ function usePotion(){
     state.lastPlayerAction = { type: 'heal', amount: healed };
     updateBars();
     log(`Drank a potion (+${healed} HP).`);
+
+    // Iron Stomach (sur_c7) - Temporary +2 Damage buff
+    if (state.skills?.survivability?.perks?.['sur_c7']) {
+        if (!state.player.ironStomachTicks) {
+            state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + 2;
+            if (typeof recomputeWeapon === 'function') recomputeWeapon();
+        }
+        state.player.ironStomachTicks = 10; // 10 turns
+        spawnFloatText("+2 DMG", state.player.x, state.player.y, '#facc15');
+    }
 
     // --- TUTORIAL Step 7 (Potion Part) ---
     if (state.gameMode === 'tutorial' && state.tutorialStep === 7) {
@@ -1273,7 +1299,11 @@ function checkStep7Completion() {
 
 function useTonic(){
   if (state.inventory.tonics > 0) {
-    state.inventory.tonics--;
+    if (state.skills?.lockpicking?.perks?.['loc_c2'] && Math.random() < 0.25) {
+      spawnFloatText("Saved!", state.player.x, state.player.y, '#facc15');
+    } else {
+      state.inventory.tonics--;
+    }
     const before = state.player.mp|0;
     const gain   = Math.max(1, Math.round(state.player.mpMax * TONIC_PCT));
     state.player.mp = clamp(before + gain, 0, state.player.mpMax);
@@ -1301,7 +1331,11 @@ function useTonic(){
 
 function useAntidote(){
   if (state.inventory.antidotes > 0) {
-    state.inventory.antidotes--;
+    if (state.skills?.lockpicking?.perks?.['loc_c2'] && Math.random() < 0.25) {
+      spawnFloatText("Saved!", state.player.x, state.player.y, '#facc15');
+    } else {
+      state.inventory.antidotes--;
+    }
     if (state.player.poisoned) { state.player.poisoned = false; state.player.poisonTicks = 0; }
     SFX.drink();;
     updateBars();
@@ -2774,6 +2808,22 @@ function pollGamepad() {
     // This guarantees the joystick never gets permanently stuck if an error occurs below.
     setTimeout(() => { gpState.moving = false; }, 150);
 
+    // --- FIX: Idol of Stone (Slow) for Controller ---
+    // We ignore this check if Sprinting, because the keyboard listener will natively handle it!
+    if (!isSprinting && state.inventory.idols?.['Idol of Stone']) {
+        state._stoneSkip = !state._stoneSkip;
+        if (state._stoneSkip) {
+            if (typeof spawnFloatText === 'function') spawnFloatText("Slow...", state.player.x, state.player.y, '#9ca3af');
+            if (typeof enemyStep === 'function') enemyStep();
+            if (typeof draw === 'function') draw();
+            
+            // FIX: Keep the controller polling loop alive before we exit!
+            if (typeof pollGamepad === 'function') requestAnimationFrame(pollGamepad);
+            return;
+        }
+    }
+    // ------------------------------------------------
+
     // --- FIX: Allow Controller to pass Tutorial Step 1 ---
     if (typeof state !== 'undefined' && state.gameMode === 'tutorial' && state.tutorialStep === 1) {
         if (!state._tutMoveWASD) state._tutMoveWASD = {};
@@ -2983,6 +3033,22 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 1){
                  
                  if (dx>0) state.player.facing='right'; else if (dx<0) state.player.facing='left';
                  else if (dy>0) state.player.facing='down'; else if (dy<0) state.player.facing='up';
+                 
+                 // --- NEW: Track Consecutive Steps for Perks ---
+                 const moveDir = dx + "," + dy;
+                 if (state.player._lastMoveDir === moveDir) state.player._consecutiveSteps = (state.player._consecutiveSteps || 0) + dist;
+                 else { state.player._consecutiveSteps = dist; state.player._lastMoveDir = moveDir; }
+                 
+                 state.player._fleetFooted = false; state.player._afterimage = false;
+                 if (state.player._consecutiveSteps >= 3) {
+                     if (state.skills?.one?.perks?.['one_b2']) state.player._fleetFooted = true;
+                     if (state.skills?.one?.perks?.['one_c3']) state.player._afterimage = true;
+                     if (state.skills?.one?.perks?.['one_c4']) state.player._momentumReady = true;
+                 }
+                 if (state.player._consecutiveSteps >= 2) {
+                     if (state.skills?.spear?.perks?.['spear_c7']) state.player._dragoonReady = true;
+                 }
+                 // ----------------------------------------------
                  
                  state.player.x = finalX; state.player.y = finalY;
                  SFX.step(); 
@@ -3244,35 +3310,52 @@ const HS_KEY = 'dc_hi10';
 const META_KEY = 'dc_meta_v1';
 
 const CLASSES = {
-  Adventurer: { name:'Adventurer', desc:'Just a basic adventurer.', unlock:true },
-  
-  // Basic Classes
-  Rogue:      { name:'Rogue',      desc:'Shortsword, 8 Picks, Bomb. +5 Stam/MP, -2 HP.', req:'locks', val:15, msg:'Unlock: Pick 15 locks.' }, 
-  Barbarian:  { name:'Barbarian',  desc:'Battleaxe, Potion. +15 HP, +5 Stam. No Magic.', req:'kills_axe', val:50, msg:'Unlock: 50 Axe kills.' }, 
-  Wizard:     { name:'Wizard',     desc:'Fire Staff, Spark, Ember. +25 MP, -8 HP.', req:'kills_magic', val:50, msg:'Unlock: 50 Magic kills.' }, 
-  
-  // Endless: Intermediate Classes
-  Mercenary:  { name:'Mercenary',  desc:'Claymore, 50g. +5 HP, +2 Stam, -5 MP.', req:'kills_two', val:75, msg:'Unlock: 75 Two-Handed kills.', endless:true }, 
-  Monk:       { name:'Monk',       desc:'Claws, Heal Spell. +15 MP, +8 Stam, -2 HP.', req:'kills_hand', val:75, msg:'Unlock: 75 Hand to Hand kills.', endless:true }, 
-  Ranger:     { name:'Ranger',     desc:'Sword, 30 Arrows, Gust. +5 MP, +5 Stam.', req:'kills_bow', val:50, msg:'Unlock: 50 Bow kills.', endless:true }, 
-  Lancer:     { name:'Lancer',     desc:'Halberd, 2 Bombs. +12 Stam, +2 HP, -8 MP.', req:'kills_spear', val:75, msg:'Unlock: 75 Polearm kills.', endless:true }, 
-  Soldier:    { name:'Soldier',    desc:'Sword, Kite Shield, Potion. +8 HP, +2 Stam.', req:'depth', val:15, msg:'Unlock: Reach Depth 15.', endless:true }, 
+  // === TIER 1: BEGINNER (Intro to mechanics) ===
+  Adventurer: { name:'Adventurer', desc:'A completely blank slate. Starts with Fists and no items.', unlock:true },
+  Squire:     { name:'Squire',     desc:'Shortsword, Buckler. +2 HP, +2 Stamina.', req:'kills_one', val:10, msg:'Unlock: 10 One-Handed kills.' }, 
+  Apprentice: { name:'Apprentice', desc:'Earth Staff, Pebble Spell. +5 MP.', req:'kills_magic', val:10, msg:'Unlock: 10 Magic kills.' }, 
+  Thief:      { name:'Thief',      desc:'Fists, 5 Lockpicks. +2 Stamina.', req:'locks', val:5, msg:'Unlock: Pick 5 locks.' }, 
 
-  // Endless: Expert Classes
-  Spellblade: { name:'Spellblade', desc:'Sword, Ice Staff, Frost. +15 MP, +3 Stam, -2 HP.', req:'kills_magic', val:200, msg:'Unlock: 200 Magic kills.', endless:true }, 
-  Legionary:  { name:'Legionary',  desc:'Sword, Tower Shield, 2 Potions. +12 HP. No Magic.', req:'kills_one', val:200, msg:'Unlock: 200 One-Handed kills.', endless:true }, 
-  Paladin:    { name:'Paladin',    desc:'Warhammer, Antidotes. +30 HP. Low Stam/MP.', req:'depth', val:40, msg:'Unlock: Reach Depth 40.', endless:true }, 
+  // === TIER 2: INTERMEDIATE (Focused playstyles) ===
+  Barbarian:  { name:'Barbarian',  desc:'Battleaxe, Potion. +10 HP, +5 Stamina, -5 MP.', req:'kills_axe', val:50, msg:'Unlock: 50 Hafted kills.' }, 
+  Mercenary:  { name:'Mercenary',  desc:'Claymore, 50g. +5 HP, +5 Stamina, -5 MP.', req:'kills_two', val:50, msg:'Unlock: 50 Two-Handed kills.' }, 
+  Ranger:     { name:'Ranger',     desc:'Shortsword, 20 Arrows, Gust. +5 Stamina, +5 MP.', req:'kills_bow', val:50, msg:'Unlock: 50 Bow kills.' }, 
+  Acolyte:    { name:'Acolyte',    desc:'Spear, Heal Spell. +5 HP, +10 MP, -2 Stamina.', req:'depth', val:15, msg:'Unlock: Reach Depth 15.' }, 
+
+  // === TIER 3: STRONG (Endless Mode ONLY) ===
+  Paladin:    { name:'Paladin',    desc:'Warhammer, 2 Potions. +20 HP, -5 MP.', req:'depth_endless', val:30, msg:'Unlock: Reach Depth 30 in Endless.', endless:true }, 
+  Spellblade: { name:'Spellblade', desc:'Shortsword, Ice Staff, Frost. +15 MP, +5 Stamina, -2 HP.', req:'kills_magic_endless', val:150, msg:'Unlock: 150 Magic kills in Endless.', endless:true }, 
+  Assassin:   { name:'Assassin',   desc:'Claws, 2 Bombs, 10 Picks. +10 Stam, +5 MP, -5 HP.', req:'kills_hand_endless', val:150, msg:'Unlock: 150 Hand-to-Hand kills in Endless.', endless:true }, 
+  Dragoon:    { name:'Dragoon',    desc:'Halberd, 2 Warp Stones. +10 Stamina, +5 HP, -5 MP.', req:'kills_spear_endless', val:150, msg:'Unlock: 150 Polearm kills in Endless.', endless:true }, 
+
+  // === TIER 4: NEXT TO GOD-LIKE (Endless Mode ONLY) ===
+  Warlord:    { name:'Warlord',    desc:'Battleaxe, 2 Potions. +30 HP, +20 Stamina, -10 MP.', req:'kills_two_endless', val:250, msg:'Unlock: 250 Two-Handed kills in Endless.', endless:true }, 
+  Archmage:   { name:'Archmage',   desc:'Fire Staff, Spark, Ember, Pebble. +30 MP, +5 Stam, -10 HP.', req:'kills_magic_endless', val:250, msg:'Unlock: 250 Magic kills in Endless.', endless:true }, 
+  Phantom:    { name:'Phantom',    desc:'Fists, 50 Picks, 3 Bombs, 3 Warps. +20 Stam, +10 MP, -5 HP.', req:'locks_endless', val:150, msg:'Unlock: Pick 150 locks in Endless.', endless:true }, 
+  Vampire:    { name:'Vampire',    desc:'Vampiric Shortsword, Amulet of Life. +15 to all Stats.', req:'depth_endless', val:50, msg:'Unlock: Reach Depth 50 in Endless.', endless:true }
 };
 
-// --- NEW: Soul Shop Definitions ---
 const SOUL_UPGRADES = {
-  vitality: { name:'Vitality', desc:'Start with +5 Max HP.', cost:100, max:5 },
-  greed:    { name:'Greed',    desc:'Start with +25 Gold.',  cost:75,  max:5 },
-  wisdom:   { name:'Wisdom',   desc:'Start with +10 Max MP.',cost:100, max:5 },
-  endurance:{ name:'Endurance',desc:'Start with +5 Max Stamina.', cost:100, max:5 }, // <--- Added this line
-  pockets:  { name:'Deep Pockets', desc:'Start with +1 Potion.', cost:150, max:3 },
-  vision:   { name:'Owl Eyes', desc:'Start with +1 Vision Range.', cost:300, max:2 }
+  vitality:  { name: 'Vitality',  desc: '+5 Max HP per level.', max: 10, cost: 5 },
+  wisdom:    { name: 'Wisdom',    desc: '+10 Max MP per level.', max: 10, cost: 5 },
+  endurance: { name: 'Endurance', desc: '+5 Max Stamina per level.', max: 10, cost: 5 },
+  vision:    { name: 'Night Owl', desc: '+1 Vision Range per level.', max: 3, cost: 15 },
+  pockets:   { name: 'Prepared',  desc: 'Start with +1 Potion per level.', max: 3, cost: 20 },
+  greed:     { name: 'Greed',     desc: 'Start with +25 Gold per level.', max: 4, cost: 10 }
 };
+
+// Safely wire the button directly and update the label!
+setTimeout(() => {
+  const btnShop = document.getElementById('btnShop');
+  if (btnShop) {
+    btnShop.onclick = (e) => {
+      e.preventDefault();
+      renderShopUI();
+      document.getElementById('shopModal').style.display = 'flex';
+    };
+  }
+  updateMainMenuShopLabel(); // Set the initial balance text on load
+}, 100);
 
 function getSoulBalance(){
   const m = loadMeta();
@@ -3373,6 +3456,20 @@ function updateMainMenuShopLabel(){
   const el = document.getElementById('btnShop');
   if(el) el.textContent = `Soul Shop`;
 }
+
+// --- NEW: Wire up the Main Menu Shop Button ---
+document.addEventListener('DOMContentLoaded', () => {
+  const btnShop = document.getElementById('btnShop');
+  if (btnShop) {
+    btnShop.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (typeof renderShopUI === 'function') renderShopUI();
+      const shopModal = document.getElementById('shopModal');
+      if (shopModal) shopModal.style.display = 'flex';
+    });
+  }
+});
+// ----------------------------------------------
 
 function loadMeta(){ try{ return JSON.parse(localStorage.getItem(META_KEY)||'{}'); }catch{ return {}; } }
 function saveMeta(m){ localStorage.setItem(META_KEY, JSON.stringify(m)); }
@@ -3690,52 +3787,40 @@ function doRestart(className){
 };
 
   // --- Apply Class Stats Modifiers ---
-  // Adjusted for thematic attunement
-  if (className === 'Barbarian') {
-    state.player.hpMax += 15; state.player.hp = state.player.hpMax; // Tanky
-    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // High endurance
-    state.player.mpMax = 0; state.player.mp = 0; // No magic
-  } else if (className === 'Wizard') {
-    state.player.mpMax += 25; state.player.mp = state.player.mpMax; // Huge mana pool
-    state.player.hpMax -= 8;  state.player.hp = state.player.hpMax; // Very fragile
-    state.player.staminaMax -= 2; state.player.stamina = state.player.staminaMax; // Physically weak
-  } else if (className === 'Rogue') {
-    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // Agile
-    state.player.hpMax -= 2;  state.player.hp = state.player.hpMax;
-    state.player.mpMax += 5;  state.player.mp = state.player.mpMax; // Utility magic
+  // TIER 1
+  if (className === 'Squire') {
+    state.player.hpMax += 2; state.player.staminaMax += 2;
+  } else if (className === 'Apprentice') {
+    state.player.mpMax += 5;
+  } else if (className === 'Thief') {
+    state.player.staminaMax += 2;
+  // TIER 2
+  } else if (className === 'Barbarian') {
+    state.player.hpMax += 10; state.player.staminaMax += 5; state.player.mpMax = Math.max(0, state.player.mpMax - 5);
   } else if (className === 'Mercenary') {
-    state.player.hpMax += 5;  state.player.hp = state.player.hpMax;
-    state.player.staminaMax += 2; state.player.stamina = state.player.staminaMax;
-    state.player.mpMax = Math.max(0, state.player.mpMax - 5); state.player.mp = state.player.mpMax;
-  } else if (className === 'Monk') {
-    state.player.staminaMax += 8; state.player.stamina = state.player.staminaMax; // Stamina heavy (Flurry)
-    state.player.mpMax += 15; state.player.mp = state.player.mpMax; // Chi/Mana focus
-    state.player.hpMax -= 2;  state.player.hp = state.player.hpMax;
+    state.player.hpMax += 5; state.player.staminaMax += 5; state.player.mpMax = Math.max(0, state.player.mpMax - 5);
   } else if (className === 'Ranger') {
-    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // Kiting stamina
-    state.player.mpMax += 5;  state.player.mp = state.player.mpMax;
-  } else if (className === 'Lancer') {
-    state.player.staminaMax += 12; state.player.stamina = state.player.staminaMax; // Needs stamina for Pierce
-    state.player.hpMax += 2; state.player.hp = state.player.hpMax;
-    state.player.mpMax = Math.max(0, state.player.mpMax - 8); state.player.mp = state.player.mpMax;
-  } else if (className === 'Soldier') {
-    state.player.hpMax += 8;       state.player.hp = state.player.hpMax;
-    state.player.staminaMax += 2;  state.player.stamina = state.player.staminaMax;
-    state.player.mpMax = Math.max(0, state.player.mpMax - 8); state.player.mp = state.player.mpMax;
-  } else if (className === 'Spellblade') {
-    state.player.mpMax += 15; state.player.mp = state.player.mpMax; // Needs MP for spells & melee
-    state.player.staminaMax += 3; state.player.stamina = state.player.staminaMax;
-    state.player.hpMax -= 2; state.player.hp = state.player.hpMax; // Glass cannon hybrid
+    state.player.staminaMax += 5; state.player.mpMax += 5;
+  } else if (className === 'Acolyte') {
+    state.player.hpMax += 5; state.player.mpMax += 10; state.player.staminaMax -= 2;
+  // TIER 3
   } else if (className === 'Paladin') {
-    state.player.hpMax += 30; state.player.hp = state.player.hpMax; // Massive Tank
-    state.player.staminaMax -= 2; state.player.stamina = state.player.staminaMax; // Heavy armor penalty
-    state.player.mpMax = Math.max(0, state.player.mpMax - 10); 
-    state.player.mp = state.player.mpMax;
-    if (state.player.mpMax <= 0) state.player.mp = 0;
-  } else if (className === 'Legionary') {
-    state.player.hpMax += 12; state.player.hp = state.player.hpMax;
-    state.player.staminaMax += 5; state.player.stamina = state.player.staminaMax; // Shield work takes stamina
-    state.player.mpMax = 0; state.player.mp = 0; // Pure martial
+    state.player.hpMax += 20; state.player.mpMax = Math.max(0, state.player.mpMax - 5);
+  } else if (className === 'Spellblade') {
+    state.player.mpMax += 15; state.player.staminaMax += 5; state.player.hpMax -= 2;
+  } else if (className === 'Assassin') {
+    state.player.staminaMax += 10; state.player.mpMax += 5; state.player.hpMax -= 5;
+  } else if (className === 'Dragoon') {
+    state.player.staminaMax += 10; state.player.hpMax += 5; state.player.mpMax = Math.max(0, state.player.mpMax - 5);
+  // TIER 4
+  } else if (className === 'Warlord') {
+    state.player.hpMax += 30; state.player.staminaMax += 20; state.player.mpMax = Math.max(0, state.player.mpMax - 10);
+  } else if (className === 'Archmage') {
+    state.player.mpMax += 30; state.player.staminaMax += 5; state.player.hpMax -= 10;
+  } else if (className === 'Phantom') {
+    state.player.staminaMax += 20; state.player.mpMax += 10; state.player.hpMax -= 5;
+  } else if (className === 'Vampire') {
+    state.player.hpMax += 15; state.player.mpMax += 15; state.player.staminaMax += 15;
   }
 
   // --- Apply Soul Shop Upgrades (IF NOT TUTORIAL) ---
@@ -3781,60 +3866,59 @@ function doRestart(className){
   };
 
   // --- Apply Class Gear ---
-  if (className === 'Rogue') {
-    state.inventory.weapons['Shortsword'] = 1; 
-    equipWeaponByName('Shortsword');
-    state.inventory.lockpicks = 8; // More picks for the thief archetype
-    state.inventory.bombs = 1; // A tool for sticky situations
-  } else if (className === 'Barbarian') {
-    state.inventory.weapons['Battleaxe'] = 1; // Upgraded from Axe to Battleaxe
-    equipWeaponByName('Battleaxe');
-    state.inventory.potions = 1; // Self-sustain for melee
-  } else if (className === 'Wizard') {
-    state.inventory.weapons['Fire Staff'] = 1; equipWeaponByName('Fire Staff');
-    state.spells.push({name:'Ember', cost:3, tier:1}); 
-    state.spells.push({name:'Spark', cost:1, tier:1}); // Basic low-cost spell backup
-    state.equippedSpell = state.spells[0];  
-    state.inventory.tonics = 2; // Mana sustain
-  }
-// -- New Classes --
-  else if (className === 'Mercenary') {
-    state.inventory.weapons['Claymore'] = 1;
-    equipWeaponByName('Claymore');
-    state.inventory.gold = 50; // Mercenaries start with coin
-  } else if (className === 'Monk') {
-    state.inventory.weapons['Claws'] = 1; // Upgraded from Knuckle Duster to Claws
-    equipWeaponByName('Claws');
-    state.spells.push({name:'Heal', cost:4, tier:1}); // Self-sufficiency
-    state.equippedSpell = state.spells[0];
-  } else if (className === 'Ranger') {
-    state.inventory.weapons['Shortsword'] = 1;
-    equipWeaponByName('Shortsword');
-    state.inventory.arrows = 30; // More ammo
-    state.player.bow.loaded = 1;
-    state.spells.push({name:'Gust', cost:2, tier:1}); // Control spell (Wind)
-    state.equippedSpell = state.spells[0];
-  } else if (className === 'Lancer') {
-    state.inventory.weapons['Halberd'] = 1; equipWeaponByName('Halberd');
-    state.inventory.bombs = 2; // Zone control
-  } else if (className === 'Soldier') {
+  // TIER 1
+  if (className === 'Squire') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
-    state.inventory.weapons['Kite Shield'] = 1; equipShield('Kite Shield');
-    state.inventory.potions = 1; // Standard issue
+    state.inventory.weapons['Buckler'] = 1; equipShield('Buckler');
+  } else if (className === 'Apprentice') {
+    state.inventory.weapons['Earth Staff'] = 1; equipWeaponByName('Earth Staff');
+    state.spells.push({name:'Pebble', cost:1, tier:1}); state.equippedSpell = state.spells[0];  
+  } else if (className === 'Thief') {
+    state.inventory.lockpicks = 5;
+  // TIER 2
+  } else if (className === 'Barbarian') {
+    state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
+    state.inventory.potions = 1;
+  } else if (className === 'Mercenary') {
+    state.inventory.weapons['Claymore'] = 1; equipWeaponByName('Claymore');
+    state.inventory.gold = 50; 
+  } else if (className === 'Ranger') {
+    state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
+    state.inventory.arrows = 20; state.player.bow.loaded = 1;
+    state.spells.push({name:'Gust', cost:2, tier:1}); state.equippedSpell = state.spells[0];
+  } else if (className === 'Acolyte') {
+    state.inventory.weapons['Spear'] = 1; equipWeaponByName('Spear');
+    state.spells.push({name:'Heal', cost:4, tier:1}); state.equippedSpell = state.spells[0];
+  // TIER 3
+  } else if (className === 'Paladin') {
+    state.inventory.weapons['Warhammer'] = 1; equipWeaponByName('Warhammer');
+    state.inventory.potions = 2; 
   } else if (className === 'Spellblade') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.weapons['Ice Staff'] = 1; 
-    state.spells.push({name:'Frost', cost:3, tier:1}); // Ice synergy
-    state.spells.push({name:'Spark', cost:1, tier:1}); // Fast cast
-    state.equippedSpell = state.spells[0];
-  } else if (className === 'Legionary') {
-    state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
-    state.inventory.weapons['Tower Shield'] = 1; equipShield('Tower Shield'); // Tankiest shield
-    state.inventory.potions = 2; // Sustain
-  } else if (className === 'Paladin') {
-    state.inventory.weapons['Warhammer'] = 1; equipWeaponByName('Warhammer');
-    state.inventory.antidotes = 2; // Purity theme
-    state.inventory.shields = 1; // Starts with spare standard shield
+    state.spells.push({name:'Frost', cost:3, tier:1}); state.equippedSpell = state.spells[0];
+  } else if (className === 'Assassin') {
+    state.inventory.weapons['Claws'] = 1; equipWeaponByName('Claws');
+    state.inventory.bombs = 2; state.inventory.lockpicks = 10;
+  } else if (className === 'Dragoon') {
+    state.inventory.weapons['Halberd'] = 1; equipWeaponByName('Halberd');
+    state.inventory.warpStones = 2; 
+  // TIER 4
+  } else if (className === 'Warlord') {
+    state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
+    state.inventory.potions = 2; 
+  } else if (className === 'Archmage') {
+    state.inventory.weapons['Fire Staff'] = 1; equipWeaponByName('Fire Staff');
+    state.spells.push({name:'Ember', cost:3, tier:1}); 
+    state.spells.push({name:'Spark', cost:1, tier:1}); 
+    state.spells.push({name:'Pebble', cost:1, tier:1}); 
+    state.equippedSpell = state.spells[0];  
+  } else if (className === 'Phantom') {
+    state.inventory.lockpicks = 50;
+    state.inventory.bombs = 3; state.inventory.warpStones = 3;
+  } else if (className === 'Vampire') {
+    state.inventory.weapons['Vampiric Shortsword'] = 1; equipWeaponByName('Vampiric Shortsword');
+    state.inventory.trinkets = {'Amulet of Life': 1}; // Note: Will require player to equip via inventory, but puts it in their bag!
   }
 
   // Finalize
@@ -4475,6 +4559,24 @@ function handleEnemyDeath(e, source) {
   if (e.boss) {
       spawnBossStairs(e.x, e.y); // Checks internally if already spawned
       if (typeof offerPick2Choice === 'function') offerPick2Choice('boss');
+  }
+
+  // Feast (axe_c2)
+  if ((e.boss || e.miniBoss) && state.player.weapon?.type === 'axe' && state.skills?.axe?.perks?.['axe_c2']) {
+      state.player.hpMax += 1;
+      state.player.hp += 1;
+      if (typeof spawnFloatText === 'function') spawnFloatText("+1 MAX HP", state.player.x, state.player.y, '#ef4444');
+      log("Feast: You devour the strong, gaining +1 Max HP.");
+  }
+
+  // --- NEW: Scavenger (bow_b4) ---
+  // FIX: Changed weaponType to source to resolve the ReferenceError causing invincibility
+  if (source === 'bow' && state.skills?.bow?.perks?.['bow_b4'] && Math.random() < 0.50) {
+      const dropKxy = key(e.x, e.y);
+      if (!state.pickups[dropKxy]) { 
+          state.pickups[dropKxy] = { kind: 'arrows', payload: 1 };
+          state.tiles[e.y][e.x] = 5; 
+      }
   }
 
   // 6. Loot Drops (Stolen items, Gold)

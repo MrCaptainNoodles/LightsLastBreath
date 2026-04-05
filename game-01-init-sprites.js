@@ -95,9 +95,9 @@ async function say(text){
 
 
 const PLAYER_XP_START   = 22;   
-const PLAYER_XP_GROWTH  = 1.20; // Reduced from 1.30 (Smoother late-game leveling)
-const SKILL_XP_START    = 22;   
-const SKILL_XP_GROWTH   = 1.30; // Reduced from 1.40 (Skills level up more often)
+const PLAYER_XP_GROWTH  = 1.20; // Smoother late-game leveling
+const SKILL_XP_START    = 25;   // Increased starting XP required
+const SKILL_XP_GROWTH   = 1.45; // Increased to slow down skill maxing
 
 
 
