@@ -760,7 +760,7 @@ function unlockCodex(key, increment=false){
     }
     saveCodex(c);
   }
-}
+}s
 
 function renderCodexUI(){
   const list = document.getElementById('codexContent');
