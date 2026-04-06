@@ -3368,12 +3368,12 @@ const CLASSES = {
 };
 
 const SOUL_UPGRADES = {
-  vitality:  { name: 'Vitality',  desc: '+5 Max HP per level.', max: 10, cost: 5 },
-  wisdom:    { name: 'Wisdom',    desc: '+10 Max MP per level.', max: 10, cost: 5 },
-  endurance: { name: 'Endurance', desc: '+5 Max Stamina per level.', max: 10, cost: 5 },
-  vision:    { name: 'Night Owl', desc: '+1 Vision Range per level.', max: 3, cost: 15 },
-  pockets:   { name: 'Prepared',  desc: 'Start with +1 Potion per level.', max: 3, cost: 20 },
-  greed:     { name: 'Greed',     desc: 'Start with +25 Gold per level.', max: 4, cost: 10 }
+  vitality:  { name: 'Vitality',  desc: '+5 Max HP per level.', max: 10, cost: 25 },
+  wisdom:    { name: 'Wisdom',    desc: '+10 Max MP per level.', max: 10, cost: 25 },
+  endurance: { name: 'Endurance', desc: '+5 Max Stamina per level.', max: 10, cost: 25 },
+  vision:    { name: 'Night Owl', desc: '+1 Vision Range per level.', max: 3, cost: 75 },
+  pockets:   { name: 'Prepared',  desc: 'Start with +1 Potion per level.', max: 3, cost: 150 },
+  greed:     { name: 'Greed',     desc: 'Start with +25 Gold per level.', max: 4, cost: 50 }
 };
 
 // Safely wire the button directly and update the label!
@@ -3440,7 +3440,8 @@ function renderShopUI(){
     const level = m[prefix + k] || 0; 
     
     const isMax = level >= def.max;
-    const cost = Math.floor(def.cost * (1 + level * 0.5));
+    // Increased scaling: cost jumps by 100% of base price per level instead of 50%
+    const cost = Math.floor(def.cost * (1 + level * 1.0));
     
     const row = document.createElement('div');
     row.className = 'card';
