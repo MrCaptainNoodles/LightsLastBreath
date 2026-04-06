@@ -257,7 +257,7 @@ function flashEnemy(e, color='red', ms=100){
 // ===== Per-floor enemy templates =====
 function floorEnemyKinds(){
   const f = state.floor | 0;
-  const scale = 1 + Math.max(0, f - 1) * 0.30; // Increased to 30% per floor
+  const scale = 1 + Math.max(0, f - 1) * 0.25; // Increased to 25% per floor
 
   // base (floor 1) stats, then scale every floor
   const base = {
@@ -636,10 +636,32 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
       }
     }
   }
-  // ----------------------------------
+// ----------------------------------
 
 // === each enemy acts ===
   for (const e of state.enemies){
+    // Status effects
+    if (e.burning && e.burnTicks > 0) {
+      e.burnTicks--;
+      e.hp -= 2;
+      if (typeof spawnFloatText === 'function') spawnFloatText("2", e.x, e.y, '#f97316');
+      if (e.hp <= 0) {
+        handleEnemyDeath(e, 'burn');
+        continue;
+      }
+      if (e.burnTicks <= 0) e.burning = false;
+    }
+    if (e.bleeding && e.bleedTicks > 0) {
+      e.bleedTicks--;
+      e.hp -= 1;
+      if (typeof spawnFloatText === 'function') spawnFloatText("1", e.x, e.y, '#ef4444');
+      if (e.hp <= 0) {
+        handleEnemyDeath(e, 'bleed');
+        continue;
+      }
+      if (e.bleedTicks <= 0) e.bleeding = false;
+    }
+
     // --- NEW: Reaper Logic ---
     if (e.type === 'Reaper') {
   // Move logic: Tick counter (set % 1 to move every turn)

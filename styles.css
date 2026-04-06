@@ -280,14 +280,10 @@ button.skill:disabled{ opacity:.6; cursor:not-allowed; }
 
 /* Modal backdrop + bounded, flex sheet */
 .modal{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.5);   /* if you ever see 5, change to .5 */
-  display:none;
-  align-items:center;
-  justify-content:center;
-  padding:14px;
-  z-index:5;
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.5); /* if you ever see 5, change to .5 */
+  display:none; align-items:center; justify-content:center;
+  padding:14px; z-index:100;
 }
 /* Make the High Score table responsive */
 #hiscoreTable{

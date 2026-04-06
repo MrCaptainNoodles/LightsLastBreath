@@ -882,6 +882,7 @@ const pick  = rooms.length ? rooms[rand(0, rooms.length-1)] : null;
   left:  { x: cx-1, y: cy },
   right: { x: cx+1, y: cy },
   room: { x: rx, y: ry, w: rw, h: rh },
+  originalRoom: pick,
   stock: null            // ← per-floor, filled on first Buy open
 };
 
@@ -920,7 +921,8 @@ if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < B
         x: cx2, y: cy2,
         left:  { x: cx2-1, y: cy2 },
         right: { x: cx2+1, y: cy2 },
-        room:  { x: rx2, y: ry2, w: rw2, h: rh2 }
+        room:  { x: rx2, y: ry2, w: rw2, h: rh2 },
+        originalRoom: pick2
       };
 
       state.safeRect2 = { x: rx2, y: ry2, w: rw2, h: rh2 };
@@ -956,7 +958,8 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < JE
         x: cx3, y: cy3,
         left:  { x: cx3-1, y: cy3 },
         right: { x: cx3+1, y: cy3 },
-        room:  { x: rx3, y: ry3, w: rw3, h: rh3 }
+        room:  { x: rx3, y: ry3, w: rw3, h: rh3 },
+        originalRoom: pick3
       };
       state.safeRect3 = { x: rx3, y: ry3, w: rw3, h: rh3 };
       spawnedJester = true;
@@ -972,9 +975,9 @@ if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < 0
   // Filter out rooms already taken by NPCs
   const availableRooms = state.rooms.slice(1).filter(r => 
       r !== state._stairsRoom &&
-      r !== state.merchant?.room &&
-      r !== state.blacksmith?.room &&
-      r !== state.jester?.room
+      r !== state.merchant?.originalRoom &&
+      r !== state.blacksmith?.originalRoom &&
+      r !== state.jester?.originalRoom
   );
 
   if (availableRooms.length > 0) {
@@ -1028,7 +1031,8 @@ if (state.gameMode !== 'tutorial' && state.floor % 10 !== 0 && Math.random() < 0
           x: cx4, y: cy4,
           left:  { x: cx4-1, y: cy4 },
           right: { x: cx4+1, y: cy4 },
-          room:  { x: rx4, y: ry4, w: rw4, h: rh4 }
+          room:  { x: rx4, y: ry4, w: rw4, h: rh4 },
+          originalRoom: pick4
         };
         state.safeRect4 = { x: rx4, y: ry4, w: rw4, h: rh4 };
 spawnedCartographer = true;
@@ -1049,10 +1053,10 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < cC
      // Added check for state.goldWell?.room
      const rooms5 = state.rooms.slice(1).filter(r => 
         r !== state._stairsRoom && 
-        !state.merchant?.room && 
-        !state.blacksmith?.room && 
-        !state.jester?.room && 
-        !state.cartographer?.room &&
+        r !== state.merchant?.originalRoom && 
+        r !== state.blacksmith?.originalRoom && 
+        r !== state.jester?.originalRoom && 
+        r !== state.cartographer?.originalRoom &&
         r !== state.goldWell?.room
      );
      const pick5 = rooms5.length ? rooms5[rand(0, rooms5.length-1)] : null;
@@ -1106,13 +1110,22 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < cC
   // 1. Build "Busy" Set (Start + Stairs + NPCs + Wells + Shrines)
   const busy = new Set([state.startRoom, state._stairsRoom]);
   if (state.puzzleEntryRoom) busy.add(state.puzzleEntryRoom);
-  if (state.merchant?.room) busy.add(state.merchant.room);
-  if (state.blacksmith?.room) busy.add(state.blacksmith.room);
-  if (state.jester?.room) busy.add(state.jester.room);
-  if (state.cartographer?.room) busy.add(state.cartographer.room);
+  if (state.merchant?.originalRoom) busy.add(state.merchant.originalRoom);
+  if (state.blacksmith?.originalRoom) busy.add(state.blacksmith.originalRoom);
+  if (state.jester?.originalRoom) busy.add(state.jester.originalRoom);
+  if (state.cartographer?.originalRoom) busy.add(state.cartographer.originalRoom);
   if (state.cleric?.room) busy.add(state.cleric.room);
   if (state.goldWell?.room) busy.add(state.goldWell.room);
-  if (state.shrines) state.shrines.forEach(s => busy.add(s.room));
+  
+  // Find rooms with Shrines manually since state.shrines array doesn't exist
+  state.rooms.forEach(r => {
+      for(let y=r.y; y<r.y+r.h; y++){
+          for(let x=r.x; x<r.x+r.w; x++){
+              if (state.tiles[y] && state.tiles[y][x] === 6) busy.add(r);
+          }
+      }
+  });
+
   if (state.puzzleRooms) state.puzzleRooms.forEach(pr => busy.add(pr)); // Block everything else from Puzzle Rooms!
 
   // 2. Cursed Stairs (Moved from earlier)

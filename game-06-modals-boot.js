@@ -2614,12 +2614,43 @@ function pollGamepad() {
       const type = (id.includes('dualshock') || id.includes('dualsense') || id.includes('playstation') || id.includes('wireless controller')) ? 'playstation' : 'xbox';
       
       let padActive = false;
-  for(let i=0; i<gp.buttons.length; i++) { if(gp.buttons[i].pressed) padActive = true; }
-  for(let i=0; i<gp.axes.length; i++) { if(Math.abs(gp.axes[i]) > 0.2) padActive = true; }
-  if (padActive) updateControlUI(type);
+      for(let i=0; i<gp.buttons.length; i++) { if(gp.buttons[i].pressed) padActive = true; }
+      for(let i=0; i<gp.axes.length; i++) { if(Math.abs(gp.axes[i]) > 0.2) padActive = true; }
+      if (padActive) updateControlUI(type);
 
-  const openModal = getVisibleModal();
-  const threshold = 0.5;
+      // --- NEW: Press ANY button/stick to bypass Title Screen ---
+      const ts = document.getElementById('titleScreen');
+      if (ts && ts.style.display !== 'none' && padActive) {
+          if (!gpState.titleDismissed) {
+              gpState.titleDismissed = true;
+              
+              // The game's listener might be on the window or expecting a specific event type.
+              // We dispatch standard inputs to guarantee it triggers the transition.
+              ts.click(); 
+              document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              ts.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+              
+              const enterEvt = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+              Object.defineProperty(enterEvt, 'isGamepad', {value: true});
+              window.dispatchEvent(enterEvt);
+              
+              const spaceEvt = new KeyboardEvent('keydown', { key: ' ', bubbles: true });
+              Object.defineProperty(spaceEvt, 'isGamepad', {value: true});
+              window.dispatchEvent(spaceEvt);
+
+              // PREVENT DOUBLE FIRE: Mark currently pressed buttons as "held"
+              for(let i=0; i<gp.buttons.length; i++) { 
+                  if(gp.buttons[i].pressed) gpState.buttons[i] = true; 
+              }
+          }
+          return requestAnimationFrame(pollGamepad);
+      } else if (!padActive) {
+          gpState.titleDismissed = false;
+      }
+      // ----------------------------------------------------
+
+      const openModal = getVisibleModal();
+      const threshold = 0.5;
 
   // Helper for one-shot button presses
   const btn = (idx, callback) => {
@@ -2728,6 +2759,7 @@ function pollGamepad() {
         }
 
         if (focusedEl) {
+            if (focusedEl.disabled || focusedEl.getAttribute('aria-disabled') === 'true' || focusedEl.classList.contains('disabled')) return;
             focusedEl.click();
         } else if (openModal) {
             openModal.click();

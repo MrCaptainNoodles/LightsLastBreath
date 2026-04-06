@@ -1217,6 +1217,10 @@ if (enemy._flashColor && enemy._flashTime > Date.now()) {
     // Simple filter hack: brightness/sepia/hue-rotate to approximate color
     if (color === 'red') ctx.filter = 'brightness(0.6) sepia(1) hue-rotate(-50deg) saturate(5)'; 
     else if (color === 'green') ctx.filter = 'brightness(1.2) sepia(1) hue-rotate(50deg) saturate(5)';
+} else if (enemy.burning) {
+    ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(3)';
+} else if (enemy.bleeding) {
+    ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(1) brightness(0.7)';
 } else if ((enemy.boss || enemy.elite) && enemy.tint){
   ctx.filter = enemy.tint;
 }
