@@ -257,7 +257,8 @@ button.skill{
 button.skill:focus-visible{ outline:2px solid #3b82f6; outline-offset:2px; }
 button.skill:disabled{ opacity:.6; cursor:not-allowed; }
 
-.log{background:var(--panel);border:1px solid var(--chipBorder);border-radius:16px;margin-top:10px;padding:12px;max-height:22vh;overflow:hidden; font-weight:600; font-size:12px;}
+.log{background:var(--panel);border:1px solid var(--chipBorder);border-radius:16px;margin-top:10px;padding:12px;max-height:22vh;overflow:hidden; font-weight:600; font-size:12px; scrollbar-width: none; -ms-overflow-style: none;}
+.log::-webkit-scrollbar { display: none; }
 .log * { font-weight: inherit !important; }
 /* Keep the modal header always reachable */
 .modal .sheet .row:first-child{
@@ -276,6 +277,13 @@ button.skill:disabled{ opacity:.6; cursor:not-allowed; }
   flex:1;                               /* fill remaining height */
   overflow:auto;                        /* enable scrolling */
   -webkit-overflow-scrolling:touch;     /* momentum scroll on iOS */
+  overflow-x: hidden;                   /* Stop controller horizontal wandering */
+  scrollbar-width: none;                /* Firefox */
+  -ms-overflow-style: none;             /* IE and Edge */
+}
+#invBody::-webkit-scrollbar,
+#spellBody::-webkit-scrollbar {
+  display: none;                        /* Chrome, Safari, Opera */
 }
 
 /* Modal backdrop + bounded, flex sheet */

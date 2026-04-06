@@ -4002,6 +4002,19 @@ function openScoreEntry(){
 state.run.depth = state.floor|0;                  // ← NEW
 state.run.timeMs = state.run.finalMs || currentRunMs();  // ← NEW
 
+  // --- NEW: Calculate & Save Shards Automatically ---
+  const earnedShards = (state.gameMode === 'tutorial') ? 0 
+     : Math.floor((state.run.depth * 1) + (state.run.kills * 0.5) + (state.run.level * 2));
+
+  if (earnedShards > 0) {
+    const meta = loadMeta();
+    meta.shards = (meta.shards || 0) + earnedShards;
+    saveMeta(meta);
+    if (typeof showBanner === 'function') showBanner(`Soul Shards Earned: +${earnedShards}`, 4000);
+    if (typeof updateMainMenuShopLabel === 'function') updateMainMenuShopLabel();
+  }
+  // ------------------------------------------------
+
   ent.style.display = 'block';
   lst.style.display = 'none';
   m.style.display = 'flex';
@@ -4043,20 +4056,6 @@ function renderHiscores(){
 function saveScore(initialsRaw){
   const initials = (initialsRaw||'???').toUpperCase().replace(/[^A-Z]/g,'').slice(0,3) || '???';
   const row = { initials, depth: state.run.depth|0, level: state.run.level|0, kills: state.run.kills|0, when: state.run.when|0, timeMs: state.run.timeMs|0  };
-  // --- NEW: Calculate & Save Shards ---
-  // --- Adjusted Shard Scaling ---
-  // Formula: (Depth * 1) + (Kills * 0.5) + (Level * 2)
-  const earnedShards = (state.gameMode === 'tutorial') ? 0 
-     : Math.floor((state.run.depth * 1) + (state.run.kills * 0.5) + (state.run.level * 2));
-
-  if (earnedShards > 0) {
-    const m = loadMeta();
-    m.shards = (m.shards || 0) + earnedShards;
-    saveMeta(m);
-    showBanner(`Soul Shards Earned: +${earnedShards}`, 4000);
-    updateMainMenuShopLabel();
-  }
-  // ------------------------------------
 
   const list = (state._hiscores||[]).concat([row]).sort((a,b)=>{
     // sort by depth desc, then kills desc, then level desc, then earlier date
