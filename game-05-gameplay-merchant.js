@@ -2946,12 +2946,14 @@ function cast(){
 if (spell.name === 'Heal'){
   const st = getSpellStats('Heal');                 // { cost, pct, range:0 }
   if (state.player.mp < st.cost){ log('Not enough MP.'); return; }
-  state.player.mp -= st.cost; updateBars();
+  state.player.mp -= st.cost; 
 
   const before = state.player.hp|0;
   const gain   = Math.max(1, Math.round(state.player.hpMax * (st.pct || 0)));
   state.player.hp = clamp(before + gain, 0, state.player.hpMax);
   const healed = state.player.hp - before;
+
+  updateBars();
 
   SFX.spell();
   log(`You cast Heal and restore ${healed} HP (${Math.round((st.pct||0)*100)}%).`);

@@ -257,7 +257,7 @@ function flashEnemy(e, color='red', ms=100){
 // ===== Per-floor enemy templates =====
 function floorEnemyKinds(){
   const f = state.floor | 0;
-  const scale = 1 + Math.max(0, f - 1) * 0.20; // Increased to 25% per floor
+  const scale = 1 + Math.max(0, f - 1) * 0.15; // Increased to 15% per floor
 
   // base (floor 1) stats, then scale every floor
   const base = {
