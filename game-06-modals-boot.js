@@ -2663,10 +2663,10 @@ function pollGamepad() {
   if (openModal) {
     const thresh = 0.5;
 
-    // Gather Navigable Elements
-    // ADDED: .menuLink to catch Endless Mode (which is a span) and removed aria-disabled block
-    const navs = Array.from(openModal.querySelectorAll('button, a, .btn, .tab-btn, .menuLink, input[type="range"], .card, .item, .slot, .item-slot, .perk-btn, .menu-btn, .menu-item, [onclick], [tabindex="0"]'))
-      .filter(el => {
+      // Gather Navigable Elements
+      // ADDED: .menuLink to catch Endless Mode (which is a span) and removed aria-disabled block
+      const navs = Array.from(openModal.querySelectorAll('button, a, .btn, .tab-btn, .menuLink, input[type="range"], select, input[type="checkbox"], .card, .item, .slot, .item-slot, .perk-btn, .menu-btn, .menu-item, [onclick], [tabindex="0"]'))
+          .filter(el => {
         const r = el.getBoundingClientRect();
         const comp = window.getComputedStyle(el);
         return r.width > 0 && r.height > 0 && comp.visibility !== 'hidden' && comp.opacity !== '0';
@@ -2686,12 +2686,24 @@ function pollGamepad() {
             gpState.navMoving = true;
 
             if (focusEl && focusEl.tagName === 'INPUT' && focusEl.type === 'range' && lsX !== 0) {
-               // Slider adjustment
-               const min = focusEl.min ? Number(focusEl.min) : 0;
-               const max = focusEl.max ? Number(focusEl.max) : 100;
-               const step = (max - min) * 0.05 || 5;
-               focusEl.value = Math.max(min, Math.min(max, Number(focusEl.value) + lsX * step));
-               focusEl.dispatchEvent(new Event('input'));
+                // Slider adjustment
+                const min = focusEl.min ? Number(focusEl.min) : 0;
+                const max = focusEl.max ? Number(focusEl.max) : 100;
+                const step = (max - min) * 0.05 || 5;
+                focusEl.value = Math.max(min, Math.min(max, Number(focusEl.value) + lsX * step));
+                focusEl.dispatchEvent(new Event('input', { bubbles: true }));
+                focusEl.dispatchEvent(new Event('change', { bubbles: true }));
+            } else if (focusEl && focusEl.tagName === 'SELECT' && lsX !== 0) {
+                // Select dropdown adjustment
+                const opts = focusEl.options;
+                let idx = focusEl.selectedIndex;
+                idx += lsX;
+                if (idx < 0) idx = 0;
+                if (idx >= opts.length) idx = opts.length - 1;
+                if (focusEl.selectedIndex !== idx) {
+                    focusEl.selectedIndex = idx;
+                    focusEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             } else if (navs.length > 0) {
                if (!navs.includes(focusEl)) {
                    // If lost or first move, snap to the very first item

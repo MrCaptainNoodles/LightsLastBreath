@@ -165,18 +165,28 @@
             <div id="audioSettingsList"></div>
           </div>
           <div id="tab-graphics" class="settings-panel">
-            <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer; margin-bottom:10px;">
-              <div><div style="font-weight:700; color:#60a5fa;">Window Mode</div><div style="font-size:12px; opacity:0.7;">Change display mode.</div></div>
-              <select id="selWindowMode" style="background:#1b2a3a; color:#d9e7f5; border:1px solid var(--chipBorder); padding:6px; border-radius:6px; font-weight:700;">
-                 <option value="fullscreen">Fullscreen</option>
-                 <option value="windowed">Windowed</option>
-              </select>
-            </label>
+              <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer; margin-bottom:10px;">
+                  <div><div style="font-weight:700; color:#60a5fa;">Window Mode</div><div style="font-size:12px; opacity:0.7;">Change display mode.</div></div>
+                  <select id="selWindowMode" style="background:#1b2a3a; color:#d9e7f5; border:1px solid var(--chipBorder); padding:6px; border-radius:6px; font-weight:700;">
+                      <option value="fullscreen">Fullscreen</option>
+                      <option value="windowed">Windowed</option>
+                  </select>
+              </label>
 
-            <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer;">
-              <div><div style="font-weight:700; color:#ff9a8b;">Arachnophobia Mode</div><div style="font-size:12px; opacity:0.7;">Replaces spiders with text labels.</div></div>
-              <input id="chkArachno" type="checkbox" style="width:24px; height:24px; accent-color:#ff9a8b;">
-            </label>
+              <script>
+                  // Send an IPC message to main.js to resize the window instantly
+                  document.getElementById('selWindowMode').addEventListener('change', function (e) {
+                      if (typeof require !== 'undefined') {
+                          const { ipcRenderer } = require('electron');
+                          ipcRenderer.send('set-window-mode', e.target.value);
+                      }
+                  });
+              </script>
+
+              <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer;">
+                  <div><div style="font-weight:700; color:#ff9a8b;">Arachnophobia Mode</div><div style="font-size:12px; opacity:0.7;">Replaces spiders with text labels.</div></div>
+                  <input id="chkArachno" type="checkbox" style="width:24px; height:24px; accent-color:#ff9a8b;">
+              </label>
           </div>
           <div id="tab-gameplay" class="settings-panel">
             <label style="display:flex; align-items:center; justify-content:space-between; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px; cursor:pointer; margin-bottom:15px;">
