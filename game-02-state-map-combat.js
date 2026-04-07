@@ -193,6 +193,12 @@ function getBossName(type){
 
 // ====== Map Gen ======
 function gen(){
+   // Clear the event log at the start of every new run
+   if (state.floor === 1) {
+     state._log = [];
+     if (typeof renderLog === 'function') renderLog();
+   }
+
    state.noFog = false;
    
    // Apply Cursed Descent flag from previous floor

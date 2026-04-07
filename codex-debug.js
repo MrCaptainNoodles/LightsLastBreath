@@ -51,6 +51,8 @@ updateEquipUI();
       S.map = null;
 
       S.eventLog = [];
+      S._log = []; // Clear the actual event log array
+      if (typeof renderLog === 'function') renderLog(); // Update the UI immediately
 
       hide('gameOverModal');
       hide('inventoryModal');
@@ -133,6 +135,17 @@ if (restartBtn) {
     dbg.inp   = document.getElementById('dbgFloor');
     dbg.btn   = document.getElementById('dbgGo');
     dbg.depthChip = document.getElementById('floorChip');
+
+    // --- NEW: Clear Log early on Menu Return / Restart ---
+    const clearLog = () => {
+      if (typeof state !== 'undefined') state._log = [];
+      if (typeof renderLog === 'function') renderLog();
+    };
+    // Attach to all buttons that leave a run or start class selection
+    ['btnRestart', 'btnQuitNoSave', 'btnReturnToMenu', 'btnTutReturn', 'btnScoreMenu', 'btnClassic', 'btnTutorial'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', clearLog);
+    });
 
     // --- NEW: Wire Insta Kill Button ---
     const btnKill = document.getElementById('dbgInstaKill');

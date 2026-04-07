@@ -257,17 +257,17 @@ function flashEnemy(e, color='red', ms=100){
 // ===== Per-floor enemy templates =====
 function floorEnemyKinds(){
   const f = state.floor | 0;
-  const scale = 1 + Math.max(0, f - 1) * 0.25; // Increased to 25% per floor
+  const scale = 1 + Math.max(0, f - 1) * 0.20; // Increased to 25% per floor
 
   // base (floor 1) stats, then scale every floor
   const base = {
-    Rat:      { hp: 4, atk:[2,3], xp: 3 },
-    Bat:      { hp: 3, atk:[2,3], xp: 3 }, // Weak but heals
-    Spider:   { hp: 5, atk:[3,4], xp: 4 }, // Slows you
-    Slime:    { hp: 5, atk:[2,4], xp: 4 },
-    Goblin:   { hp: 6, atk:[3,5], xp: 5 },
-    Skeleton: { hp: 7, atk:[3,6], xp: 6 },
-    Mage:     { hp: 8, atk:[4,7], xp: 7 }
+    Rat:      { hp: 4, atk:[1,2], xp: 3 },
+    Bat:      { hp: 3, atk:[1,2], xp: 3 }, // Weak but heals
+    Spider:   { hp: 5, atk:[2,3], xp: 4 }, // Slows you
+    Slime:    { hp: 5, atk:[1,3], xp: 4 },
+    Goblin:   { hp: 6, atk:[2,6], xp: 5 },
+    Skeleton: { hp: 7, atk:[2,7], xp: 6 },
+    Mage:     { hp: 8, atk:[3,6], xp: 7 }
   };
 
   // progressive availability
