@@ -911,16 +911,18 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
         }
       }
       
+      const eName = e.displayName || (e.elite ? 'Elite ' + e.type : e.type);
+
       if (adj) {
         const dmg = rand(e.atk[1] * 2, e.atk[1] * 3); // Massive Dmg
         state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
         flashDamage();
         spawnFloatText("CRUSH: " + dmg, state.player.x, state.player.y, '#ff0000');
-        log(`The ${e.type} CRUSHES you for ${dmg}!`);
+        log(`The ${eName} CRUSHES you for ${dmg}!`);
         updateBars();
         if (state.player.hp <= 0){ triggerGameOver(); return; }
       } else {
-        log(`The ${e.type} swings wildly and misses!`);
+        log(`The ${eName} swings wildly and misses!`);
         spawnFloatText("Miss!", e.x, e.y, '#9ca3af');
       }
       continue; 
@@ -950,7 +952,8 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
     // "Sprinkled in" - mostly they will skip this and do normal attacks below
     if ((e.boss || e.elite) && !e.charging && !e.recovering && d2p <= 2 && Math.random() < 0.15) {
        e.charging = true;
-       log(`The ${e.type} begins to charge a massive attack!`);
+       const eName = e.displayName || (e.elite ? 'Elite ' + e.type : e.type);
+       log(`The ${eName} begins to charge a massive attack!`);
        spawnFloatText("⚠️ CHARGING", e.x, e.y, '#ffae00');
        continue; // Skip normal movement
     }
@@ -1104,7 +1107,8 @@ clearStraightLine(e.x, e.y, state.player.x, state.player.y)) {
 
           flashDamage();
           SFX.enemyHit?.();
-          log(`${e.type} hits you for ${dmg}.`);
+          const eName = e.displayName || (e.elite ? 'Elite ' + e.type : e.type);
+          log(`${eName} hits you for ${dmg}.`);
           updateBars();
           if (state.player.hp <= 0){ triggerGameOver(); return; }
       }
@@ -1126,10 +1130,11 @@ if (adjacent){
   // --- NEW: Enemy Accuracy Check ---
   // Base 85% accuracy. Bosses/Elites get 95%.
   const accuracy = (e.boss || e.elite) ? 0.95 : 0.85;
+  const eName = e.displayName || (e.elite ? 'Elite ' + e.type : e.type);
   
   if (Math.random() > accuracy) {
         spawnFloatText("Miss", state.player.x, state.player.y, '#9ca3af');
-        log(`The ${e.type} attacks but misses you.`);
+        log(`The ${eName} attacks but misses you.`);
         continue; // Skip the rest of the attack logic
       }
       // ---------------------------------
@@ -1246,7 +1251,7 @@ if (adjacent){
           state.player.hp = clamp(state.player.hp - dmg, 0, state.player.hpMax);
           flashDamage();
           SFX.enemyHit?.();
-          log(`${e.type} hits you for ${dmg}.`);
+          log(`${eName} hits you for ${dmg}.`);
           updateBars();
           if (state.player.hp <= 0){ triggerGameOver(); return; }
       }
