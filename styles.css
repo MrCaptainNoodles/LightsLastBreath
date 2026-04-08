@@ -767,3 +767,31 @@ input[type=range].custom-slider::-webkit-slider-thumb {
   }
 }
 
+/* --- WIDER UI OVERRIDES --- */
+
+/* Make the Inventory screen wider and prevent clipping */
+#invModal .sheet {
+  width: min(760px, 96vw); 
+}
+#invBody {
+  padding: 6px; /* Stops horizontal clipping */
+}
+#invBody .row {
+  padding-top: 6px; /* Makes the tabs section taller */
+  padding-bottom: 6px;
+}
+
+/* Make the Codex screen wider and prevent clipping */
+#codexOverlay .creditsCard {
+  width: min(1200px, 98vw); 
+  padding: min(4vh, 30px) min(4vw, 36px); 
+}
+#codexContent {
+  padding: 8px 0; 
+}
+/* FIX: Keep codex rows from touching the absolute edges so their auras can shine */
+#codexContent > div {
+  width: 96%;
+  margin-left: auto;
+  margin-right: auto;
+}

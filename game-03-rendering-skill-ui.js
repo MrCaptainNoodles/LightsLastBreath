@@ -2667,14 +2667,14 @@ function updateBars(){
   
   // --- FIX: Ensure Max Stats include Perks (Fixes save/load bug) ---
   if (!state._maxStatsRecalculated) {
-      state._maxStatsRecalculated = true;
-      
-      // Base stats derived from level
-      let expectedHpMax = 20 + ((state.player.level - 1) * 2); // Assuming +2 HP per level
-      let expectedMpMax = 10 + (state.player.level - 1);       // Assuming +1 MP per level
-      let expectedStaminaMax = 10;
+        state._maxStatsRecalculated = true;
+        
+        // Base stats derived from level
+        let expectedHpMax = 20 + ((state.player.level - 1) * 2); // Assuming +2 HP per level
+        let expectedMpMax = 20 + (state.player.level - 1); // Assuming +1 MP per level
+        let expectedStaminaMax = 20;
 
-      // Add Skill Perks
+        // Add Skill Perks
       if (state.skills?.survivability?.perks?.['sur_base']) expectedHpMax += (2 * state.skills.survivability.perks['sur_base']);
       if (state.skills?.hand?.perks?.['hand_b1']) expectedHpMax += (1 * state.skills.hand.perks['hand_b1']);
       if (state.skills?.magic?.perks?.['mag_b1']) expectedMpMax += (2 * state.skills.magic.perks['mag_b1']);

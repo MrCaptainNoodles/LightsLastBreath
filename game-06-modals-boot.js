@@ -3380,9 +3380,9 @@ const CLASSES = {
 };
 
 const SOUL_UPGRADES = {
-  vitality:  { name: 'Vitality',  desc: '+5 Max HP per level.', max: 10, cost: 25 },
+  vitality:  { name: 'Vitality',  desc: '+10 Max HP per level.', max: 10, cost: 25 },
   wisdom:    { name: 'Wisdom',    desc: '+10 Max MP per level.', max: 10, cost: 25 },
-  endurance: { name: 'Endurance', desc: '+5 Max Stamina per level.', max: 10, cost: 25 },
+  endurance: { name: 'Endurance', desc: '+10 Max Stamina per level.', max: 10, cost: 25 },
   vision:    { name: 'Night Owl', desc: '+1 Vision Range per level.', max: 3, cost: 75 },
   pockets:   { name: 'Prepared',  desc: 'Start with +1 Potion per level.', max: 3, cost: 150 },
   greed:     { name: 'Greed',     desc: 'Start with +25 Gold per level.', max: 4, cost: 50 }
@@ -3809,19 +3809,19 @@ function doRestart(className){
   state.player.xp = 0;
   state.player.next = PLAYER_XP_START;          
   state.player.hpMax = 20;
-  state.player.mpMax = 10;
+  state.player.mpMax = 20;
   
   // --- NEW: Stamina Init ---
-  state.player.staminaMax = 10;
-  state.player.stamina = 10;
+  state.player.staminaMax = 20;
+  state.player.stamina = 20;
 
 // --- HARD RESET PLAYER STATE (Moved Above Class Modifiers) ---
   state.player = {
     x:0, y:0, rx:0, ry:0,
     level:1, xp:0, next:PLAYER_XP_START,
-    hpMax:20, mpMax:10,
-    hp:20, mp:10,
-    stamina:10, staminaMax:10,
+    hpMax:20, mpMax:20,
+    hp:20, mp:20,
+    stamina:20, staminaMax:20,
   poisoned:false, poisonTicks:0,
   facing:'down',
   bow:{ range:5, loaded:0 },
@@ -3875,9 +3875,9 @@ function doRestart(className){
   const isTut = (state.gameMode === 'tutorial');
 
   if (!isTut) {
-    state.player.hpMax += ((meta[upgPrefix+'vitality']||0) * 5);
+    state.player.hpMax += ((meta[upgPrefix+'vitality']||0) * 10);
     state.player.mpMax += ((meta[upgPrefix+'wisdom']||0) * 10);
-    state.player.staminaMax += ((meta[upgPrefix+'endurance']||0) * 5); // <--- Added: Apply Max Stamina boost
+    state.player.staminaMax += ((meta[upgPrefix+'endurance']||0) * 10); // <--- Added: Apply Max Stamina boost
   }
 
   state.player.hp = state.player.hpMax;
@@ -4797,13 +4797,65 @@ function useStaff(w) {
                 }
 
                 // --- FIX: Apply Durability Loss ---
-                handleSuccessfulHitDurabilityTick();
-                // ----------------------------------
+      handleSuccessfulHitDurabilityTick();
+      // ----------------------------------
 
-                if(t.hp<=0) {
-                    // Use new central handler
-                    handleEnemyDeath(t, 'magic');
-                }
+      // --- NEW: Staff Basic Attack Elemental Procs (25% Chance) ---
+      if (t.hp > 0 && Math.random() < 0.25) {
+          if (w.name.includes('Fire')) {
+              if (typeof applyBleed === 'function') applyBleed(t, 3, 2); 
+              spawnFloatText("BURN", t.x, t.y, '#f97316');
+              log(`The ${t.type} catches fire!`);
+          }
+          else if (w.name.includes('Ice')) {
+              if (typeof applySlow === 'function') applySlow(t, 3);
+              spawnFloatText("SLOWED", t.x, t.y, '#38bdf8');
+              log(`The ${t.type} is chilled to the bone!`);
+          }
+          else if (w.name.includes('Earth')) {
+              if (typeof applyStun === 'function') applyStun(t, 2);
+              spawnFloatText("STUNNED", t.x, t.y, '#facc15');
+              log(`The ${t.type} is stunned by the impact!`);
+          }
+          else if (w.name.includes('Wind')) {
+              const pushX = t.x + Math.sign(t.x - state.player.x);
+              const pushY = t.y + Math.sign(t.y - state.player.y);
+              if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
+                  t.x = pushX; t.y = pushY;
+                  spawnFloatText("PUSHED", pushX, pushY, '#9ca3af');
+                  log(`The ${t.type} is blown back!`);
+              }
+          }
+          else if (w.name.includes('Light')) {
+              let currentTarget = t;
+              let chainChance = 1.0; 
+              let chainDmg = Math.max(1, Math.floor(dmg * 0.75));
+              const hitList = new Set([t]);
+              for (let bounces = 0; bounces < 3; bounces++) {
+                  if (Math.random() > chainChance) break;
+                  const nextTarget = state.enemies.find(en => 
+                      en.hp > 0 && !hitList.has(en) && 
+                      Math.abs(en.x - currentTarget.x) <= 1 && Math.abs(en.y - currentTarget.y) <= 1
+                  );
+                  if (!nextTarget) break; 
+                  hitList.add(nextTarget);
+                  nextTarget.hp -= chainDmg;
+                  spawnFloatText(chainDmg + " (Chain)", nextTarget.x, nextTarget.y, '#fde047');
+                  if (typeof spawnParticles === 'function') spawnParticles(nextTarget.x, nextTarget.y, '#fde047', 6);
+                  log(`Lightning chains to the ${nextTarget.type} for ${chainDmg}!`);
+                  if (nextTarget.hp <= 0) handleEnemyDeath(nextTarget, 'magic');
+                  currentTarget = nextTarget;
+                  chainDmg = Math.max(1, Math.floor(chainDmg * 0.75)); 
+                  chainChance *= 0.50; 
+              }
+          }
+      }
+      // ------------------------------------------------------------
+
+      if(t.hp<=0) {
+         // Use new central handler
+         handleEnemyDeath(t, 'magic');
+      }
             }
             enemyStep(); draw();
         }

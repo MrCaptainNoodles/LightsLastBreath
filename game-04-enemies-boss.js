@@ -257,7 +257,7 @@ function flashEnemy(e, color='red', ms=100){
 // ===== Per-floor enemy templates =====
 function floorEnemyKinds(){
   const f = state.floor | 0;
-  const scale = 1 + Math.max(0, f - 1) * 0.15; // Increased to 15% per floor
+  const scale = 1 + Math.max(0, f - 1) * 0.10; // Increased to 15% per floor
 
   // base (floor 1) stats, then scale every floor
   const base = {
@@ -692,6 +692,7 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
   const dist = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
   if (dist <= 1) {
     state.player.hp = 0;
+    if (typeof unlockCodex === 'function') unlockCodex('Reaper', true);
     triggerGameOver();
     log("The Reaper claims your soul.");
   }

@@ -668,6 +668,7 @@ setTimeout(() => {
     delete state.player.movementSlowed;
 
 // Cleanup Floor Effects
+const prevEffect = Array.isArray(state.floorEffect) ? state.floorEffect[0] : state.floorEffect;
 state.floorEffect = []; 
 delete state.player.tempVisionRange;
 
@@ -714,23 +715,52 @@ if (nextFloor % 10 !== 0) {
     }
     // --- CLASSIC MODE ---
     else if (!isEndless) {
-       const roll = Math.random();
-       if (roll < 0.20) { state.floorEffect = 'Bloodhunt'; newBgColor = 'rgba(190,24,93,0.14)'; }
-       else if (roll < 0.40) { state.floorEffect = 'AntiMagic'; newBgColor = 'rgba(100, 100, 100, 0.25)'; }
-       else if (roll < 0.60) { state.floorEffect = 'ArcaneFlux'; newBgColor = 'rgba(147, 51, 234, 0.15)'; }
-       else if (roll < 0.80) { state.floorEffect = 'MiasmaChamber'; newBgColor = 'rgba(34,197,94,0.18)'; }
+       let picked = false;
+       while (!picked) {
+           const roll = Math.random();
+           let eff = null;
+           let bg = 'rgba(0,0,0,0)';
+           
+           if (roll < 0.20) { eff = 'Bloodhunt'; bg = 'rgba(190,24,93,0.14)'; }
+           else if (roll < 0.40) { eff = 'AntiMagic'; bg = 'rgba(100, 100, 100, 0.25)'; }
+           else if (roll < 0.60) { eff = 'ArcaneFlux'; bg = 'rgba(147, 51, 234, 0.15)'; }
+           else if (roll < 0.80) { eff = 'MiasmaChamber'; bg = 'rgba(34,197,94,0.18)'; }
+
+           if (eff && eff === prevEffect) continue; // Reroll if it's a duplicate of the last floor
+           
+           if (eff) { state.floorEffect = eff; newBgColor = bg; }
+           picked = true;
+       }
     }
     // --- ENDLESS MODE (Floors 1-49) ---
     else {
-        const roll = Math.random();
-        if (roll < 0.12) { state.floorEffect = 'MiasmaChamber'; newBgColor = 'rgba(34,197,94,0.18)'; }
-        else if (roll < 0.24) { state.floorEffect = 'ShadowLabyrinth'; state.player.tempVisionRange = 2; }
-        else if (roll < 0.36) { state.floorEffect = 'Bloodhunt'; newBgColor = 'rgba(190,24,93,0.14)'; }
-        else if (roll < 0.48) { state.floorEffect = 'GlacialFreeze'; newBgColor = 'rgba(165, 243, 252, 0.15)'; }
-        else if (roll < 0.60) { state.floorEffect = 'VolatileAether'; newBgColor = 'rgba(234, 88, 12, 0.15)'; state.explosions = []; }
-        else if (roll < 0.72) { state.floorEffect = 'AntiMagic'; newBgColor = 'rgba(100, 100, 100, 0.25)'; }
-        else if (roll < 0.84) { state.floorEffect = 'ArcaneFlux'; newBgColor = 'rgba(147, 51, 234, 0.15)'; }
-        else if (roll < 0.96) { state.floorEffect = 'StaminaDrain'; newBgColor = 'rgba(234, 234, 234, 0.15)'; }
+       let picked = false;
+       while (!picked) {
+           const roll = Math.random();
+           let eff = null;
+           let bg = 'rgba(0,0,0,0)';
+           let doVision = false;
+           let doExplosions = false;
+
+           if (roll < 0.12) { eff = 'MiasmaChamber'; bg = 'rgba(34,197,94,0.18)'; }
+           else if (roll < 0.24) { eff = 'ShadowLabyrinth'; doVision = true; }
+           else if (roll < 0.36) { eff = 'Bloodhunt'; bg = 'rgba(190,24,93,0.14)'; }
+           else if (roll < 0.48) { eff = 'GlacialFreeze'; bg = 'rgba(165, 243, 252, 0.15)'; }
+           else if (roll < 0.60) { eff = 'VolatileAether'; bg = 'rgba(234, 88, 12, 0.15)'; doExplosions = true; }
+           else if (roll < 0.72) { eff = 'AntiMagic'; bg = 'rgba(100, 100, 100, 0.25)'; }
+           else if (roll < 0.84) { eff = 'ArcaneFlux'; bg = 'rgba(147, 51, 234, 0.15)'; }
+           else if (roll < 0.96) { eff = 'StaminaDrain'; bg = 'rgba(234, 234, 234, 0.15)'; }
+
+           if (eff && eff === prevEffect) continue; // Reroll if it's a duplicate of the last floor
+
+           if (eff) { 
+               state.floorEffect = eff; 
+               newBgColor = bg; 
+               if (doVision) state.player.tempVisionRange = 2;
+               if (doExplosions) state.explosions = [];
+           }
+           picked = true;
+       }
     }
 }
 
@@ -2729,15 +2759,22 @@ function useWeaponArt(){
   else if (t === 'one') {
     // --- FIX: Auto-target any adjacent enemy regardless of which way the player is facing ---
     const nbs = neighbors4(state.player.x, state.player.y);
-    const e = state.enemies.find(en => nbs.some(n => n.x===en.x && n.y===en.y));
+    const e = state.enemies.find(en => {
+      const s = en.size || 1;
+      return nbs.some(n => n.x >= en.x && n.x < en.x + s && n.y >= en.y && n.y < en.y + s);
+    });
     
     if (e) {
+      const s = e.size || 1;
       // Calc direction from player to enemy dynamically
-      const dx = e.x - state.player.x;
-      const dy = e.y - state.player.y;
+      let dx = 0, dy = 0;
+      if (state.player.x < e.x) dx = 1;
+      else if (state.player.x >= e.x + s) dx = -1;
+      if (state.player.y < e.y) dy = 1;
+      else if (state.player.y >= e.y + s) dy = -1;
       
       // Calc spot behind enemy
-      const bx = e.x + dx, by = e.y + dy;
+      const bx = state.player.x + dx * (s + 1), by = state.player.y + dy * (s + 1);
       if (inBounds(bx, by) && state.tiles[by][bx] === 1 && !enemyAt(bx, by)) {
         // Teleport (Snap visuals)
         state.player.x = bx; state.player.y = by;
