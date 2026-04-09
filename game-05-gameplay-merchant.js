@@ -3102,12 +3102,19 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
       log(`The ${target.type} is stunned by the impact!`);
   }
   else if (spell.name === 'Gust' && Math.random() < 0.25) {
-      const pushX = target.x + Math.sign(target.x - state.player.x);
-      const pushY = target.y + Math.sign(target.y - state.player.y);
-      // Ensure the tile behind them is empty floor
-      if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
-          target.x = pushX; target.y = pushY;
-          spawnFloatText("PUSHED", pushX, pushY, '#9ca3af');
+      const dx = Math.sign(target.x - state.player.x);
+      const dy = Math.sign(target.y - state.player.y);
+      let pushed = false;
+      for (let step = 0; step < 2; step++) {
+          const pushX = target.x + dx;
+          const pushY = target.y + dy;
+          if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
+              target.x = pushX; target.y = pushY;
+              pushed = true;
+          } else break;
+      }
+      if (pushed) {
+          spawnFloatText("PUSHED", target.x, target.y, '#9ca3af');
           log(`The ${target.type} is blown back!`);
       }
   }

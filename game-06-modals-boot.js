@@ -4818,11 +4818,19 @@ function useStaff(w) {
               log(`The ${t.type} is stunned by the impact!`);
           }
           else if (w.name.includes('Wind')) {
-              const pushX = t.x + Math.sign(t.x - state.player.x);
-              const pushY = t.y + Math.sign(t.y - state.player.y);
-              if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
-                  t.x = pushX; t.y = pushY;
-                  spawnFloatText("PUSHED", pushX, pushY, '#9ca3af');
+              const dx = Math.sign(t.x - state.player.x);
+              const dy = Math.sign(t.y - state.player.y);
+              let pushed = false;
+              for (let step = 0; step < 2; step++) {
+                  const pushX = t.x + dx;
+                  const pushY = t.y + dy;
+                  if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
+                      t.x = pushX; t.y = pushY;
+                      pushed = true;
+                  } else break;
+              }
+              if (pushed) {
+                  spawnFloatText("PUSHED", t.x, t.y, '#9ca3af');
                   log(`The ${t.type} is blown back!`);
               }
           }
