@@ -647,7 +647,7 @@ const CODEX_DEF = {
   // --- Weapon Effects ---
   Sharp:    { name:'Prefix: Sharp',    desc:'Refined edge. Increases Min and Max damage by 1.', seen:false },
   Heavy:    { name:'Prefix: Heavy',    desc:'Weighted for impact. Increases Max damage by 3.', seen:false },
-  Vampiric: { name:'Prefix: Vampiric', desc:'Drains life essence. Heals 1 HP on successful hits.', seen:false },
+  Vampiric: { name:'Prefix: Vampiric', desc:'Drains life essence. Heals for 25% of the damage dealt on successful hits.', seen:false },
 Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Max damage by 2.', seen:false },
   
   // --- NEW: Curses ---

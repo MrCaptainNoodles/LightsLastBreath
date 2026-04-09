@@ -2656,74 +2656,91 @@ function useWeaponArt(){
     const dirs = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
     const [dx,dy] = dirs[state.player.facing || 'down'];
     
-    // Target must be EXACTLY 5 tiles away
-    const tx = state.player.x + (dx * range);
-    const ty = state.player.y + (dy * range);
+    let targetE = null;
+    let tx = state.player.x;
+    let ty = state.player.y;
     
-    const e = state.enemies.find(en => {
-      const s = en.size || 1;
-      return tx >= en.x && tx < en.x + s && ty >= en.y && ty < en.y + s;
-    });
+    for (let r = 1; r <= range; r++) {
+        tx = state.player.x + (dx * r);
+        ty = state.player.y + (dy * r);
+        
+        // Stop at walls or closed doors
+        if (!inBounds(tx, ty) || state.tiles[ty][tx] === 0 || state.tiles[ty][tx] === 2) {
+            tx -= dx;
+            ty -= dy;
+            break;
+        }
+        
+        const e = state.enemies.find(en => {
+          const s = en.size || 1;
+          return tx >= en.x && tx < en.x + s && ty >= en.y && ty < en.y + s;
+        });
+        
+        if (e) {
+            targetE = e;
+            break;
+        }
+    }
     
-    if (e) {
+    if (targetE) {
         // Calculate Massive Damage (3x Base)
         const dmg = rand(w.min, w.max) * 3;
-        e.hp -= dmg;
+        targetE.hp -= dmg;
         
         // Visuals
         SFX.swingFor('axe');
-        spawnFloatText(dmg + "!!", e.x, e.y, '#ff0000');
-        spawnParticles(e.x, e.y, '#ef4444', 8);
-        flashEnemy(e, 'red');
+        spawnFloatText(dmg + "!!", targetE.x, targetE.y, '#ff0000');
+        spawnParticles(targetE.x, targetE.y, '#ef4444', 8);
+        flashEnemy(targetE, 'red');
         
-        log(`You HURL your ${w.name} at the ${e.type}!`);
+        log(`You HURL your ${w.name} at the ${targetE.type}!`);
         
         // Handle Kill
-        if(e.hp <= 0) { 
-            handleEnemyDeath(e, t);
+        if(targetE.hp <= 0) { 
+            handleEnemyDeath(targetE, t);
         }
-
-        // DROP LOGIC
-        // Drop 1 tile in front of enemy (from player's perspective)
-        const dropX = tx - dx;
-        const dropY = ty - dy;
-        
-        if (inBounds(dropX, dropY) && state.tiles[dropY][dropX] === 1) {
-            const k = key(dropX, dropY);
-            // Create Pickup from current weapon data
-            state.pickups[k] = { kind: 'weapon', payload: { ...w } };
-            state.tiles[dropY][dropX] = 5; // Pickup tile
-            
-            // Remove from Inventory Count
-            if (state.inventory.weapons[w.name]) {
-                state.inventory.weapons[w.name]--;
-                if (state.inventory.weapons[w.name] <= 0) delete state.inventory.weapons[w.name];
-            }
-            
-            // Unequip (Switch to Fists)
-            state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
-            recomputeWeapon();
-            updateInvBody(); // Update inventory UI counts
-            log(`Your weapon drops to the floor.`);
-        } else {
-            log(`Your weapon shattered against the wall!`);
-            state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
-            recomputeWeapon();
-        }
-
-        acted = true;
-        state.player.artCooldown = 0; // No cooldown because you lost the weapon
-        
-        // Projectile Effect (Visual only)
-        spawnProjectileEffect({
-            kind: 'arrow', color: '#a3a3a3', // Metallic projectile
-            fromX: state.player.x, fromY: state.player.y, 
-            toX: tx, toY: ty
-        });
-
     } else {
-        log("No enemy exactly 5 spaces away.");
+        SFX.swingFor('axe');
+        log(`You HURL your ${w.name} through the air!`);
     }
+
+    // DROP LOGIC
+    // Drop 1 tile in front of where it hit/stopped (from player's perspective)
+    const dropX = tx - dx;
+    const dropY = ty - dy;
+    
+    if (inBounds(dropX, dropY) && state.tiles[dropY][dropX] === 1) {
+        const k = key(dropX, dropY);
+        // Create Pickup from current weapon data
+        state.pickups[k] = { kind: 'weapon', payload: { ...w } };
+        state.tiles[dropY][dropX] = 5; // Pickup tile
+        
+        // Remove from Inventory Count
+        if (state.inventory.weapons[w.name]) {
+            state.inventory.weapons[w.name]--;
+            if (state.inventory.weapons[w.name] <= 0) delete state.inventory.weapons[w.name];
+        }
+        
+        // Unequip (Switch to Fists)
+        state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
+        recomputeWeapon();
+        updateInvBody(); // Update inventory UI counts
+        log(`Your weapon drops to the floor.`);
+    } else {
+        log(`Your weapon shattered against the wall!`);
+        state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
+        recomputeWeapon();
+    }
+
+    acted = true;
+    state.player.artCooldown = 0; // No cooldown because you lost the weapon
+    
+    // Projectile Effect (Visual only)
+    spawnProjectileEffect({
+        kind: 'arrow', color: '#a3a3a3', // Metallic projectile
+        fromX: state.player.x, fromY: state.player.y, 
+        toX: tx, toY: ty
+    });
   }
   
   // 2. PIERCE (Spear): Attack 2 tiles in a line
