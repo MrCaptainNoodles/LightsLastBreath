@@ -2613,7 +2613,10 @@ function useWeaponArt(){
         
         const tx = state.player.x + dx;
         const ty = state.player.y + dy;
-        const e = enemyAt(tx, ty);
+        const e = state.enemies.find(en => {
+          const s = en.size || 1;
+          return tx >= en.x && tx < en.x + s && ty >= en.y && ty < en.y + s;
+        });
         
         if (e && !hitList.has(e)) {
           hitList.add(e);
@@ -2657,7 +2660,10 @@ function useWeaponArt(){
     const tx = state.player.x + (dx * range);
     const ty = state.player.y + (dy * range);
     
-    const e = enemyAt(tx, ty);
+    const e = state.enemies.find(en => {
+      const s = en.size || 1;
+      return tx >= en.x && tx < en.x + s && ty >= en.y && ty < en.y + s;
+    });
     
     if (e) {
         // Calculate Massive Damage (3x Base)
@@ -2727,11 +2733,11 @@ function useWeaponArt(){
     
     // Check tile 1
     let tx = state.player.x + dx, ty = state.player.y + dy;
-    let e1 = enemyAt(tx, ty);
+    let e1 = state.enemies.find(en => { const s = en.size || 1; return tx >= en.x && tx < en.x + s && ty >= en.y && ty < en.y + s; });
     
     // Check tile 2
     let tx2 = tx + dx, ty2 = ty + dy;
-    let e2 = enemyAt(tx2, ty2);
+    let e2 = state.enemies.find(en => { const s = en.size || 1; return tx2 >= en.x && tx2 < en.x + s && ty2 >= en.y && ty2 < en.y + s && en !== e1; });
     
     if (e1 || e2) {
       SFX.swingFor('spear');
@@ -2803,7 +2809,10 @@ function useWeaponArt(){
   // 4. FLURRY (Fists): 3 rapid hits for 60% dmg each
   else if (t === 'hand') {
     const nbs = neighbors4(state.player.x, state.player.y);
-    const e = state.enemies.find(en => nbs.some(n => n.x===en.x && n.y===en.y));
+    const e = state.enemies.find(en => {
+      const s = en.size || 1;
+      return nbs.some(n => n.x >= en.x && n.x < en.x + s && n.y >= en.y && n.y < en.y + s);
+    });
     
     if(e){
       let total = 0;

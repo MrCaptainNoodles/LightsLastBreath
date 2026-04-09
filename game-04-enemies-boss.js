@@ -570,7 +570,7 @@ function enemyStep(){
         log('Your Survivability shrugs off the poison.');
       }
     }
-    if (t === 0){ state.player.poisoned = false; log('The poison fades.'); }
+    if (t === 0){ state.player.poisoned = false; log('The poison fades.'); updateBars(); }
   }
 
 if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
@@ -997,7 +997,7 @@ if (state.gameMode !== 'classic' && state.floorEffect === 'Bloodhunt') {
 
 // If enemy is ranged (range > 1) AND is currently within attack range 
 // AND is NOT adjacent to the player (dist > 1) 
-if (eRange > 1 && distToPlayer <= eRange && distToPlayer > 1) {
+if (eRange > 1 && distToPlayer <= eRange && distToPlayer > 1 && !e.boss) {
     // Halt movement to maintain the optimal firing distance.
     moves = 0; 
     // We still allow 'fast' enemies (like Goblins) to keep moving to prevent
@@ -1267,6 +1267,7 @@ if (adjacent){
             }
             state.player.poisoned = true;
             state.player.poisonTicks = Math.max(state.player.poisonTicks|0, 15);
+            updateBars();
         }
       }
 
