@@ -14,6 +14,15 @@ function collectIfPickup(){
         // ---------------------------------
         SFX.pickup();
         state.inventory.weapons[it.payload.name]=(state.inventory.weapons[it.payload.name]||0)+1;
+        
+        // --- FIX: Preserve thrown weapon durability ---
+        if (it.payload.dur !== undefined) {
+            state.inventory.stashed = state.inventory.stashed || {};
+            if (!state.inventory.stashed[it.payload.name]) state.inventory.stashed[it.payload.name] = [];
+            state.inventory.stashed[it.payload.name].push(it.payload);
+        }
+        // ----------------------------------------------
+        
         log(`Picked up ${it.payload.name} (now x${state.inventory.weapons[it.payload.name]}).`);
 
         // --- NEW: Codex Unlock (Weapons) ---
@@ -2733,9 +2742,9 @@ function useWeaponArt(){
     }
 
     acted = true;
-    state.player.artCooldown = 0; // No cooldown because you lost the weapon
+    state.player.artCooldown = 15; 
     
-    // Projectile Effect (Visual only)
+    // Projectile Effect (Visual only)// Projectile Effect (Visual only)
     spawnProjectileEffect({
         kind: 'arrow', color: '#a3a3a3', // Metallic projectile
         fromX: state.player.x, fromY: state.player.y, 
