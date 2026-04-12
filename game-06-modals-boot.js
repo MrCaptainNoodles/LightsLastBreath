@@ -1174,7 +1174,7 @@ function useBomb(){
         }
       }
     }
-log(`You throw a bomb! Hit ${hitCount} foes.`);
+log(`You throw a bomb! Hit ${hitCount} foes. (${state.inventory.bombs})`);
     
     // Force close inventory to show the explosion
     const m = document.getElementById('invModal');
@@ -1219,10 +1219,10 @@ function useWarpStone(){
       // Snap visuals instantly
       state.player.rx = spot.x; state.player.ry = spot.y; 
       
-      log("You warp through the ether!");
+      log(`You warp through the ether! (${state.inventory.warpStones})`);
       spawnFloatText("WARP", state.player.x, state.player.y, '#00ffff');
     } else {
-      log(" The warp fizzles...");
+      log(` The warp fizzles... (${state.inventory.warpStones})`);
     }
     
     updateInvBody();
@@ -1266,7 +1266,7 @@ function usePotion(){
     // --- NEW: Record heal for Shadow ---
     state.lastPlayerAction = { type: 'heal', amount: healed };
     updateBars();
-    log(`Drank a potion (+${healed} HP).`);
+    log(`Drank a potion (+${healed} HP). (${state.inventory.potions})`);
 
     // Iron Stomach (sur_c7) - Temporary +2 Damage buff
     if (state.skills?.survivability?.perks?.['sur_c7']) {
@@ -1317,7 +1317,7 @@ function useTonic(){
 
     SFX.drink();
     updateBars();
-    log(`Used a tonic (+${restored} MP).`);
+    log(`Used a tonic (+${restored} MP). (${state.inventory.tonics})`);
     
     // --- TUTORIAL Step 10 (Tonic) ---
     if (state.gameMode === 'tutorial' && state.tutorialStep === 10) {
@@ -1345,7 +1345,7 @@ function useAntidote(){
     if (state.player.poisoned) { state.player.poisoned = false; state.player.poisonTicks = 0; }
     SFX.drink();;
     updateBars();
-    log('You use an antidote. The poison is cured.');
+    log(`You use an antidote. The poison is cured. (${state.inventory.antidotes})`);
     
     // --- TUTORIAL Step 7 (Antidote Part) ---
     if (state.gameMode === 'tutorial' && state.tutorialStep === 7) {
@@ -2531,19 +2531,22 @@ function updateControlUI(type) {
   const controls = isGP ? [
     ['L-Stick', 'Move / Navigate'],
     [isPS ? 'L1' : 'LB', 'Sprint (Hold)'],
+    [isPS ? 'R1' : 'RB', 'Spell Menu'],
     [isPS ? 'Cross' : 'A', 'Attack / Select'],
     [isPS ? 'Square' : 'X', 'Interact / Open'],
-    [isPS ? 'Circle' : 'B', 'Cast Spell'],
     [isPS ? 'Triangle' : 'Y', 'Cycle Spells'],
-    [isPS ? 'R2' : 'RT', 'Weapon Art'],
+    [isPS ? 'Circle' : 'B', 'Cast Spell'],
     [isPS ? 'L2' : 'LT', 'Bow (Shoot)'],
+    [isPS ? 'R2' : 'RT', 'Weapon Art'],
     ['D-Pad Up', 'Use Potion'],
     ['D-Pad Down', 'Use Tonic'],
     ['D-Pad Left', 'Use Antidote'],
     ['D-Pad Right', 'Use Bomb'],
+    ['L3', 'Toggle Help'],
     ['R3', 'Skills Menu'],
-    [isPS ? 'Share' : 'Select', 'Inventory / Pause'],
-    ['L3', 'Toggle Help']
+    [isPS ? 'Options' : 'Start', 'Menu'],
+    [isPS ? 'Share' : 'Select', 'Inventory']
+    
   ] : [
     ['WASD / Arrows', 'Move'], ['Shift + Move', 'Sprint'], ['Space', 'Attack'], ['E', 'Interact'], ['Q', 'Cast'],
     ['F', 'Cycle Spells'], ['R', 'Weapon Art'], ['B', 'Bow'], 

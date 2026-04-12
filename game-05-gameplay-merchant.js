@@ -1107,7 +1107,7 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           SFX.lockSuccess();
 
           if (hasKey) log('The Key of Destiny unlocks the path.');
-          else        log('You pick the lock and open the door.');
+          else        log(`You pick the lock and open the door. (${state.inventory.lockpicks})`);
 
           if (state.gameMode === 'tutorial') {
             // --- TUTORIAL Step 12 (Door) ---
@@ -1119,7 +1119,7 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           }
         } else {
           SFX.lockFail();
-          log('Lockpick attempt failed.');
+          log(`Lockpick attempt failed. (${state.inventory.lockpicks})`);
         }
 
         draw(); did = true;
@@ -1675,6 +1675,14 @@ function equipWeaponByName(name){
     return;
   }
 
+// --- TUTORIAL Step 4 -> 5 (Equip Warhammer) ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && name === 'Warhammer') {
+      state.tutorialStep = 5;
+      state.player.stamina = 20; // Refill stamina for Art (updated for new max stats)
+      hideBanner();
+      showBanner(`Step 5: Weapon Arts: Walk to the 3 rats and press (${getInputName('art')}).`, 999999);
+    }
+
   if (name !== 'Fists' && stashedCnt > 0){
   const w = stashArr.pop();
 
@@ -1691,15 +1699,6 @@ function equipWeaponByName(name){
   updateEquipUI();
   return;
 }
-
-// --- TUTORIAL Step 4 -> 5 (Equip Warhammer) ---
-    if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && name === 'Warhammer') {
-      state.tutorialStep = 5;
-      state.player.stamina = 10; // refill stamina for Art
-      hideBanner();
-      showBanner(`Step 5: Weapon Arts: Walk to the 3 rats and press (${getInputName('art')}).`, 999999);
-    }
-
 
   // 3) Otherwise build a fresh copy (full durability)
   // --- FIX: Parse Affixes so we can look up base stats ---
@@ -1740,7 +1739,8 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
   
   // --- NEW: Preserve Cursed properties when rebuilding fresh weapon ---
   const isCursed = name.includes('Cursed ');
-  const cType = isCursed ? (name.includes('blood') ? 'blood' : (name.includes('greed') ? 'greed' : (name.includes('frailty') ? 'frailty' : 'rust'))) : null; 
+  const nameLower = name.toLowerCase();
+  const cType = isCursed ? (nameLower.includes('blood') ? 'blood' : (nameLower.includes('greed') ? 'greed' : (nameLower.includes('frailty') ? 'frailty' : 'rust'))) : null; 
 
   state.player.weapon = {
     name, // Keep full name "Cursed Shortsword"

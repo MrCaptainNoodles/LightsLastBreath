@@ -97,7 +97,7 @@ async function say(text){
 const PLAYER_XP_START   = 22;   
 const PLAYER_XP_GROWTH  = 1.20; // Smoother late-game leveling
 const SKILL_XP_START    = 25;   // Increased starting XP required
-const SKILL_XP_GROWTH   = 1.45; // Increased to slow down skill maxing
+const SKILL_XP_GROWTH   = 1.32; // Increased to slow down skill maxing
 
 
 
@@ -1996,10 +1996,10 @@ async function startTutorial(e){
     }
   }
 
-  // --- 3. Player Start ---
+ // --- 3. Player Start ---
   state.player.x = 10; state.player.y = 6;
   state.player.rx=10; state.player.ry=6;
-  state.player.stamina = 10;
+  state.player.stamina = 20;
   state.seen = new Set(['10,6']);
 
   // --- 4. Place Static Obstacles ---
