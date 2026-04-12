@@ -136,12 +136,13 @@ if (tgtS) tgtS.onclick = ()=>{ bsTarget='shield'; refreshBsUI(); };
   if (b5) b5.onclick = ()=>doRepair(5);
   if (bf) bf.onclick = ()=>doRepair(999);
 
-  // global open
+// global open
  window.openBlacksmith = function openBlacksmith(){
   unlockCodex('Blacksmith'); // <--- ADD THIS
   
+  // Check if player is bare-handed
   if (state.player.weapon && state.player.weapon.name === 'Fists') {
-    playNpcDialogue('https://cdn.jsdelivr.net/gh/MrCaptainNoodles/LightsLastBreath@main/npc_blacksmith_fists.mp3'); // Update to full CDN URL if hosted externally like the others
+    playNpcDialogue('https://cdn.jsdelivr.net/gh/MrCaptainNoodles/LightsLastBreath@main/npc_blacksmith_fists.mp3');
   } else {
     playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.interact);
   }
