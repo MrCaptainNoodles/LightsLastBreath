@@ -139,7 +139,12 @@ if (tgtS) tgtS.onclick = ()=>{ bsTarget='shield'; refreshBsUI(); };
   // global open
  window.openBlacksmith = function openBlacksmith(){
   unlockCodex('Blacksmith'); // <--- ADD THIS
-  playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.interact);
+  
+  if (state.player.weapon && state.player.weapon.name === 'Fists') {
+    playNpcDialogue('https://cdn.jsdelivr.net/gh/MrCaptainNoodles/LightsLastBreath@main/npc_blacksmith_fists.mp3'); // Update to full CDN URL if hosted externally like the others
+  } else {
+    playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.interact);
+  }
 
   refreshBsUI();
   modal.style.display = 'flex';
