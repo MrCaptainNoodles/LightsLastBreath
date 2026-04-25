@@ -43,14 +43,14 @@ function collectIfPickup(){
 
     }else if(it.kind==='potion'){
         SFX.pickup();    
-      state.inventory.potions++; log('Picked up a potion.');
+      state.inventory.potions++; log(`Picked up a potion. (${state.inventory.potions})`);
     }else if(it.kind==='tonic'){
         SFX.pickup();    
-      state.inventory.tonics++; log('Picked up a tonic.');
+      state.inventory.tonics++; log(`Picked up a tonic. (${state.inventory.tonics})`);
 }else if(it.kind==='antidote'){
       SFX.pickup();
       state.inventory.antidotes++;
-      log('Picked up an antidote.');
+      log(`Picked up an antidote. (${state.inventory.antidotes})`);
     }else if(it.kind==='trinket'){
             SFX.pickup();
             state.inventory.trinkets = state.inventory.trinkets || {};
@@ -82,11 +82,11 @@ function collectIfPickup(){
     }else if(it.kind==='bomb'){
       SFX.pickup();
       state.inventory.bombs = (state.inventory.bombs|0) + (it.payload||1);
-      log(`Picked up ${it.payload||1} Bomb(s).`);
+      log(`Picked up ${it.payload||1} Bomb(s). (${state.inventory.bombs})`);
     }else if(it.kind==='warp'){
           SFX.pickup();
           state.inventory.warpStones = (state.inventory.warpStones|0) + (it.payload||1);
-          log(`Picked up ${it.payload||1} Warp Stone(s).`);
+          log(`Picked up ${it.payload||1} Warp Stone(s). (${state.inventory.warpStones})`);
 // ------------------------------------
         }else if(it.kind==='lore'){
         SFX.pickup();
@@ -94,7 +94,7 @@ function collectIfPickup(){
         log(`You found a torn page! Check your Codex.`);
       }else if(it.kind==='lockpicks'){
         SFX.pickup();    
-      state.inventory.lockpicks += it.payload; log(`Picked up ${it.payload} lockpick(s).`);
+      state.inventory.lockpicks += it.payload; log(`Picked up ${it.payload} lockpick(s). (${state.inventory.lockpicks})`);
     } else if (it.kind === 'arrows'){
       SFX.pickup();
       state.inventory.arrows = (state.inventory.arrows | 0) + (it.payload | 0);
@@ -1075,7 +1075,6 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
         if (state.skills?.lockpicking?.perks?.['loc_base']) keepPick = Math.random() < (0.15 * state.skills.lockpicking.perks['loc_base']);
         if (state.skills?.lockpicking?.perks?.['loc_c5']) keepPick = true;
         
-        if (!hasKey && !keepPick) state.inventory.lockpicks--;
 
         // Tutorial OR Key = Instant Success
         let success;
@@ -1085,6 +1084,11 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           const L = state.skills['lockpicking'].lvl || 1;
           const chance = Math.max(0.10, Math.min(0.95, 0.35 + 0.10*(L-1)));
           success = (Math.random() < chance);
+        }
+        
+        if (!success && !hasKey && !keepPick) {
+            state.inventory.lockpicks--;
+            updateInvBody?.(); // Ensure UI reflects the used pick on failure
         }
 
       if (success){
@@ -1252,23 +1256,23 @@ function handlePropSmash(x, y) {
     if (lootR < 0.4) {
       const g = rand(5, 15);
       state.inventory.gold += g;
-      log(`Found ${g} gold inside.`);
+      log(`Found ${g} gold inside. (${state.inventory.gold})`);
       spawnFloatText(`+${g}g`, x, y, '#facc15');
     } else if (lootR < 0.7) {
       state.inventory.arrows += 3;
-      log('Found a bundle of arrows.');
+      log(`Found a bundle of arrows. (${state.inventory.arrows})`);
       spawnFloatText("+3 Arrows", x, y, '#9ca3af');
     } else if (lootR < 0.9) {
       state.inventory.potions++;
-      log('Found a potion.');
+      log(`Found a potion. (${state.inventory.potions})`);
       spawnFloatText("+1 Potion", x, y, '#ef4444');
     } else {
       state.inventory.bombs++;
-      log('Found a bomb!');
+      log(`Found a bomb! (${state.inventory.bombs})`);
       spawnFloatText("+1 Bomb", x, y, '#f97316');
     }
     updateInvBody();
-  } 
+  }
   // 3. Empty (70%)
   else {
     log(`You smash the ${name}. It was empty.`);
