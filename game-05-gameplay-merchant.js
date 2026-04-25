@@ -3256,19 +3256,29 @@ const MERCHANT_WEAPON_NAMES = ['Shortsword','Claymore','Spear','Axe','Knuckle Du
 
 // Pull stats from the same mapping used by equipWeaponByName()
 function weaponStatsFor(name){
+  if (!name) return null;
   let baseName = name;
   let bonMin=0, bonMax=0;
   
+  // FIX: Extract +X upgrade level dynamically and add to base damage
+  const match = baseName.match(/(.+) \+(\d+)$/);
+  if (match) {
+      baseName = match[1];
+      const plus = parseInt(match[2], 10);
+      bonMin += plus;
+      bonMax += plus;
+  }
+
   // FIX: Strip Cursed prefix so the base type/stats lookup works
-  if (name.includes('Cursed ')) {
+  if (baseName.includes('Cursed ')) {
      baseName = baseName.replace('Cursed ', '');
      baseName = baseName.replace('Blood ', '').replace('Greed ', '').replace('Rust ', '').replace('Frailty ', '');
   }
 
-  if (name.includes('Sharp '))       { baseName = baseName.replace('Sharp ', '');   bonMin+=1; bonMax+=1; }
-  else if (name.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
-  else if (name.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); }
-  else if (name.includes('Ancient ')) { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
+  if (baseName.includes('Sharp '))       { baseName = baseName.replace('Sharp ', '');   bonMin+=1; bonMax+=1; }
+  else if (baseName.includes('Heavy '))  { baseName = baseName.replace('Heavy ', '');   bonMax+=3; }
+  else if (baseName.includes('Vampiric ')){ baseName = baseName.replace('Vampiric ', ''); }
+  else if (baseName.includes('Ancient ')) { baseName = baseName.replace('Ancient ', '');  bonMin+=2; bonMax+=2; }
 
 const stats = {
     'Shortsword': [3,5,'one'],

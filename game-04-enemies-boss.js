@@ -1296,9 +1296,11 @@ if (adjacent){
              if (!state.player.slowed) {
                  state.player.slowed = true;
                  state.player.slowTicks = 5; // 5 steps
-                 log('The Spider webs you! (Slowed)');
+                 state.player.stamina = Math.max(0, state.player.stamina - 2); // NEW: Drain chunk of stamina
+                 log('The Spider webs you! (Slowed & -2 Stamina)');
              } else {
                  state.player.slowTicks = Math.max(state.player.slowTicks, 5);
+                 state.player.stamina = Math.max(0, state.player.stamina - 1); // NEW: Minor drain on refresh
              }
          }
       }
@@ -1324,11 +1326,24 @@ if (adjacent){
     for (let step = 0; step < moves; step++){
   // 1) quick greedy step
   const g = greedyStepToward?.(e);
-  if (g && canEnterPoint(g.x, g.y)) { e.x = g.x; e.y = g.y; continue; }
+  if (g && g.better && canEnterPoint(g.x, g.y)) { 
+      // FIX: Only update facing on the first step, prioritizing X-axis for better side-profile art
+      if (step === 0) {
+          if (g.x > e.x) e.facing = 'right'; else if (g.x < e.x) e.facing = 'left';
+          else if (g.y > e.y) e.facing = 'down'; else if (g.y < e.y) e.facing = 'up';
+      }
+      e.x = g.x; e.y = g.y; continue; 
+  }
 
   // 2) short BFS (bigger budget for bosses / bigger maps)
   const b = bfsStepToward?.(e, e.boss ? 160 : 96);
-  if (b && canEnterPoint(b.x, b.y)) { e.x = b.x; e.y = b.y; continue; }
+  if (b && canEnterPoint(b.x, b.y)) { 
+      if (step === 0) {
+          if (b.x > e.x) e.facing = 'right'; else if (b.x < e.x) e.facing = 'left';
+          else if (b.y > e.y) e.facing = 'down'; else if (b.y < e.y) e.facing = 'up';
+      }
+      e.x = b.x; e.y = b.y; continue; 
+  }
 
     // 3) Fallback: take any passable neighbor that most reduces Manhattan distance
   let best = null, bestD = Infinity;
@@ -1338,7 +1353,13 @@ if (adjacent){
     const d = Math.abs(nx - state.player.x) + Math.abs(ny - state.player.y);
     if (d < bestD){ bestD = d; best = {x:nx,y:ny}; }
   }
-  if (best){ e.x = best.x; e.y = best.y; continue; }
+  if (best){ 
+      if (step === 0) {
+          if (best.x > e.x) e.facing = 'right'; else if (best.x < e.x) e.facing = 'left';
+          else if (best.y > e.y) e.facing = 'down'; else if (best.y < e.y) e.facing = 'up';
+      }
+      e.x = best.x; e.y = best.y; continue; 
+  }
 
   // truly boxed in
   break;

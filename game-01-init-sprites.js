@@ -2281,7 +2281,24 @@ const DURABILITY = {
   'Earth Staff':     15
 };
 function defaultDurabilityFor(name){
-  return Number.isFinite(DURABILITY[name]) ? DURABILITY[name] : null; // fists/null => no durability
+  if (!name) return null;
+  let baseName = name;
+  
+  // Strip upgrades so the dictionary finds it
+  const match = baseName.match(/(.+) \+(\d+)$/);
+  if (match) baseName = match[1];
+
+  // Strip affixes
+  if (baseName.includes('Cursed ')) {
+     baseName = baseName.replace('Cursed ', '');
+     baseName = baseName.replace('Blood ', '').replace('Greed ', '').replace('Rust ', '').replace('Frailty ', '');
+  }
+  if (baseName.includes('Sharp '))       baseName = baseName.replace('Sharp ', '');
+  else if (baseName.includes('Heavy '))  baseName = baseName.replace('Heavy ', '');
+  else if (baseName.includes('Vampiric ')) baseName = baseName.replace('Vampiric ', '');
+  else if (baseName.includes('Ancient ')) baseName = baseName.replace('Ancient ', '');
+
+  return Number.isFinite(DURABILITY[baseName]) ? DURABILITY[baseName] : null; // fists/null => no durability
 }
 
 

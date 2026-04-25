@@ -1114,6 +1114,20 @@ if (state.gameMode === 'endless' && state.floor % 10 !== 0 && Math.random() < cC
   // --- NEW: Cursed Spawns (Stairs & Red Chest) ---
   // We handle both here, AFTER NPCs spawn, to ensure they don't overlap.
   
+  // Force NPC footprints to be clean floor tiles (overwriting pre-generated traps/shrines/props)
+  [state.merchant, state.blacksmith, state.jester, state.cartographer].forEach(n => {
+    if (n) {
+      state.tiles[n.y][n.x] = 1; state.tiles[n.y][n.x-1] = 1; state.tiles[n.y][n.x+1] = 1;
+      delete state.props[n.x+','+n.y]; delete state.props[(n.x-1)+','+n.y]; delete state.props[(n.x+1)+','+n.y];
+      delete state.pickups[n.x+','+n.y]; delete state.pickups[(n.x-1)+','+n.y]; delete state.pickups[(n.x+1)+','+n.y];
+    }
+  });
+  if (state.cleric) {
+    state.tiles[state.cleric.y][state.cleric.x] = 1;
+    delete state.props[state.cleric.x+','+state.cleric.y];
+    delete state.pickups[state.cleric.x+','+state.cleric.y];
+  }
+
   // 1. Build "Busy" Set (Start + Stairs + NPCs + Wells + Shrines)
   const busy = new Set([state.startRoom, state._stairsRoom]);
   if (state.puzzleEntryRoom) busy.add(state.puzzleEntryRoom);

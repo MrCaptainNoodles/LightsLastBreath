@@ -1,3 +1,63 @@
+// --- NEW: Weapon Fusion Logic ---
+window.fuseWeapon = function(name) {
+    if ((state.inventory.gold || 0) < 50) {
+        if (typeof log === 'function') log("Not enough gold to fuse!");
+        return;
+    }
+    if (!state.inventory.weapons[name] || state.inventory.weapons[name] < 2) return;
+
+    let baseName = name;
+    let plus = 0;
+    const match = name.match(/(.+) \+(\d+)$/);
+    if (match) {
+        baseName = match[1];
+        plus = parseInt(match[2]);
+    }
+    const newName = `${baseName} +${plus + 1}`;
+    
+    // FIX: Completely bypass memory cloning. Build the weapon cleanly using the robust engine lookups.
+    const ws = typeof weaponStatsFor === 'function' ? weaponStatsFor(name) : null;
+    if (!ws) {
+        if (typeof log === 'function') log("Cannot forge this unknown artifact!");
+        return;
+    }
+
+    state.inventory.gold -= 50;
+    state.inventory.weapons[name] -= 2;
+    if (state.inventory.weapons[name] <= 0) delete state.inventory.weapons[name];
+    
+    // Discard corrupted/old objects from stash
+    if (state.inventory.stashed?.[name]) {
+        state.inventory.stashed[name].pop();
+        if (state.inventory.stashed[name].length > 0) state.inventory.stashed[name].pop();
+    }
+    
+    // Generate a mathematically perfect, pristine weapon object
+    let dur = typeof defaultDurabilityFor === 'function' ? defaultDurabilityFor(newName) : 20;
+    const newWep = {
+        name: newName,
+        min: ws.min + 1, // Add the +1 power directly to base stats
+        max: ws.max + 1,
+        type: ws.type,
+        base: { min: ws.min + 1, max: ws.max + 1 },
+        dur: dur,
+        durMax: dur
+    };
+
+    if (!state.inventory.stashed) state.inventory.stashed = {};
+    if (!state.inventory.stashed[newName]) state.inventory.stashed[newName] = [];
+    state.inventory.stashed[newName].push(newWep);
+    
+    state.inventory.weapons[newName] = (state.inventory.weapons[newName] || 0) + 1;
+    
+    if (typeof SFX !== 'undefined' && SFX.lockSuccess) SFX.lockSuccess(); 
+    if (typeof log === 'function') log(`Forged 2x ${name} into ${newName}!`);
+    
+    if (typeof refreshBsUI === 'function') refreshBsUI();
+    if (typeof updateEquipUI === 'function') updateEquipUI();
+    if (typeof updateInvBody === 'function') updateInvBody();
+};
+
 // ===== Blacksmith modal wiring (repairs @ 2g per durability) =====
 document.addEventListener('DOMContentLoaded', ()=>{
   const modal = document.getElementById('blacksmithModal');
@@ -9,8 +69,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   let bsTarget = 'weapon'; // 'weapon' | 'shield'
 
-function refreshBsUI(){
-  const tgtW = document.getElementById('bsTargetWeapon');
+    window.refreshBsUI = function refreshBsUI(){
+      const tgtW = document.getElementById('bsTargetWeapon');
   const tgtS = document.getElementById('bsTargetShield');
 
   const w  = state.player.weapon || {};
@@ -25,6 +85,39 @@ function refreshBsUI(){
   if (tgtS) tgtS.disabled = !sh;
 
   bsGold.textContent = (state.inventory.gold|0);
+
+  // --- NEW: Blacksmith Weapon Fusion UI ---
+  let forgeDiv = document.getElementById('bsForgeUI');
+  if (!forgeDiv) {
+      forgeDiv = document.createElement('div');
+      forgeDiv.id = 'bsForgeUI';
+      forgeDiv.style.cssText = "margin-top:16px; border-top:1px solid rgba(255,255,255,0.1); padding-top:16px;";
+      
+      // Try to append it to the modal sheet
+      const sheet = document.querySelector('#blacksmithModal .sheet');
+      if (sheet) sheet.appendChild(forgeDiv);
+  }
+  
+  forgeDiv.innerHTML = '<div style="font-weight:800; margin-bottom:8px; color:#f9d65c;">Weapon Fusion (50g)</div>';
+  
+  let canFuseAny = false;
+  if (state.inventory.weapons) {
+      Object.entries(state.inventory.weapons).forEach(([wepName, count]) => {
+          if (count >= 2) {
+              canFuseAny = true;
+              const btn = document.createElement('button');
+              btn.className = 'btn';
+              btn.style.cssText = "width:100%; margin-bottom:4px; text-align:left; display:flex; justify-content:space-between;";
+              btn.innerHTML = `<span>Fuse 2x ${wepName}</span> <span style="opacity:0.8;">[+1 Power]</span>`;
+              btn.onclick = () => window.fuseWeapon(wepName);
+              forgeDiv.appendChild(btn);
+          }
+      });
+  }
+  if (!canFuseAny) {
+      forgeDiv.innerHTML += '<div style="font-size:13px; opacity:0.6;">You need 2 identical weapons to fuse.</div>';
+  }
+  // -----------------------------------------
 
   let name, dur, max;
   if (bsTarget === 'shield'){

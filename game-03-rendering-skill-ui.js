@@ -206,51 +206,98 @@ function spawnProjectileEffect(opts){
   requestAnimationFrame(step);
 }
 
-
-// Updated drawPlayerHelmet (original lines ~4211–4244) – added outline pixels and extra shading for clarity
+// Replaced drawPlayerHelmet with a High-Detail Directional Knight
 function drawPlayerHelmet(ctx, x, y, tile, facing='down') {
   const { s, R } = gridN(ctx, x, y, tile, 12);
-  const steel = '#a7b3c1', dark = '#0b141d', plume = '#9d1d2b', shine = '#dfe6ee';
+  // Expanded Palette for Depth
+  const steel = '#a7b3c1', shine = '#dfe6ee', shade = '#475569', dark = '#0b141d';
+  const plume = '#9d1d2b', plumeL = '#dc2626';
+  const cape = '#1e3a8a', capeL = '#3b82f6';
+  const leather = '#78350f', gold = '#fbbf24';
 
-  // plume (with outline)
-  R(5,0,2,1,plume);
-  R(4,0,1,1,dark); R(7,0,1,1,dark);  // add dark pixels at plume edges
-
-  // dome (enhanced with outline)
-  R(2,1,8,1,steel);
-  R(1,2,10,1,steel);
-  R(1,3,10,1,steel);
-  R(2,4,8,1,steel);
-  R(3,5,6,1,steel);
-  // outline around helmet dome silhouette
-  R(1,1,1,1,dark); R(10,1,1,1,dark);
-  R(0,2,1,1,dark); R(11,2,1,1,dark);
-  R(0,3,1,1,dark); R(11,3,1,1,dark);
-  R(1,4,1,1,dark); R(10,4,1,1,dark);
-  R(2,5,1,1,dark); R(9,5,1,1,dark);
-
-  // cheek plates (with outline)
-  R(1,7,3,3,steel);
-  R(8,7,3,3,steel);
-  // border around cheek pieces
-  R(0,7,1,1,dark); R(4,7,1,1,dark); R(7,7,1,1,dark); R(11,7,1,1,dark);
-  R(0,8,1,1,dark); R(4,8,1,1,dark); R(7,8,1,1,dark); R(11,8,1,1,dark);
-  R(0,9,1,1,dark); R(4,9,1,1,dark); R(7,9,1,1,dark); R(11,9,1,1,dark);
-
-  // highlights
-  R(3,2,2,1,shine);
-  R(4,3,2,1,shine);
-
-  // visor by facing (same dark color as outline)
-  if (facing==='up') {
-    R(3,4,6,1,dark); R(4,3,4,1,dark);
-  } else if (facing==='left') {
-    R(1,6,7,1,dark); R(1,5,2,1,dark);
-  } else if (facing==='right') {
-    R(4,6,7,1,dark); R(9,5,2,1,dark);
-  } else { // down
-    R(3,7,6,1,dark);
+  ctx.save();
+  if (facing === 'left') {
+      ctx.translate(x + tile/2, y + tile/2);
+      ctx.scale(-1, 1);
+      ctx.translate(-(x + tile/2), -(y + tile/2));
   }
+
+  if (facing === 'up') {
+      // BACK VIEW
+      R(4,1,4,4,steel); R(5,1,2,1,shine); // Helmet dome + highlight
+      R(3,4,6,1,dark); // Helmet base rim
+      
+      // Plume trailing wildly back
+      R(5,-1,2,3,plumeL); R(4,0,1,4,plume); R(7,1,1,2,plume);
+      
+      // Shoulders peeking
+      R(2,5,2,2,steel); R(8,5,2,2,steel);
+      
+      // Majestic Cape covering the back
+      R(3,5,6,6,cape); 
+      R(4,6,1,5,capeL); R(7,6,1,4,capeL); // Cape folds/highlights
+      
+      // Legs stepping
+      R(4,10,1,2,shade); R(7,10,1,2,shade);
+      R(3,11,2,1,dark); R(7,11,2,1,dark); // Heels
+
+  } else if (facing === 'right' || facing === 'left') {
+      // SIDE PROFILE
+      // Plume flowing behind
+      R(4,0,3,1,plumeL); R(2,1,2,1,plume); R(1,2,1,2,plume);
+      
+      // Helmet Profile
+      R(4,1,5,4,steel); R(5,1,2,1,shine); // Dome
+      R(7,3,2,1,dark); R(8,4,1,1,dark); // Eye slit / breathing gap
+      R(4,5,5,1,shade); // Chin rim
+      
+      // Cape billowing backwards
+      R(3,5,2,6,cape); R(2,7,1,4,capeL); R(1,9,1,2,cape);
+      
+      // Torso & Arm
+      R(5,5,3,4,steel); R(7,5,1,3,shine); // Breastplate pushed forward
+      R(4,9,4,1,leather); // Side belt
+      
+      // Arm resting / slightly bent
+      R(6,6,2,2,steel); // Pauldron
+      R(6,8,2,2,shade); // Gauntlet
+      
+      // Walking legs
+      R(4,9,1,2,dark); R(3,11,2,1,shade); // Back leg & boot
+      R(6,9,1,2,shade); R(6,11,2,1,steel); // Front leg & boot
+
+  } else {
+      // DEFAULT FRONT VIEW
+      // Plume
+      R(5,-1,2,2,plumeL); R(4,0,1,1,plume); R(7,0,1,1,plume);
+      
+      // Helmet Front
+      R(4,1,4,3,steel); R(5,1,2,1,shine); // Dome
+      R(3,4,2,2,steel); R(7,4,2,2,steel); // Cheek plates
+      R(4,3,4,1,dark); R(5,4,2,2,dark);   // T-Visor
+      
+      // Cape peeking past shoulders
+      R(1,6,1,5,cape); R(10,6,1,5,cape);
+      R(0,8,1,3,capeL); R(11,8,1,3,capeL); // Folds
+      
+      // Pauldrons
+      R(2,6,2,2,steel); R(8,6,2,2,steel); 
+      R(2,6,1,1,shine); R(9,6,1,1,shine);
+      
+      // Chest
+      R(4,6,4,3,steel); R(4,6,4,1,shine);
+      
+      // Belt
+      R(4,9,4,1,leather); R(5,9,2,1,gold); // Buckle
+      
+      // Arms (Gauntlets)
+      R(2,8,2,2,shade); R(8,8,2,2,shade);
+      
+      // Legs
+      R(4,10,1,2,shade); R(7,10,1,2,shade); // Tights/chainmail
+      R(3,11,2,1,steel); R(7,11,2,1,steel); // Iron Boots
+  }
+  ctx.restore();
 }
 
 // Updated drawChestPixel (original lines ~4247–4278) – added a dark frame outline for clarity
@@ -847,12 +894,11 @@ function drawShadowPixel(ctx, x, y, tile){
   R(2,4,8,6,dark);
   R(3,10,6,1,deep);
 }
-function drawHeartlessPixel(ctx, x, y, tile){
+function drawHeartlessPixel(ctx, x, y, tile, enemy){
   const { s, R } = gridN(ctx, x, y, tile, 12);
   const body = '#0f172a'; // Ink black
-  const eye  = '#facc15'; // Glowing yellow
-
-  // Twitchy antenna animation (shifts based on time)
+  const eyeColor  = '#facc15'; // Glowing yellow
+  const facing = enemy?.facing || 'down';
   const twitch = Math.floor(Date.now() / 200) % 2; 
 
   // Antennae
@@ -866,10 +912,16 @@ function drawHeartlessPixel(ctx, x, y, tile){
   R(3,4, 6,5, body); // Head
   R(4,9, 4,2, body); // Body/Feet base
 
-  // GLOWING YELLOW EYES
-  R(4,5, 1,1, eye); 
-  R(7,5, 1,1, eye);
+  if (facing === 'up') {
+      // No eyes visible
+  } else if (facing === 'right' || facing === 'left') {
+      R(7,5, 1,1, eyeColor); // Side eye
+  } else {
+      R(4,5, 1,1, eyeColor); R(7,5, 1,1, eyeColor); // Both eyes
+  }
 }
+
+
 function drawHoodedPixel(ctx, x, y, tile){
   const { s, R } = gridN(ctx, x, y, tile, 12);
   // palette
@@ -1008,45 +1060,79 @@ function drawSpiderPixel(ctx, x, y, tile){
   R(5,4,2,1,red); // Eyes
 }
 
-// Updated drawRatPixel (original lines ~4358–4370) – added outline pixels for body and tail
-function drawRatPixel(ctx, x, y, tile){
+// Updated drawRatPixel with Directional Sprites
+function drawRatPixel(ctx, x, y, tile, enemy){
   const { R } = gridN(ctx, x, y, tile, 12);
   const fur='#5d4037', furL='#8d6e63', skin='#ffab91', dark='#0f172a';
-  // Silhouette / Outline
-  R(1,6,3,1,dark); R(0,7,1,2,dark); R(1,9,2,1,dark); // Head outline
-  R(3,5,6,1,dark); R(9,6,2,1,dark); // Back outline
-  R(11,7,1,2,dark); R(3,10,8,1,dark); // Rump/Belly outline
-  // Body Gradient
-  R(2,6,7,4,fur); R(3,5,5,1,fur);
-  R(4,6,4,1,furL); // Top highlight
-  // Head Details
-  R(1,7,2,2,furL); 
-  R(0,8,1,1,skin); // Nose
-  R(2,5,2,2,skin); // Big Ear
-  R(2,7,1,1,'#ef4444'); // Red Eye
-  // Tail (Sinuous curve)
-  R(11,8,1,1,skin); R(10,9,1,1,skin); R(9,9,1,1,skin); R(8,10,1,1,skin);
-  // Paws
-  R(3,11,2,1,skin); R(8,11,2,1,skin);
+  const facing = enemy?.facing || 'down';
+
+  if (facing === 'up') {
+      R(3,5,6,6,fur); R(4,5,4,1,furL); // Body facing away
+      R(2,5,2,2,skin); R(8,5,2,2,skin); // Ears on back
+      R(5,11,2,1,skin); R(6,11,1,1,skin); // Tail hanging straight down
+      R(3,11,2,1,skin); R(7,11,2,1,skin); // Paws
+  } else if (facing === 'right' || facing === 'left') {
+      R(3,6,6,4,fur); R(4,5,4,1,furL); // Body
+      R(8,7,3,2,furL); // Snout
+      R(11,8,1,1,skin); // Nose tip
+      R(5,5,2,2,skin); // 1 Ear
+      R(9,7,1,1,'#ef4444'); // 1 Eye
+      R(2,8,2,1,skin); R(1,9,1,1,skin); R(0,10,2,1,skin); // Tail trailing backwards
+      R(4,10,2,1,skin); R(7,10,2,1,skin); // Paws
+  } else {
+      // Default Down
+      R(1,6,3,1,dark); R(0,7,1,2,dark); R(1,9,2,1,dark); // Head outline
+      R(3,5,6,1,dark); R(9,6,2,1,dark); // Back outline
+      R(11,7,1,2,dark); R(3,10,8,1,dark); // Rump/Belly outline
+      R(2,6,7,4,fur); R(3,5,5,1,fur); // Body Gradient
+      R(4,6,4,1,furL); // Top highlight
+      R(1,7,2,2,furL); // Head Details
+      R(0,8,1,1,skin); // Nose
+      R(2,5,2,2,skin); // Big Ear
+      R(2,7,1,1,'#ef4444'); // Red Eye
+      R(11,8,1,1,skin); R(10,9,1,1,skin); R(9,9,1,1,skin); R(8,10,1,1,skin); // Tail
+      R(3,11,2,1,skin); R(8,11,2,1,skin); // Paws
+  }
 }
 
-// Updated drawGoblinPixel (original lines ~4373–4388) – added outline pixels for head/ears
-function drawGoblinPixel(ctx, x, y, tile){
+// Updated drawGoblinPixel with 4-way Directional Art
+function drawGoblinPixel(ctx, x, y, tile, enemy){
   const { R } = gridN(ctx, x, y, tile, 12);
   const skin='#15803d', skinL='#4ade80', leather='#854d0e', metal='#cbd5e1';
-  // Head (Big w/ Ears)
-  R(3,2,6,5,skin);
-  R(1,3,2,1,skin); R(9,3,2,1,skin); // Ears
-  R(4,3,1,1,'#ef4444'); R(7,3,1,1,'#ef4444'); // Eyes
-  R(5,4,2,2,skinL); // Nose Highlight
-  // Body (Tunics)
+  const facing = enemy?.facing || 'down';
+
+  // Base Body & Feet (mostly identical across directions)
   R(4,7,4,4,leather); R(4,8,4,1,'#a16207'); // Belt
-  // Arms
-  R(2,8,2,2,skin); R(8,8,2,2,skin);
-  // Weapon (Rusty Shiv)
-  R(9,6,1,3,metal); R(8,9,3,1,'#78350f'); // Handle
-  // Feet
-  R(3,11,2,1,'#5c4033'); R(7,11,2,1,'#5c4033');
+  R(3,11,2,1,'#5c4033'); R(7,11,2,1,'#5c4033'); // Feet
+
+  if (facing === 'up') {
+      // BACK OF HEAD: No eyes, no nose.
+      R(3,2,6,5,skin);
+      R(1,3,2,1,skin); R(9,3,2,1,skin); // Ears
+      R(2,8,2,2,skin); R(8,8,2,2,skin); // Arms (behind back)
+      // Weapon held up/behind
+      R(9,4,1,3,metal); R(8,7,3,1,'#78350f'); 
+      
+  } else if (facing === 'right' || facing === 'left') {
+      // SIDE PROFILE: Facing Right (The canvas mirror handles 'left' automatically!)
+      R(4,2,5,5,skin); // Thinner head
+      R(4,3,2,1,skin); // Back ear
+      R(7,3,1,1,'#ef4444'); // Single front eye
+      R(8,4,2,2,skinL); // Nose pointing forward/right
+      R(5,8,2,2,skin); // Single front arm visible
+      // Weapon held in front
+      R(7,6,1,3,metal); R(6,9,3,1,'#78350f'); 
+      
+  } else {
+      // DEFAULT: Facing Down (Original Sprite)
+      R(3,2,6,5,skin);
+      R(1,3,2,1,skin); R(9,3,2,1,skin); // Ears
+      R(4,3,1,1,'#ef4444'); R(7,3,1,1,'#ef4444'); // Eyes
+      R(5,4,2,2,skinL); // Nose Highlight
+      R(2,8,2,2,skin); R(8,8,2,2,skin); // Both Arms
+      // Weapon at side
+      R(9,6,1,3,metal); R(8,9,3,1,'#78350f');
+  }
 }
 
 function drawSlimePixel(ctx, x, y, tile){
@@ -1065,40 +1151,45 @@ function drawSlimePixel(ctx, x, y, tile){
   R(2,11,1,1,gel); R(9,11,1,1,gel);
 }
 
-function drawMadKingPixel(ctx, x, y, tile){
+function drawMadKingPixel(ctx, x, y, tile, enemy){
   const { s, R } = gridN(ctx, x, y, tile, 12);
-  // palette
   const gold='#e0c14f', gem='#64d2ff', ruby='#ff6b6b';
   const steel='#a7b1c4', plate='#8a96ab';
   const face='#ecd9bf', eye='#0b141d', hair='#b88d3a', beard='#a67c2e';
   const fur='#cfc8b6', cape='#5c0a16', capeDeep='#3d080f', shade='#0b141d';
+  const facing = enemy?.facing || 'down';
 
-  // crown with 3 points + gems
-  R(2,0,8,1,gold); R(4,-1,1,1,gold); R(6,-1,1,1,gold); R(8,-1,1,1,gold);
-  R(5,0,1,1,gem); R(7,0,1,1,ruby);
-
-  // hair fringe and face
-  R(3,1,6,1,hair);
-  R(3,2,6,3,face);
-  R(4,3,1,1,eye); R(7,3,1,1,eye);   // eyes
-  R(5,4,2,1,beard);                  // moustache
-
-  // beard / jaw
-  R(4,5,4,1,beard);
-
-  // fur mantle for shoulders
-  R(1,6,10,1,fur);
-
-  // chest plate + highlight
-  R(3,7,6,3,plate);
-  R(4,8,4,1,steel);
-
-  // cape behind shoulders (gives silhouette)
-  R(1,7,1,4,cape); R(10,7,1,4,cape);
-  R(0,8,1,3,capeDeep); R(11,8,1,3,capeDeep);
-
-  // belt line / shadow line
-  R(3,10,6,1,shade);
+  if (facing === 'up') {
+      R(2,0,8,2,gold); R(4,-1,1,1,gold); R(6,-1,1,1,gold); R(8,-1,1,1,gold); // Crown back
+      R(3,2,6,3,hair); // Back of hair
+      R(1,5,10,2,fur); // Mantle across back
+      R(1,7,10,5,cape); // Wide cape covering back
+      R(2,8,8,4,capeDeep); // Cape folds
+  } else if (facing === 'right' || facing === 'left') {
+      R(3,0,6,2,gold); R(4,-1,1,1,gold); R(6,-1,1,1,gold); R(8,-1,1,1,gold); // Crown side
+      R(7,1,1,1,ruby);
+      R(4,2,4,3,face); // Side face
+      R(7,3,1,1,eye); // One eye
+      R(6,4,2,2,beard); // Side beard
+      R(3,2,2,4,hair); // Hair trailing back
+      R(2,6,8,2,fur); // Mantle profile
+      R(4,8,4,4,plate); // Chest plate
+      R(1,7,3,5,cape); // Cape flowing back
+      R(5,7,2,4,steel); // Arm front
+  } else {
+      // Default Down
+      R(2,0,8,1,gold); R(4,-1,1,1,gold); R(6,-1,1,1,gold); R(8,-1,1,1,gold);
+      R(5,0,1,1,gem); R(7,0,1,1,ruby);
+      R(3,1,6,1,hair);
+      R(3,2,6,3,face);
+      R(4,3,1,1,eye); R(7,3,1,1,eye); 
+      R(5,4,2,1,beard); R(4,5,4,1,beard); 
+      R(1,6,10,1,fur); 
+      R(3,7,6,3,plate); R(4,8,4,1,steel); 
+      R(1,7,1,4,cape); R(10,7,1,4,cape); 
+      R(0,8,1,3,capeDeep); R(11,8,1,3,capeDeep);
+      R(3,10,6,1,shade); 
+  }
 }
 
 
@@ -1152,48 +1243,78 @@ function drawReaperPixel(ctx, x, y, tile){
 
 function drawSkeletonPixel(ctx, x, y, tile, enemy){
   const { R } = gridN(ctx, x, y, tile, 12);
-  // ELITE VARIANT: Dark bones, Red eyes
   const isElite = enemy && (enemy.elite || enemy.boss);
-  const bone   = isElite ? '#57534e' : '#f1f5f9'; // Warm Grey vs White
+  const bone   = isElite ? '#57534e' : '#f1f5f9'; 
   const shadow = isElite ? '#292524' : '#94a3b8';
-  const eyes   = isElite ? '#ef4444' : '#0f172a'; // Red vs Dark
+  const eyes   = isElite ? '#ef4444' : '#0f172a'; 
   const dark   = '#0f172a';
+  const facing = enemy?.facing || 'down';
 
-  // Skull
-  R(4,1,4,3,bone); R(4,2,4,1,bone); // Forehead
-  R(4,2,1,1,dark); R(7,2,1,1,dark); // Eyes
-  R(5,3,2,1,eyes); // Nose hole
-  // Ribcage (Detailed)
-  R(3,5,6,1,bone); R(4,5,4,1,shadow); // Top Rib
-  R(3,6,6,1,dark); // Gap
-  R(4,7,4,1,bone); // Bottom Rib
-  R(5,8,2,1,bone); // Spine
-  // Pelvis
-  R(4,9,4,1,bone);
-  // Limbs
-  R(2,5,1,3,bone); R(9,5,1,3,bone); // Arms
-  R(4,10,1,2,bone); R(7,10,1,2,bone); // Legs
-  // Weapon (Scimitar)
-  R(10,4,1,4,'#cbd5e1'); R(10,8,1,1,'#475569'); R(9,7,1,1,'#cbd5e1');
+  if (facing === 'up') {
+      R(4,1,4,3,bone); R(4,2,4,1,bone); // Back of skull
+      R(5,5,2,4,bone); // spine
+      R(3,6,6,1,bone); R(4,8,4,1,bone); // ribs
+      R(4,9,4,1,bone); // Pelvis
+      R(2,5,1,3,bone); R(9,5,1,3,bone); // Arms behind
+      R(4,10,1,2,bone); R(7,10,1,2,bone); // Legs
+      R(9,3,1,4,'#cbd5e1'); R(9,7,1,1,'#475569'); // Scimitar held back
+  } else if (facing === 'right' || facing === 'left') {
+      R(4,1,4,3,bone); R(4,2,3,1,bone); // Side skull
+      R(7,2,1,1,dark); // One eye
+      R(5,5,2,1,bone); R(5,7,2,1,bone); R(5,8,1,1,bone); // spine
+      R(6,6,2,1,bone); // protruding rib
+      R(4,9,3,1,bone); // Pelvis
+      R(6,5,1,3,bone); // One arm
+      R(5,10,1,2,bone); R(7,10,1,2,shadow); // Legs offset
+      R(8,6,3,1,'#cbd5e1'); R(7,6,1,1,'#475569'); R(9,5,1,1,'#cbd5e1'); // Scimitar forward
+  } else {
+      // Default Down
+      R(4,1,4,3,bone); R(4,2,4,1,bone); // Forehead
+      R(4,2,1,1,dark); R(7,2,1,1,dark); // Eyes
+      R(5,3,2,1,eyes); // Nose hole
+      R(3,5,6,1,bone); R(4,5,4,1,shadow); // Top Rib
+      R(3,6,6,1,dark); // Gap
+      R(4,7,4,1,bone); // Bottom Rib
+      R(5,8,2,1,bone); // Spine
+      R(4,9,4,1,bone); // Pelvis
+      R(2,5,1,3,bone); R(9,5,1,3,bone); // Arms
+      R(4,10,1,2,bone); R(7,10,1,2,bone); // Legs
+      R(10,4,1,4,'#cbd5e1'); R(10,8,1,1,'#475569'); R(9,7,1,1,'#cbd5e1'); // Scimitar
+  }
 }
 
-function drawMagePixel(ctx, x, y, tile){
+function drawMagePixel(ctx, x, y, tile, enemy){
   const { R } = gridN(ctx, x, y, tile, 12);
   const robe='#4c1d95', trim='#c084fc', skin='#fca5a5', dark='#0f172a';
-  // Robe Body
-  R(3,4,6,7,robe);
-  R(5,4,2,8,trim); // Central sash
-  // Hood (Dark interior)
-  R(3,1,6,3,robe);
-  R(4,2,4,2,dark); // Face shadow
-  R(5,3,1,1,'#fbbf24'); R(7,3,1,1,'#fbbf24'); // Glowing Eyes
-  // Staff (Right Hand)
-  R(9,2,1,10,'#78350f'); // Wood
-  R(8,1,3,2,'#facc15'); // Gold Head
-  R(9,1,1,1,'#ef4444'); // Ruby Gem
-  // Magic (Left Hand)
-  R(1,5,2,1,skin);
-  R(1,3,1,2,'#38bdf8'); R(2,4,1,1,'#38bdf8'); // Sparkles
+  const facing = enemy?.facing || 'down';
+
+  if (facing === 'up') {
+      R(3,4,6,7,robe); // Robe Body back
+      R(3,1,6,3,robe); // Hood back (no eyes)
+      R(9,2,1,10,'#78350f'); // Staff behind
+      R(8,1,3,2,'#facc15'); R(9,1,1,1,'#ef4444'); // Staff Head
+  } else if (facing === 'right' || facing === 'left') {
+      R(4,4,4,7,robe); // Robe profile
+      R(6,4,1,8,trim); // Sash offset
+      R(4,1,5,3,robe); // Hood profile
+      R(7,2,2,2,dark); // Face shadow offset
+      R(8,3,1,1,'#fbbf24'); // Single Glowing Eye
+      R(7,5,1,1,skin); // Hand reaching out
+      R(8,5,2,1,'#38bdf8'); // Sparkles front
+      R(4,2,1,10,'#78350f'); // Staff side
+      R(3,1,3,2,'#facc15'); R(4,1,1,1,'#ef4444'); // Staff Head side
+  } else {
+      // Default Down
+      R(3,4,6,7,robe);
+      R(5,4,2,8,trim); // Central sash
+      R(3,1,6,3,robe);
+      R(4,2,4,2,dark); // Face shadow
+      R(5,3,1,1,'#fbbf24'); R(7,3,1,1,'#fbbf24'); // Glowing Eyes
+      R(9,2,1,10,'#78350f'); // Staff (Right Hand)
+      R(8,1,3,2,'#facc15'); R(9,1,1,1,'#ef4444'); // Gold Head / Ruby
+      R(1,5,2,1,skin); // Magic (Left Hand)
+      R(1,3,1,2,'#38bdf8'); R(2,4,1,1,'#38bdf8'); // Sparkles
+  }
 }
 
 
@@ -1220,26 +1341,34 @@ if (enemy._flashColor && enemy._flashTime > Date.now()) {
 } else if (enemy.burning) {
     ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(3)';
 } else if (enemy.bleeding) {
-    ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(1) brightness(0.7)';
-} else if ((enemy.boss || enemy.elite) && enemy.tint){
-  ctx.filter = enemy.tint;
-}
+        ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(1) brightness(0.7)';
+    } else if ((enemy.boss || enemy.elite) && enemy.tint){
+      ctx.filter = enemy.tint;
+    }
 
-  const t = String(enemy.type || '').toLowerCase();
-    if (t.includes('mad') && t.includes('king')) { drawMadKingPixel(ctx, x, y, sizePx); ctx.restore(); return; }
+    // --- NEW: Horizontal Sprite Mirroring Only ---
+    // Flips the "Right" side-profile pixel art to face "Left" automatically.
+    if (enemy.facing === 'left') {
+        ctx.translate(x + sizePx / 2, y + sizePx / 2);
+        ctx.scale(-1, 1);
+        ctx.translate(-(x + sizePx / 2), -(y + sizePx / 2));
+    }
+
+      const t = String(enemy.type || '').toLowerCase();
+        if (t.includes('mad') && t.includes('king')) { drawMadKingPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
   if (t.includes('hood'))                     { drawHoodedPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
   if (t.includes('shadow'))                   { drawShadowPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
 // --- NEW: Link Reaper ---
   if (t.includes('reaper'))    { drawReaperPixel(ctx, x, y, sizePx);    ctx.restore(); return; }
 
-  if (t.includes('heartless')) { drawHeartlessPixel(ctx, x, y, sizePx); ctx.restore(); return; }
-  if (t.includes('rat'))       { drawRatPixel(ctx, x, y, sizePx);       ctx.restore(); return; }
-  if (t.includes('bat'))       { drawBatPixel(ctx, x, y, sizePx); ctx.restore(); return; }
-  if (t.includes('spider'))    { drawSpiderPixel(ctx, x, y, sizePx); ctx.restore(); return; }
-  if (t.includes('goblin'))    { drawGoblinPixel(ctx, x, y, sizePx); ctx.restore(); return; }
-  if (t.includes('slime'))     { drawSlimePixel(ctx, x, y, sizePx); ctx.restore(); return; }
+  if (t.includes('heartless')) { drawHeartlessPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
+  if (t.includes('rat'))       { drawRatPixel(ctx, x, y, sizePx, enemy);       ctx.restore(); return; }
+  if (t.includes('bat'))       { drawBatPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
+  if (t.includes('spider'))    { drawSpiderPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
+  if (t.includes('goblin'))    { drawGoblinPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; } 
+  if (t.includes('slime'))     { drawSlimePixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
   if (t.includes('skeleton')) { drawSkeletonPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('mage'))      { drawMagePixel(ctx, x, y, sizePx); ctx.restore(); return; }
+  if (t.includes('mage'))      { drawMagePixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
   if (t.includes('mimic')) { drawMimicPixel(ctx, x, y, sizePx); ctx.restore(); return; } // Added ctx.restore()
   if (t.includes('clone') || t.includes('mirror')){
     drawPlayerHelmet(ctx, x, y, sizePx, state.player.facing || 'down');
