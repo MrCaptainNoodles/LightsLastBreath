@@ -285,13 +285,13 @@ function floorEnemyKinds(){
     const b = base[name];
     return {
       type: name,
-      // Boosted HP: Base scale + flat 1 per floor
-      hp: Math.max(1, Math.round(b.hp * scale) + Math.floor((f - 1) * 1)),
+      // Softened HP: Base scale + flat 0.5 per floor (was 1)
+      hp: Math.max(1, Math.round(b.hp * scale) + Math.floor((f - 1) * 0.5)),
       atk: [
-        // Added flat +1 Min Damage every 2 floors
-        Math.max(0, Math.floor(b.atk[0] * scale) + Math.floor((f - 1) / 2)),
-        // Added flat +1 Max Damage EVERY floor (Guarantees they outpace Hardened quickly)
-        Math.max(1, Math.floor(b.atk[1] * scale) + Math.floor((f - 1) * 1))
+        // Softened: +1 Min Damage every 4 floors (was every 2 floors)
+        Math.max(0, Math.floor(b.atk[0] * scale) + Math.floor((f - 1) / 4)),
+        // Softened: +1 Max Damage every 2 floors (was EVERY floor)
+        Math.max(1, Math.floor(b.atk[1] * scale) + Math.floor((f - 1) / 2))
       ],
       xp: Math.max(1, Math.round(b.xp * (1 + Math.max(0, f - 1) * 0.10)))
     };

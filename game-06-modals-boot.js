@@ -2686,12 +2686,16 @@ window.openSkillsModal = function() {
         document.body.appendChild(sm);
         
         const origParent = document.getElementById('skillsList').parentNode;
-        document.getElementById('closeSkillsModalBtn').onclick = () => {
-            origParent.appendChild(document.getElementById('skillsList'));
-            sm.style.display = 'none';
-            state._inputLocked = false;
-            if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
-        };
+            document.getElementById('closeSkillsModalBtn').onclick = () => {
+                origParent.appendChild(document.getElementById('skillsList'));
+                sm.style.display = 'none';
+                
+                // Strip lingering controller focus so chips don't stay highlighted on the main HUD
+                document.querySelectorAll('.controller-focus').forEach(e => e.classList.remove('controller-focus'));
+                
+                state._inputLocked = false;
+                if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+            };
     }
     const list = document.getElementById('skillsList');
     if (list) document.getElementById('skillsModalBody').appendChild(list);
@@ -2882,7 +2886,7 @@ function pollGamepad() {
 
     // Close/Back (B / Circle)
     btn(1, () => {
-        const closeBtn = openModal.querySelector('[data-close], #mBack, #jBack, #cBack, #clBack, #gwClose, #closeSkillsModalBtn');
+        const closeBtn = openModal.querySelector('[data-close], #mBack, #jBack, #cBack, #clBack, #gwClose, #closeSkillsModalBtn, #btnCloseSkillInfo');
         if (closeBtn) closeBtn.click();
         else if (typeof closePauseMenu === 'function') closePauseMenu();
     });

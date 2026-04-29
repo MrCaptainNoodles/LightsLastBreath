@@ -733,8 +733,9 @@ const SFX = {};
 const AudioSystem = {
   channels: {
     music:    { def: 0.8, label: 'Music', var:'_volMusic', node:'musicGain' },
-    voice:    { def: 1.0, label: 'Voice / Dialogue', var: null, node:'voiceGain' }, // New Channel
+    voice:    { def: 1.0, label: 'Voice / Dialogue', var: null, node:'voiceGain' }, 
     combat:   { def: 0.9, label: 'Combat', var:'_volCombat', node:'combatGain' },
+    enemy:    { def: 0.9, label: 'Monsters', var: null, node:'enemyGain' }, // <--- New Channel
     interact: { def: 0.9, label: 'Environment', var:'_volInteract', node:'interactGain' },
     foot:     { def: 1.0, label: 'Footsteps', var:'_volFoot', node:'footstepGain' },
     ui:       { def: 0.9, label: 'Interface', var:'_volUi', node:'uiGain' }
@@ -1132,7 +1133,8 @@ function playSkelRevive(){
     src.buffer = skelReviveBuf; 
     const g = audioCtx.createGain(); 
     g.gain.value = 0.5; 
-    src.connect(g); g.connect(combatGain||masterGain); 
+    // Routed to the new enemy channel
+    src.connect(g); g.connect(enemyGain||masterGain); 
     src.start(); 
   } else { 
     SFX.weaponBreak(); // Fallback if file isn't loaded yet
@@ -1319,8 +1321,8 @@ function defineSfx(){
   // Combat (Attacks, Hits, Deaths)
   SFX.attack      = devSfx('Melee Hit: Generic Attack', ()=>chordTo(combatGain, [440,660], 0.08, 'square', 0.25));
   SFX.miss        = devSfx('Melee/Ranged Miss', ()=>playMissSfx());
-  SFX.enemyHit    = devSfx('Player Hurt', ()=>toneTo(combatGain, 140, 0.10, 'sawtooth', 0.28));
-  SFX.kill        = devSfx('Enemy Kill', ()=>chordTo(combatGain, [392, 523, 659], 0.20, 'triangle', 0.32));
+  SFX.enemyHit    = devSfx('Player Hurt', ()=>toneTo(enemyGain, 140, 0.10, 'sawtooth', 0.28));
+  SFX.kill        = devSfx('Enemy Kill', ()=>chordTo(enemyGain, [392, 523, 659], 0.20, 'triangle', 0.32));
   
   // Environment (Interactables: Chests, Doors, Stairs)
   SFX.openChest   = devSfx('Chest Open', ()=>playChestOpenSfx()); // Uses interactGain internally
@@ -1334,8 +1336,8 @@ function defineSfx(){
 
   // Magic / Status (Combat)
   SFX.spell       = devSfx('Spell Cast', ()=>playCastSfx());
-  SFX.rangedZap   = devSfx('Enemy Ranged Hit', ()=>toneTo(combatGain, 900, 0.11, 'sine', 0.26));
-  SFX.poisonTick  = devSfx('Poison Tick', ()=>noiseTo(combatGain, 0.06, 0.25, 1000));
+  SFX.rangedZap   = devSfx('Enemy Ranged Hit', ()=>toneTo(enemyGain, 900, 0.11, 'sine', 0.26));
+  SFX.poisonTick  = devSfx('Poison Tick', ()=>noiseTo(enemyGain, 0.06, 0.25, 1000));
   SFX.antidote    = devSfx('Antidote Cure', ()=>chordTo(combatGain, [523,659], 0.12, 'triangle', 0.24));
 }
 
@@ -1369,15 +1371,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const layout = [
       { type: 'slider', key: 'master', label: 'Master Volume', class: 'master-slider' },
       
-      { type: 'header', label: 'Atmosphere' },
-      { type: 'slider', key: 'music', label: 'Music' },
-      { type: 'slider', key: 'voice', label: 'Voice / Dialogue' }, // <--- New Slider
+      { type: 'header', label: 'Music & Voice' },
+      { type: 'slider', key: 'music', label: 'Background Music' },
+      { type: 'slider', key: 'voice', label: 'NPC Dialogue' }, 
       
       { type: 'header', label: 'Sound Effects' },
-      { type: 'slider', key: 'combat',   label: 'Combat' },
-      { type: 'slider', key: 'interact', label: 'Environment' },
+      { type: 'slider', key: 'combat',   label: 'Player Combat' },
+      { type: 'slider', key: 'enemy',    label: 'Monsters & Enemies' }, // <--- New Slider
+      { type: 'slider', key: 'interact', label: 'World & Environment' },
       { type: 'slider', key: 'foot',     label: 'Footsteps' },
-      { type: 'slider', key: 'ui',       label: 'Interface' },
+      { type: 'slider', key: 'ui',       label: 'Menus & UI' },
     ];
 
     container.innerHTML = '';

@@ -3033,8 +3033,17 @@ m.innerHTML = `
 
   const close = () => {
     m.style.display = 'none';
-    state._inputLocked = false; // UNLOCKS MOVEMENT!
-    if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+    
+    // Strip focus here as well to prevent UI ghosting
+    document.querySelectorAll('.controller-focus').forEach(e => e.classList.remove('controller-focus'));
+    
+    if (state._inSkillTree) {
+      state._inSkillTree = false;
+      if (typeof window.openSkillsModal === 'function') window.openSkillsModal();
+    } else {
+      state._inputLocked = false; // UNLOCKS MOVEMENT!
+      if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+    }
   };
   m.querySelector('#btnCloseSkillInfo')?.addEventListener('click', close);
   m.addEventListener('click', (e)=>{ if (e.target === m) close(); });
@@ -3069,6 +3078,8 @@ function showSkillDetails(type){
   const title = document.getElementById('skillInfoTitle');
   const body = document.getElementById('skillInfoBody');
   if (!modal || !title || !body) return;
+
+  state._inSkillTree = true; // Flag that we are deep in the skill tree
 
   const s = state.skills[type] || { lvl:1 };
   const L = s.lvl | 0;
