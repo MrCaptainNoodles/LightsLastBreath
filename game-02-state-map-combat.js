@@ -2035,18 +2035,31 @@ function getSpellStats(name){
     }
 
 // Offensive spells: add Empower perk damage
-// Note: Scroll Upgrades and Magic Level bonuses are already calculated inside baseForTier!
-let perkDmg = 0;
-if (state.skills?.magic?.perks && state.skills.magic.perks['mag_a1']) {
-  perkDmg = state.skills.magic.perks['mag_a1'];
-}
+        // Note: Scroll Upgrades and Magic Level bonuses are already calculated inside baseForTier!
+        let perkDmg = 0;
+        if (state.skills?.magic?.perks && state.skills.magic.perks['mag_a1']) {
+          perkDmg = state.skills.magic.perks['mag_a1'];
+        }
 
-return {
-  cost:  base.cost,
-  min:   base.baseMin + perkDmg,
-  max:   base.baseMax + perkDmg,
-  range: base.baseRange
-};
+        // --- NEW: Staff Elemental Synergy ---
+        let synergyDmg = 0;
+        const w = state.player.weapon;
+        if (w && w.type === 'staff') {
+            const spellMap = { 'Ember': 'Fire', 'Frost': 'Ice', 'Spark': 'Lightning', 'Gust': 'Wind', 'Pebble': 'Earth' };
+            const elem = spellMap[name];
+            if (elem) {
+                if (w.name.includes(elem)) {
+                    synergyDmg = 2; // Matching Element Buff
+                }
+            }
+        }
+
+        return {
+          cost:  base.cost,
+          min:   Math.max(1, base.baseMin + perkDmg + synergyDmg),
+          max:   Math.max(2, base.baseMax + perkDmg + synergyDmg),
+          range: base.baseRange
+        };
 }
 
 
@@ -2396,7 +2409,8 @@ function ensureSkill(type){
 }
 
 function skillDamageBonus(type){
-  const s = state.skills[type];
+  const checkType = type === 'staff' ? 'magic' : type;
+  const s = state.skills[checkType];
   let bonus = s ? Math.floor((s.lvl-1)/2) : 0;
   
   // NEW: Base Damage Tree Perks (+1 Dmg per level)
@@ -2434,20 +2448,27 @@ function awardKill(type,amount){
   if (type === 'infighting') return;
 
   // --- NEW PERKS: On-Kill Effects ---
+  let barsChanged = false;
   if (type === 'axe' && state.skills?.axe?.perks?.['axe_b1']) { // Bloodlust
     let healAmt = state.skills.axe.perks['axe_b1'];
     if (state.skills.axe.perks['axe_c1']) healAmt = Math.max(healAmt, Math.floor(state.player.hpMax * 0.10)); // Vampirism
     state.player.hp = Math.min(state.player.hpMax, state.player.hp + healAmt);
+    if (typeof spawnFloatText === 'function') spawnFloatText("+" + healAmt, state.player.x, state.player.y, '#4ade80');
+    barsChanged = true;
   }
-  if (type !== 'magic' && state.skills?.magic?.perks?.['mag_b3']) { // Siphon
+  if (type !== 'magic' && type !== 'bow' && state.skills?.magic?.perks?.['mag_b3']) { // Siphon
     state.player.mp = Math.min(state.player.mpMax, state.player.mp + state.skills.magic.perks['mag_b3']);
+    barsChanged = true;
   }
   if (state.skills?.spear?.perks?.['spear_c4']) { // Hit and Run
       state.player.stamina = Math.min(state.player.staminaMax, state.player.stamina + 1);
+      barsChanged = true;
   }
   if (type === 'two' && state.skills?.two?.perks?.['two_c7']) { // Rampage
       state.player.stamina = Math.min(state.player.staminaMax, state.player.stamina + 2);
+      barsChanged = true;
   }
+  if (barsChanged && typeof updateBars === 'function') updateBars();
 
   incrementMetaStat('kills_' + type);
 

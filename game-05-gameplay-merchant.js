@@ -1086,9 +1086,13 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           success = (Math.random() < chance);
         }
         
-        if (!success && !hasKey && !keepPick) {
-            state.inventory.lockpicks--;
-            updateInvBody?.(); // Ensure UI reflects the used pick on failure
+        if (!success && !hasKey) {
+            if (keepPick) {
+                spawnFloatText("Saved!", state.player.x, state.player.y, '#facc15');
+            } else {
+                state.inventory.lockpicks--;
+                updateInvBody?.(); // Ensure UI reflects the used pick on failure
+            }
         }
 
       if (success){
@@ -1123,7 +1127,11 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
           }
         } else {
           SFX.lockFail();
-          log(`Lockpick attempt failed. (${state.inventory.lockpicks})`);
+          if (keepPick && !hasKey) {
+              log(`Lockpick attempt failed, but your pick didn't break! (${state.inventory.lockpicks})`);
+          } else {
+              log(`Lockpick attempt failed. (${state.inventory.lockpicks})`);
+          }
         }
 
         draw(); did = true;
@@ -3117,7 +3125,7 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
 
   // --- NEW: Elemental Spell Effects (25% Proc Chance) ---
   if (spell.name === 'Ember' && Math.random() < 0.25) {
-      if (typeof applyBleed === 'function') applyBleed(target, 3, 2); // Reusing Bleed logic for Burn DOT
+      target.burning = true; target.burnTicks = Math.max(target.burnTicks|0, 3);
       spawnFloatText("BURN", target.x, target.y, '#f97316');
       log(`The ${target.type} catches fire!`);
   }

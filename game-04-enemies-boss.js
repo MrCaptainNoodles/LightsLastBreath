@@ -646,7 +646,7 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
       e.hp -= 2;
       if (typeof spawnFloatText === 'function') spawnFloatText("2", e.x, e.y, '#f97316');
       if (e.hp <= 0) {
-        handleEnemyDeath(e, 'burn');
+        handleEnemyDeath(e, 'magic');
         continue;
       }
       if (e.burnTicks <= 0) e.burning = false;

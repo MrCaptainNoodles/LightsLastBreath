@@ -4909,7 +4909,7 @@ function useStaff(w) {
       // --- NEW: Staff Basic Attack Elemental Procs (25% Chance) ---
       if (t.hp > 0 && Math.random() < 0.25) {
           if (w.name.includes('Fire')) {
-              if (typeof applyBleed === 'function') applyBleed(t, 3, 2); 
+              t.burning = true; t.burnTicks = Math.max(t.burnTicks|0, 3);
               spawnFloatText("BURN", t.x, t.y, '#f97316');
               log(`The ${t.type} catches fire!`);
           }

@@ -2805,9 +2805,9 @@ function updateBars(){
 
         // Add Skill Perks
       if (state.skills?.survivability?.perks?.['sur_base']) expectedHpMax += (2 * state.skills.survivability.perks['sur_base']);
-      if (state.skills?.hand?.perks?.['hand_b1']) expectedHpMax += (1 * state.skills.hand.perks['hand_b1']);
-      if (state.skills?.magic?.perks?.['mag_b1']) expectedMpMax += (2 * state.skills.magic.perks['mag_b1']);
-      if (state.skills?.survivability?.perks?.['sur_c1']) expectedStaminaMax += (1 * state.skills.survivability.perks['sur_c1']); // It's +1 per level, not +5
+      if (state.skills?.hand?.perks?.['hand_b4']) expectedHpMax += (5 * state.skills.hand.perks['hand_b4']); // Chi Focus (+5 Max HP)
+      if (state.skills?.magic?.perks?.['mag_a2']) expectedMpMax += (2 * state.skills.magic.perks['mag_a2']); // Leyline (+2 Max MP)
+      if (state.skills?.survivability?.perks?.['sur_a2']) expectedStaminaMax += (5 * state.skills.survivability.perks['sur_a2']); // Athleticism (+5 Max Stamina)
 
       // Only apply if there's a discrepancy to avoid infinite loops
       if (state.player.hpMax < expectedHpMax) state.player.hpMax = expectedHpMax;
