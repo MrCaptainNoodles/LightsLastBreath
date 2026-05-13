@@ -29,12 +29,13 @@ function _R12(ctx, px, py, s, cx, cy, w, h, color){
   ctx.fillRect(px + cx*s, py + cy*s, w*s, h*s);
 }
 
-// === Simple projectile helpers (magic bolts + arrows) ===
 function projectileColorForMagic(name){
   switch(name){
     case 'Spark':  return '#ffd93b'; // bright yellow
     case 'Ember':  return '#ff7f50'; // orange / fire
     case 'Frost':  return '#6ec5ff'; // icy blue
+    case 'Water':  return '#3b82f6'; // deep ocean blue
+    case 'Acid':   return '#4ade80'; // toxic bright green
     case 'Gust':   return '#f5f5f5'; // pale wind
     case 'Pebble': return '#b8b2a0'; // stone
     default:       return '#ffffff';
@@ -1533,10 +1534,10 @@ function drawPickupPixel(ctx, item, px, py, tile){
            let gem = '#d946ef'; // Pink
            let head = gD; // Gold mount
            if (n.includes('fire')) { gem='#ef4444'; head='#7f1d1d'; }
-           else if (n.includes('ice')) { gem='#06b6d4'; head='#164e63'; }
+           else if (n.includes('ice')) { gem='#a5f3fc'; head='#164e63'; } // Changed: Lighter icy blue
+           else if (n.includes('water')) { gem='#1d4ed8'; head='#1e3a8a'; } // Added: Dark blue
+           else if (n.includes('acid')) { gem='#4ade80'; head='#14532d'; } // Added: Bright toxic green
            else if (n.includes('lightning')) { gem='#facc15'; head='#854d0e'; }
-           else if (n.includes('poison')) { gem='#22c55e'; head='#14532d'; }
-           else if (n.includes('void')) { gem='#7e22ce'; head='#3b0764'; }
            else if (n.includes('wind')) { gem='#f8fafc'; head='#94a3b8'; } // White/Silver
            else if (n.includes('earth')) { gem='#92400e'; head='#451a03'; } // Brown/Dark Wood
 
@@ -2547,6 +2548,28 @@ for (const e of state.enemies){
     drawEnemyPixel(ctx, b.enemy, b.px, b.py, tile*2); // pass enemy object
   }
 
+  // --- NEW: Draw Telegraph Zones for Charging Enemies ---
+  for (const e of state.enemies) {
+    if (e.charging && e.chargeTiles) {
+      // Create a slow pulsing alpha using sine wave
+      const alpha = 0.15 + Math.abs(Math.sin(Date.now() / 250)) * 0.35; 
+      ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+      for (const t of e.chargeTiles) {
+        // Only draw the flash if the player has vision of that tile
+        if (!state.seen.has(key(t.x, t.y))) continue;
+
+        const sx = (t.x - ox) * tile;
+        const sy = (t.y - oy) * tile;
+        
+        // Prevent drawing outside the viewport bounds
+        if (sx + tile > 0 && sy + tile > 0 && sx < w && sy < h) {
+          ctx.fillRect(sx, sy, tile, tile);
+        }
+      }
+    }
+  }
+  // ------------------------------------------------------
+
   // projectiles (magic bolts / arrows) on top of tiles, under player
   if (Array.isArray(state.projectiles) && state.projectiles.length){
     for (const proj of state.projectiles){
@@ -3254,22 +3277,38 @@ function showSkillDetails(type){
   lockpicking: [
     { id: 'loc_base', name: 'Tinkerer', max: 5, desc: '+10% Lockpick Success Chance per level.', req: null },
     
-    { id: 'loc_a1', name: 'Scavenger', max: 5, desc: 'Find 20% more gold per level.', req: 'loc_base' },
-    { id: 'loc_a2', name: 'Trap Sense', max: 1, desc: 'Spike Traps deal half damage to you.', req: 'loc_base' },
+    { id: 'loc_a1', name: 'Nimble Fingers', max: 5, desc: '10% chance per level to not consume a lockpick upon use.', req: 'loc_base' },
+    { id: 'loc_a2', name: 'Trap Sense', max: 5, desc: 'Traps deal 10% less damage per level to you.', req: 'loc_base' },
     
-    { id: 'loc_b1', name: 'Appraiser', max: 1, desc: 'Chests have a +25% chance to drop Affixed weapons.', req: 'loc_a1' },
-    { id: 'loc_b2', name: 'Haggle', max: 1, desc: 'Merchant prices are permanently reduced by 20%.', req: 'loc_a1' },
+    { id: 'loc_b1', name: 'Burglar', max: 5, desc: '10% chance per level to instantly pick a lock without needing a tool.', req: 'loc_a1' },
+    { id: 'loc_b2', name: 'Scrap Metal', max: 5, desc: 'Breaking props has a 5% chance per level to drop a lockpick.', req: 'loc_a1' },
     { id: 'loc_b3', name: 'Saboteur', max: 1, desc: 'Walking over Spike Traps permanently breaks them.', req: 'loc_a2' },
-    { id: 'loc_b4', name: 'Scout', max: 1, desc: 'Field of vision in the darkness is permanently increased by 2 tiles.', req: 'loc_a2' },
+    { id: 'loc_b4', name: 'Mechanisms', max: 1, desc: 'Safely walk over traps, "arming" them to deal double damage to enemies.', req: 'loc_a2' },
     
-    { id: 'loc_c1', name: 'Bounty', max: 1, desc: 'Warlords and Bosses drop 3x the normal amount of gold.', req: 'loc_b1' },
-    { id: 'loc_c2', name: 'Alchemist\'s Bag', max: 1, desc: 'Using any consumable has a 25% chance to not be consumed.', req: 'loc_b1' },
-    { id: 'loc_c3', name: 'Silver Tongue', max: 1, desc: 'Sell items to the merchant for 50% more gold.', req: 'loc_b2' },
-    { id: 'loc_c4', name: 'Mercenary', max: 5, desc: 'Deal +1% bonus weapon damage for every 100 gold you are carrying per level.', req: 'loc_b2' },
-    { id: 'loc_c5', name: 'Master Thief', max: 1, desc: 'Lockpicks never break.', req: 'loc_b3' },
-    { id: 'loc_c6', name: 'Trapmaster', max: 1, desc: 'Safely walk over traps, "arming" them to deal double damage to enemies.', req: 'loc_b3' },
-    { id: 'loc_c7', name: 'Shadow Walk', max: 1, desc: 'Enemies cannot spot or aggro onto you unless you are within 2 tiles of them.', req: 'loc_b4' },
-    { id: 'loc_c8', name: 'Lucky Coin', max: 1, desc: 'Flat 10% chance to take 0 damage from any source.', req: 'loc_b4' }
+    { id: 'loc_c1', name: 'Master Thief', max: 1, desc: 'Lockpicks never break.', req: 'loc_b1' },
+    { id: 'loc_c2', name: 'Skeleton Key', max: 1, desc: 'Puzzle doors and sealed magic doors can now be lockpicked.', req: 'loc_b1' },
+    { id: 'loc_c3', name: 'Jury-Rig', max: 1, desc: 'Allows you to combine 3 Arrows into 1 Lockpick from the inventory.', req: 'loc_b2' },
+    { id: 'loc_c4', name: 'Shadow Walk', max: 1, desc: 'Successfully picking a lock makes you invisible to enemies for 3 turns.', req: 'loc_b2' },
+    { id: 'loc_c5', name: 'Evasion', max: 1, desc: 'You take 0 damage from all traps and environmental hazards.', req: 'loc_b3' },
+    { id: 'loc_c6', name: 'Trapmaster', max: 1, desc: 'Armed traps can now be picked up and placed elsewhere.', req: 'loc_b4' }
+  ],
+  dungeoneering: [
+    { id: 'dun_base', name: 'Scout', max: 5, desc: '+1 Field of Vision radius per level.', req: null },
+    
+    { id: 'dun_a1', name: 'Scavenger', max: 5, desc: 'Find 20% more gold per level.', req: 'dun_base' },
+    { id: 'dun_a2', name: 'Spelunker', max: 5, desc: 'Heal 5 HP per level when descending stairs.', req: 'dun_base' },
+    
+    { id: 'dun_b1', name: 'Appraiser', max: 1, desc: 'Chests have a +25% chance to drop Affixed weapons.', req: 'dun_a1' },
+    { id: 'dun_b2', name: 'Haggle', max: 5, desc: 'Merchant prices are reduced by 10% per level.', req: 'dun_a1' },
+    { id: 'dun_b3', name: 'Treasure Hunter', max: 5, desc: 'Chests drop +1 extra consumable per level.', req: 'dun_a2' },
+    { id: 'dun_b4', name: 'Alchemist\'s Bag', max: 1, desc: 'Using any consumable has a 25% chance to not be consumed.', req: 'dun_a2' },
+    
+    { id: 'dun_c1', name: 'Bounty', max: 1, desc: 'Warlords and Bosses drop 3x the normal amount of gold.', req: 'dun_b1' },
+    { id: 'dun_c2', name: 'Sixth Sense', max: 1, desc: 'Mimics are revealed automatically instead of surprising you.', req: 'dun_b1' },
+    { id: 'dun_c3', name: 'Silver Tongue', max: 1, desc: 'Sell items to the merchant for 50% more gold.', req: 'dun_b2' },
+    { id: 'dun_c4', name: 'Mercenary', max: 5, desc: 'Deal +1% bonus weapon damage for every 100 gold you are carrying per level.', req: 'dun_b2' },
+    { id: 'dun_c5', name: 'Hoarder', max: 1, desc: 'Chests have a 10% chance to contain an extra piece of equipment.', req: 'dun_b3' },
+    { id: 'dun_c6', name: 'Lucky Coin', max: 1, desc: 'Flat 10% chance to take 0 damage from any source.', req: 'dun_b4' }
   ]
 };
 
@@ -3498,8 +3537,8 @@ function showSkillDetails(type){
           state.player.stamina += 5;
           if (typeof updateBars === 'function') updateBars();
         }
-        if (pId === 'loc_b4') { // Scout (+2 Vision)
-          state.fovRadius = (state.fovRadius || 5) + 2;
+        if (pId === 'dun_base') { // Scout (+1 Vision per level)
+          state.fovRadius = 5 + (s.perks['dun_base'] || 0); // Recalculate from base 5
           if (typeof draw === 'function') draw();
         }
         

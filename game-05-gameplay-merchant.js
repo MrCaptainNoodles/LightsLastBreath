@@ -1,4 +1,17 @@
 // ====== Gameplay ======
+window.awardSkillXP = function(type, amount) {
+    if (typeof ensureSkill !== 'function') return;
+    ensureSkill(type);
+    const s = state.skills[type];
+    s.xp += amount;
+    if(!s.shown) s.shown = true;
+    let up = false;
+    const growth = (typeof SKILL_XP_GROWTH !== 'undefined') ? SKILL_XP_GROWTH : 1.5;
+    while(s.xp >= s.next){ s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * growth); up = true; }
+    if(up && typeof log === 'function') log(typeNice(type) + ' advanced to ' + s.lvl + '.');
+    if (typeof renderSkills === 'function') renderSkills();
+};
+
 function collectIfPickup(){
   const kxy=key(state.player.x,state.player.y);
   if(state.tiles[state.player.y][state.player.x]===5 && state.pickups[kxy]){
@@ -219,6 +232,14 @@ function tryMove(dx,dy){
   }
   if(enemyAt(nx,ny)) { log('An enemy blocks the way.'); return; }
   if(t===2) { log(`A door blocks the way. Press ${getInputName('interact')} to open/unlock.`); return; }
+  if(t===13 || t===14) { 
+      if (state.skills?.lockpicking?.perks?.['loc_c2']) {
+          log(`A sealed door blocks the way. Press ${getInputName('interact')} to lockpick it!`);
+      } else {
+          log(`A magically sealed door blocks the way. You need a key or puzzle solution.`);
+      }
+      return; 
+  }
   if(t===3) { log(`A chest blocks the way. Press ${getInputName('interact')} to open.`); return; }
   if(t===6) { log(`A mystical shrine blocks the way. Press ${getInputName('interact')} to interact.`); return; }
   
@@ -366,22 +387,27 @@ function tryMove(dx,dy){
         state.tiles[ny][nx] = 1;
         spawnFloatText("DISARMED", nx, ny, '#9ca3af');
         log("You safely disarmed the spike trap.");
-    } else if (state.skills?.lockpicking?.perks?.['loc_c6']) {
+    } else if (state.skills?.lockpicking?.perks?.['loc_b4']) { // Mechanisms
         state.armedTraps = state.armedTraps || new Set();
         state.armedTraps.add(key(nx,ny));
         spawnFloatText("ARMED", nx, ny, '#facc15');
+    } else if (state.skills?.lockpicking?.perks?.['loc_c5']) { // Evasion
+        spawnFloatText("EVADED", nx, ny, '#9ca3af');
     } else {
         let finalDmg = Math.max(5, Math.floor(state.player.hpMax * 0.10));
+        if (state.skills?.lockpicking?.perks?.['loc_a2']) finalDmg = Math.floor(finalDmg * (1 - (0.10 * state.skills.lockpicking.perks['loc_a2']))); // Trap Sense
         if (state.skills?.survivability?.perks?.['sur_c4']) finalDmg = Math.ceil(finalDmg / 2); // Juggernaut
         if (window._godMode) finalDmg = 0;
         
-        state.player.hp = clamp(state.player.hp - finalDmg, 0, state.player.hpMax);
-        flashDamage();
-        SFX.weaponBreak(); 
-        log(`You step on spikes! Took ${finalDmg} damage.`);
-        spawnFloatText(finalDmg, nx, ny, '#ff0000');
-        updateBars();
-        if(state.player.hp <= 0) { triggerGameOver(); return; }
+        if (finalDmg > 0) {
+            state.player.hp = clamp(state.player.hp - finalDmg, 0, state.player.hpMax);
+            flashDamage();
+            SFX.weaponBreak(); 
+            log(`You step on spikes! Took ${finalDmg} damage.`);
+            spawnFloatText(finalDmg, nx, ny, '#ff0000');
+            updateBars();
+            if(state.player.hp <= 0) { triggerGameOver(); return; }
+        }
     }
   }
   // NEW: block NPC tiles BEFORE moving
@@ -784,8 +810,18 @@ if (tintEl) tintEl.style.background = newBgColor;
 
 log('You descend.');
 
+if (window.awardSkillXP) {
+    const xpGain = state.cursedFloor ? 10 : 5; // Double XP for Cursed Stairs
+    window.awardSkillXP('dungeoneering', xpGain);
+}
+
 // recover HP (Base 25%)
 let heal = Math.ceil(state.player.hpMax * 0.25);
+
+// Spelunker (dun_a2): Heal 5 HP per level when descending stairs
+if (state.skills?.dungeoneering?.perks?.['dun_a2']) {
+    heal += (5 * state.skills.dungeoneering.perks['dun_a2']);
+}
 
 // --- FIX: Survivability Regeneration (Heal 1 HP per level per floor) ---
 if (state.skills?.survivability?.perks?.['sur_b1']) {
@@ -1049,9 +1085,11 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
     }
   }
   
+  if (window.awardSkillXP) window.awardSkillXP('dungeoneering', 15);
+
   did = true;
   // Only turn if something happened (which it did)
-  enemyStep(); 
+  enemyStep();
   draw();
 
 
@@ -1063,23 +1101,46 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
   
   did = true;
 }
-        if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===2){
+
+    // --- NEW: Trapmaster (loc_c6) Pickup Traps ---
+    if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===7){
+        if (state.skills?.lockpicking?.perks?.['loc_c6'] && state.armedTraps?.has(key(nb.x,nb.y))) {
+            state.armedTraps.delete(key(nb.x,nb.y));
+            state.tiles[nb.y][nb.x] = 1;
+            state.inventory.traps = (state.inventory.traps || 0) + 1;
+            log("You picked up the armed trap.");
+            spawnFloatText("+1 Trap", nb.x, nb.y, '#facc15');
+            did = true;
+        }
+    }
+
+    const isNormalDoor = state.tiles[nb.y][nb.x]===2;
+    const isPuzzleDoor = state.skills?.lockpicking?.perks?.['loc_c2'] && (state.tiles[nb.y][nb.x]===13 || state.tiles[nb.y][nb.x]===14);
+
+    if(inBounds(nb.x,nb.y) && (isNormalDoor || isPuzzleDoor)){
       // Check for Key of Destiny
       const hasKey = state.player.weapon?.name?.includes('Key of Destiny');
       
-      if(hasKey || state.inventory.lockpicks>0){
+      // Burglar (loc_b1) - Free open
+      let isBurglar = false;
+      if (state.skills?.lockpicking?.perks?.['loc_b1'] && Math.random() < (0.10 * state.skills.lockpicking.perks['loc_b1'])) {
+          isBurglar = true;
+      }
+      
+      if(hasKey || isBurglar || state.inventory.lockpicks>0){
         ensureSkill('lockpicking');
         
-        // Perk: Locksmith (15% chance per level to not consume lockpick) & Skeleton Key (Unbreakable)
         let keepPick = false;
-        if (state.skills?.lockpicking?.perks?.['loc_base']) keepPick = Math.random() < (0.15 * state.skills.lockpicking.perks['loc_base']);
-        if (state.skills?.lockpicking?.perks?.['loc_c5']) keepPick = true;
+        // Nimble Fingers (loc_a1): 10% chance per level
+        if (state.skills?.lockpicking?.perks?.['loc_a1']) keepPick = Math.random() < (0.10 * state.skills.lockpicking.perks['loc_a1']);
+        // Master Thief (loc_c1): Never breaks
+        if (state.skills?.lockpicking?.perks?.['loc_c1']) keepPick = true;
         
 
-        // Tutorial OR Key = Instant Success
+        // Tutorial OR Key OR Burglar = Instant Success
         let success;
-        if (state.gameMode === 'tutorial' || hasKey ) {
-          success = true; // loc_a2 = Master Thief (Guaranteed Success)
+        if (state.gameMode === 'tutorial' || hasKey || isBurglar) {
+          success = true; 
         } else {
           const L = state.skills['lockpicking'].lvl || 1;
           const chance = Math.max(0.10, Math.min(0.95, 0.35 + 0.10*(L-1)));
@@ -1098,7 +1159,14 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
       if (success){
           incrementMetaStat('locks'); // <--- NEW: Track lockpick success
           state.tiles[nb.y][nb.x] = 1;
-          
+
+          // Shadow Walk (loc_c4)
+          if (state.skills?.lockpicking?.perks?.['loc_c4']) {
+              state.player._invisibleTicks = 3;
+              log("You fade into the shadows.");
+              spawnFloatText("STEALTH", state.player.x, state.player.y, '#9ca3af');
+          }
+
           // Only grant XP if we actually used a lockpick (no Key)
           if (!hasKey) {
             state.skills['lockpicking'].shown = true;
@@ -1258,6 +1326,16 @@ function handlePropSmash(x, y) {
       updateBars();
     }
   }
+  if (window.awardSkillXP) window.awardSkillXP('dungeoneering', 2);
+
+  // Scrap Metal (loc_b2): 5% chance per level to drop a lockpick
+  if (state.skills?.lockpicking?.perks?.['loc_b2'] && Math.random() < (0.05 * state.skills.lockpicking.perks['loc_b2'])) {
+      state.inventory.lockpicks++;
+      log(`Found a spare lockpick in the debris. (${state.inventory.lockpicks})`);
+      spawnFloatText("+1 Lockpick", x, y, '#9ca3af');
+      updateInvBody();
+  }
+
   // 2. Good Outcome (20%): Loot
   else if (roll < 0.30) {
     const lootR = Math.random();
@@ -1391,6 +1469,13 @@ function openChest(x,y){
 
   // --- Mimic trap remains the same ---
   if (state.mimicChests && state.mimicChests.has(k)) {
+    if (state.skills?.dungeoneering?.perks?.['dun_c2'] && !state._revealedMimics?.has(k)) {
+        state._revealedMimics = state._revealedMimics || new Set();
+        state._revealedMimics.add(k);
+        log('Your Sixth Sense tingles! That chest is a Mimic!');
+        spawnFloatText("MIMIC!", x, y, '#ef4444');
+        return; // Prevents opening it instantly so they aren't ambushed
+    }
     state.mimicChests.delete(k);
     state.tiles[y][x] = 1;     // chest disappears
     SFX.openChest();
@@ -1632,9 +1717,33 @@ function openChest(x,y){
 
   if (isStarterChest) delete state._starterChest;
 
-  // Perk: Treasure Hunter (Bonus Gold in chests)
-  if (state.skills?.lockpicking?.perks?.['loc_a1']) {
-      const extraGold = rand(5, 15) * state.skills.lockpicking.perks['loc_a1'];
+  if (window.awardSkillXP) window.awardSkillXP('dungeoneering', 5);
+
+  // Treasure Hunter (dun_b3): +1 extra consumable per level
+  if (state.skills?.dungeoneering?.perks?.['dun_b3']) {
+      const extraCount = state.skills.dungeoneering.perks['dun_b3'];
+      for (let i = 0; i < extraCount; i++) {
+          const wConsumable = scaleNonWeaponWeights(NON_WEAPON_BASE);
+          wConsumable.shield = 0; wConsumable.arrows = 0; wConsumable.spell = 0; // Force consumables
+          const extraPick = pickWeighted(wConsumable);
+          if (extraPick === 'potion') { state.inventory.potions++; lootMsg.push('+1 potion'); }
+          else if (extraPick === 'tonic') { state.inventory.tonics++; lootMsg.push('+1 tonic'); }
+          else if (extraPick === 'antidote') { state.inventory.antidotes++; lootMsg.push('+1 antidote'); }
+          else if (extraPick === 'bomb') { state.inventory.bombs = (state.inventory.bombs||0)+1; lootMsg.push('+1 bomb'); }
+          else if (extraPick === 'warp') { state.inventory.warpStones = (state.inventory.warpStones||0)+1; lootMsg.push('+1 warp stone'); }
+      }
+  }
+
+  // Hoarder (dun_c5): 10% chance for extra equipment
+  if (state.skills?.dungeoneering?.perks?.['dun_c5'] && Math.random() < 0.10) {
+      const wExtra = randomWeapon();
+      state.inventory.weapons[wExtra.name] = (state.inventory.weapons[wExtra.name] || 0) + 1;
+      lootMsg.push(`${wExtra.name} (Hoarder)`);
+  }
+
+  // Perk: Scavenger (dun_a1)
+  if (state.skills?.dungeoneering?.perks?.['dun_a1']) {
+      const extraGold = rand(5, 15) * state.skills.dungeoneering.perks['dun_a1'];
       state.inventory.gold += extraGold;
       lootMsg.push(`+${extraGold}g`);
       spawnFloatText(`+${extraGold}g`, x, y, '#facc15');
@@ -2127,7 +2236,28 @@ function attack(){
     // Use Staff Magic IF: We have an enemy OR (We have no enemy AND no prop to smash)
     // If we HAVE a prop and NO enemy, this skips, allowing us to smash the prop below.
     if (isStaff && (target || !propPos)) {
-        useStaff(state.player.weapon); 
+        // Create a synthetic spell definition dynamically tracking the staff's custom name matching
+        const wName = state.player.weapon.name || '';
+        let staffSpell = null;
+        
+        if (wName.includes('Fire'))         staffSpell = { name: 'Ember', cost: 0, tier: 1 };
+        else if (wName.includes('Ice'))     staffSpell = { name: 'Frost', cost: 0, tier: 1 };
+        else if (wName.includes('Lightning')) staffSpell = { name: 'Spark', cost: 0, tier: 1 };
+        else if (wName.includes('Wind'))    staffSpell = { name: 'Gust', cost: 0, tier: 1 };
+        else if (wName.includes('Earth'))   staffSpell = { name: 'Pebble', cost: 0, tier: 1 };
+        else if (wName.includes('Acid'))    staffSpell = { name: 'Acid', cost: 0, tier: 1 };
+        else if (wName.includes('Water'))   staffSpell = { name: 'Water', cost: 0, tier: 1 };
+
+        if (staffSpell) {
+            // Temporarily stash equipped spell, route staff shot through cast engine to hook statuses & combos seamlessly
+            const oldSpell = state.equippedSpell;
+            state.equippedSpell = staffSpell;
+            cast();
+            state.equippedSpell = oldSpell;
+        } else {
+            // Fallback default action if the staff name is generic
+            cast();
+        }
         return;
     }
     // -----------------------------
@@ -3114,12 +3244,50 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
   else if (wName.includes('Ice') && spell.name === 'Frost') { dmg+=3; log('Ice Staff boost!'); }
   else if (wName.includes('Wind') && spell.name === 'Gust') { dmg+=3; log('Wind Staff boost!'); }
   else if (wName.includes('Earth') && spell.name === 'Pebble') { dmg+=3; log('Earth Staff boost!'); }
+  else if (wName.includes('Acid') && spell.name === 'Acid') { dmg+=3; log('Acid Staff boost!'); }
+  else if (wName.includes('Water') && spell.name === 'Water') { dmg+=3; log('Water Staff boost!'); }
   
   if (isEffectActive('ArcaneFlux')) dmg = Math.ceil(dmg * 1.5);
 
+  // --- NEW: Elemental Synergies ---
+  let synergyNote = "";
+  if (spell.name === 'Spark' && target.slipperyTicks > 0) {
+      dmg *= 2;
+      target.slipperyTicks = 0;
+      synergyNote = " (ELECTROCUTE!)";
+      spawnFloatText("ELECTROCUTE!", target.x, target.y - 0.5, '#fde047');
+  } else if (spell.name === 'Frost' && target.slipperyTicks > 0) {
+      if (typeof applyStun === 'function') applyStun(target, 3);
+      target.slipperyTicks = 0;
+      synergyNote = " (FLASH FREEZE!)";
+      spawnFloatText("FLASH FREEZE!", target.x, target.y - 0.5, '#38bdf8');
+  } else if (spell.name === 'Ember' && target.poisonTicks > 0) {
+      dmg += target.poisonTicks * 3;
+      target.poisonTicks = 0;
+      target.poisoned = false;
+      synergyNote = " (TOXIC DETONATION!)";
+      spawnFloatText("DETONATION!", target.x, target.y - 0.5, '#a3e635');
+  } else if (spell.name === 'Gust' && target.burnTicks > 0) {
+      synergyNote = " (WILDFIRE!)";
+      spawnFloatText("WILDFIRE!", target.x, target.y - 0.5, '#f97316');
+      state.enemies.forEach(en => {
+          if (en !== target && Math.abs(en.x - target.x) <= 1 && Math.abs(en.y - target.y) <= 1) {
+              en.burning = true;
+              en.burnTicks = Math.max(en.burnTicks|0, 3);
+              spawnFloatText("BURN", en.x, en.y, '#f97316');
+          }
+      });
+  } else if (spell.name === 'Pebble' && target.slowTicks > 0) {
+      dmg *= 2;
+      target.slowTicks = 0;
+      synergyNote = " (SHATTER!)";
+      spawnFloatText("SHATTER!", target.x, target.y - 0.5, '#facc15');
+  }
+  // --------------------------------
+
   target.hp -= dmg;
   if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); 
-  spawnParticles(target.x, target.y, '#60a5fa', 6); 
+  spawnParticles(target.x, target.y, '#60a5fa', 6);
   
   spawnFloatText(dmg, target.x, target.y, '#60a5fa');
 
@@ -3159,7 +3327,7 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
   else if (spell.name === 'Spark' && Math.random() < 0.25) {
       // Chain Lightning Logic
       let currentTarget = target;
-      let chainChance = 1.0; // Guaranteed first jump if the 25% initial proc succeeds
+      let chainChance = 1.0; 
       let chainDmg = Math.max(1, Math.floor(dmg * 0.75));
       const hitList = new Set([target]);
 
@@ -3188,6 +3356,17 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
           chainChance *= 0.50; // Decay jump chance 50%
       }
   }
+  else if (spell.name === 'Acid' && Math.random() < 0.25) {
+      target.poisoned = true; 
+      target.poisonTicks = Math.max(target.poisonTicks|0, 4);
+      spawnFloatText("POISONED", target.x, target.y, '#22c55e');
+      log(`The ${target.type} is covered in corrosive acid!`);
+  }
+  else if (spell.name === 'Water' && Math.random() < 0.25) {
+      target.slipperyTicks = Math.max(target.slipperyTicks|0, 3);
+      spawnFloatText("SLIPPERY", target.x, target.y, '#3b82f6');
+      log(`The ground beneath the ${target.type} becomes slick with water!`);
+  }
   // ------------------------------------------------------
 
   // NEW: Arcane Chain (mag_c2) - Overcharge bounces to second enemy
@@ -3204,7 +3383,7 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
 
   // --- FIX: Magic Aether Nova (mag_a3 is gone, keeping base overcharge logic cleanly) ---
 
-  log(`Your ${spell.name} hits for ${dmg}.`);
+  log(`Your ${spell.name} hits for ${dmg}${synergyNote}.`);
 
   // TUTORIAL Step 9 (Magic)
   if (state.gameMode === 'tutorial' && state.tutorialStep === 9) {
@@ -3308,6 +3487,8 @@ const stats = {
     'Lightning Staff':[2,4,'staff'],
     'Wind Staff':     [2,4,'staff'], 
     'Earth Staff':    [2,4,'staff'],
+    'Acid Staff':     [2,4,'staff'],
+    'Water Staff':    [2,4,'staff'],
 
     // --- NEW SHIELDS ---
     'Buckler':        [1,2,'shield'], 
@@ -3437,7 +3618,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const f = state.floor | 0;
     const mult = 1 + 0.10 * Math.floor(Math.max(0, f - 1) / 3);
     let p = Math.ceil(base * mult);
-    if (state.skills?.lockpicking?.perks?.['loc_b2']) p = Math.floor(p * 0.80); // Haggle (-20%)
+    // Haggle (dun_b2): -10% price per level
+    if (state.skills?.dungeoneering?.perks?.['dun_b2']) {
+        p = Math.floor(p * (1 - (0.10 * state.skills.dungeoneering.perks['dun_b2'])));
+    }
     return Math.max(1, p);
   }
 
@@ -3503,7 +3687,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     // Helper to create a sell row
     const addSellItem = (label, basePrice, onSell) => {
-      const price = state.skills?.lockpicking?.perks?.['loc_c3'] ? Math.ceil(basePrice * 1.50) : basePrice;
+      // Silver Tongue (dun_c3): Sell items for 50% more
+      const price = state.skills?.dungeoneering?.perks?.['dun_c3'] ? Math.ceil(basePrice * 1.50) : basePrice;
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.1);';
       

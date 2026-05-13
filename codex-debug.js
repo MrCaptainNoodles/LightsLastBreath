@@ -273,6 +273,7 @@ if (lootBtn) lootBtn.addEventListener('click', () => {
         {name:'Claws', type:'hand'}, {name:'Fire Staff', type:'staff'},
         {name:'Ice Staff', type:'staff'}, {name:'Lightning Staff', type:'staff'},
         {name:'Wind Staff', type:'staff'}, {name:'Earth Staff', type:'staff'},
+        {name:'Water Staff', type:'staff'}, {name:'Acid Staff', type:'staff'},
         {name:'Key of Destiny', type:'one'}
       ];
       let idx = 0;

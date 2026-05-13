@@ -2281,7 +2281,11 @@ const DURABILITY = {
   'Ice Staff':       15,
   'Lightning Staff': 15,
   'Wind Staff':      15,
-  'Earth Staff':     15
+  'Earth Staff':     15,
+  'Acid Staff':      15,
+  'Water Staff':     15
+};
+function defaultDurabilityFor(name){
 };
 function defaultDurabilityFor(name){
   if (!name) return null;

@@ -1906,6 +1906,9 @@ const pool=[
     {name:'Lightning Staff',min:2,max:4,type:'staff'},
     {name:'Wind Staff',min:2,max:4,type:'staff'},
     {name:'Earth Staff',min:2,max:4,type:'staff'},
+    {name:'Acid Staff',min:2,max:4,type:'staff'},
+    {name:'Water Staff',min:2,max:4,type:'staff'},
+    
   // SHIELDS REMOVED FROM WEAPON POOL. They now spawn only via the 'shield' pickup kind.
   ];
   let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
@@ -1913,7 +1916,7 @@ const pool=[
   // --- NEW: Affix System (25% chance) ---
   // --- FIX: Appraiser Perk (+25% affix chance) ---
   let affixChance = 0.25;
-  if (state.skills?.lockpicking?.perks?.['loc_b1']) {
+  if (state.skills?.dungeoneering?.perks?.['dun_b1']) { // Appraiser
       affixChance += 0.25;
   }
 
@@ -1971,6 +1974,8 @@ function randomSpell(){
     {name:'Frost',  cost:3},
     {name:'Gust',   cost:2},
     {name:'Pebble', cost:1},
+    {name:'Acid',   cost:3}, // NEW
+    {name:'Water',  cost:2}, // NEW
     {name:'Heal',   cost:4}
   ];
   const base = pool[rand(0,pool.length-1)];
@@ -1989,6 +1994,8 @@ const SPELL_BOOK = {
   Frost:  { cost:3, baseMin:2, baseMax:4, baseRange:3 },
   Gust:   { cost:1, baseMin:1, baseMax:3, baseRange:2 }, 
   Pebble: { cost:1, baseMin:1, baseMax:4, baseRange:3 },
+  Acid:   { cost:3, baseMin:2, baseMax:5, baseRange:3 }, // NEW
+  Water:  { cost:2, baseMin:1, baseMax:3, baseRange:3 }, // NEW
   Heal:   { cost:4, baseMin:4, baseMax:6, baseRange:0 }
 };
 
@@ -2045,7 +2052,7 @@ function getSpellStats(name){
         let synergyDmg = 0;
         const w = state.player.weapon;
         if (w && w.type === 'staff') {
-            const spellMap = { 'Ember': 'Fire', 'Frost': 'Ice', 'Spark': 'Lightning', 'Gust': 'Wind', 'Pebble': 'Earth' };
+            const spellMap = { 'Ember': 'Fire', 'Frost': 'Ice', 'Spark': 'Lightning', 'Gust': 'Wind', 'Pebble': 'Earth', 'Acid': 'Acid', 'Water': 'Water' }; // NEW: Added Acid/Water mappings
             const elem = spellMap[name];
             if (elem) {
                 if (w.name.includes(elem)) {
@@ -2145,12 +2152,12 @@ function goldFor(enemy){
 
   let base = rand(lo + depthBonus, hi + depthBonus);
   
-  // Treasure Hunter (loc_a1): +20% gold per level
-  if (state.skills?.lockpicking?.perks?.['loc_a1']) {
-      base = Math.ceil(base * (1 + (0.20 * state.skills.lockpicking.perks['loc_a1'])));
+  // Scavenger (dun_a1): +20% gold per level
+  if (state.skills?.dungeoneering?.perks?.['dun_a1']) {
+      base = Math.ceil(base * (1 + (0.20 * state.skills.dungeoneering.perks['dun_a1'])));
   }
-  // Bounty (loc_c1): Bosses/Warlords/Elites drop 3x Gold
-  if (state.skills?.lockpicking?.perks?.['loc_c1'] && (enemy.boss || enemy.miniBoss || enemy.elite)) {
+  // Bounty (dun_c1): Bosses/Warlords/Elites drop 3x Gold
+  if (state.skills?.dungeoneering?.perks?.['dun_c1'] && (enemy.boss || enemy.miniBoss || enemy.elite)) {
       base *= 3;
   }
 
@@ -2170,8 +2177,8 @@ function damageAfterDR(raw){
   // --- NEW: God Mode ---
   if (window._godMode) return 0;
 
-  // NEW: Lucky Coin (loc_c8)
-  if (state.skills?.lockpicking?.perks?.['loc_c8'] && Math.random() < 0.10) {
+  // NEW: Lucky Coin (dun_c6)
+  if (state.skills?.dungeoneering?.perks?.['dun_c6'] && Math.random() < 0.10) {
       if (typeof spawnFloatText === 'function') spawnFloatText("LUCKY!", state.player.x, state.player.y, '#facc15');
       return 0; 
   }
@@ -2421,9 +2428,9 @@ function skillDamageBonus(type){
     if (type === 'hand' && s.perks['hand_base']) bonus += s.perks['hand_base'];
   }
   
-  // Mercenary (loc_c4)
-  if (state.skills?.lockpicking?.perks?.['loc_c4']) {
-      bonus += Math.floor((state.inventory.gold || 0) / 100) * state.skills.lockpicking.perks['loc_c4'];
+  // Mercenary (dun_c4)
+  if (state.skills?.dungeoneering?.perks?.['dun_c4']) {
+      bonus += Math.floor((state.inventory.gold || 0) / 100) * state.skills.dungeoneering.perks['dun_c4'];
   }
   
   return bonus;
@@ -2562,6 +2569,7 @@ function typeNice(type){
     axe:'Hafted',
     bow:'Archery',
     lockpicking:'Lockpicking',
+    dungeoneering:'Dungeoneering',
     magic:'Magic',
     survivability:'Survivability'
   })[type] || type;
