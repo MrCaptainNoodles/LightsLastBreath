@@ -1215,11 +1215,11 @@ function useBomb(){
     }
     SFX.weaponBreak(); // FIX: Explosion sound instead of stairs
     
-    // --- FIX: Throw 3 tiles in facing direction ---
-    const range = 3;
+    // --- FIX: Throw in facing direction ---
+    const range = 2; // User requested range 2
     const dirs = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
     // Default to down if facing is undefined
-    const [dx, dy] = dirs[state.player.facing || 'down']; 
+    const [dx, dy] = dirs[state.player.facing || 'down'];
     
     const targetX = state.player.x + (dx * range);
     const targetY = state.player.y + (dy * range);
@@ -1228,13 +1228,23 @@ function useBomb(){
     // 3x3 Explosion centered on targetX, targetY
     const rad = 1; 
     let hitCount = 0;
+    
+    // --- NEW: Queue the 3x3 visual effect ---
+    if (!state.bombEffects) state.bombEffects = [];
+    state.bombEffects.push({
+        x: targetX,
+        y: targetY,
+        start: Date.now(),
+        duration: 900 // Increased from 400ms to last noticeably longer
+    });
+    // ----------------------------------------
+    
     for(let y = -rad; y <= rad; y++){
       for(let x = -rad; x <= rad; x++){
         const tx = targetX + x;
         const ty = targetY + y;
         
         // Visuals
-        spawnFloatText("💥", tx, ty, '#ff0000');
         spawnParticles(tx, ty, '#f97316', 6); // Fire
         spawnParticles(tx, ty, '#4b5563', 4); // Smoke
         

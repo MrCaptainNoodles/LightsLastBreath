@@ -2240,13 +2240,13 @@ function attack(){
         const wName = state.player.weapon.name || '';
         let staffSpell = null;
         
-        if (wName.includes('Fire'))         staffSpell = { name: 'Ember', cost: 0, tier: 1 };
-        else if (wName.includes('Ice'))     staffSpell = { name: 'Frost', cost: 0, tier: 1 };
-        else if (wName.includes('Lightning')) staffSpell = { name: 'Spark', cost: 0, tier: 1 };
-        else if (wName.includes('Wind'))    staffSpell = { name: 'Gust', cost: 0, tier: 1 };
-        else if (wName.includes('Earth'))   staffSpell = { name: 'Pebble', cost: 0, tier: 1 };
-        else if (wName.includes('Acid'))    staffSpell = { name: 'Acid', cost: 0, tier: 1 };
-        else if (wName.includes('Water'))   staffSpell = { name: 'Water', cost: 0, tier: 1 };
+        if (wName.includes('Fire'))         staffSpell = { name: 'Ember', cost: 0, tier: 1, isBasic: true };
+        else if (wName.includes('Ice'))     staffSpell = { name: 'Frost', cost: 0, tier: 1, isBasic: true };
+        else if (wName.includes('Lightning')) staffSpell = { name: 'Spark', cost: 0, tier: 1, isBasic: true };
+        else if (wName.includes('Wind'))    staffSpell = { name: 'Gust', cost: 0, tier: 1, isBasic: true };
+        else if (wName.includes('Earth'))   staffSpell = { name: 'Pebble', cost: 0, tier: 1, isBasic: true };
+        else if (wName.includes('Acid'))    staffSpell = { name: 'Acid', cost: 0, tier: 1, isBasic: true };
+        else if (wName.includes('Water'))   staffSpell = { name: 'Water', cost: 0, tier: 1, isBasic: true };
 
         if (staffSpell) {
             // Temporarily stash equipped spell, route staff shot through cast engine to hook statuses & combos seamlessly
@@ -2254,6 +2254,10 @@ function attack(){
             state.equippedSpell = staffSpell;
             cast();
             state.equippedSpell = oldSpell;
+            
+            // --- FIX: Ensure the UI updates to reflect the restored equipped spell ---
+            if (typeof updateEquipUI === 'function') updateEquipUI();
+            // -------------------------------------------------------------------------
         } else {
             // Fallback default action if the staff name is generic
             cast();
@@ -3239,13 +3243,15 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
 
   // Staff Elemental Boost
   const wName = state.player.weapon ? state.player.weapon.name : '';
-  if (wName.includes('Fire') && spell.name === 'Ember') { dmg+=3; log('Fire Staff boost!'); }
-  else if (wName.includes('Light') && spell.name === 'Spark') { dmg+=3; log('Lightning Staff boost!'); }
-  else if (wName.includes('Ice') && spell.name === 'Frost') { dmg+=3; log('Ice Staff boost!'); }
-  else if (wName.includes('Wind') && spell.name === 'Gust') { dmg+=3; log('Wind Staff boost!'); }
-  else if (wName.includes('Earth') && spell.name === 'Pebble') { dmg+=3; log('Earth Staff boost!'); }
-  else if (wName.includes('Acid') && spell.name === 'Acid') { dmg+=3; log('Acid Staff boost!'); }
-  else if (wName.includes('Water') && spell.name === 'Water') { dmg+=3; log('Water Staff boost!'); }
+  if (!spell.isBasic) {
+      if (wName.includes('Fire') && spell.name === 'Ember') { dmg+=3; log('Fire Staff boost!'); }
+      else if (wName.includes('Light') && spell.name === 'Spark') { dmg+=3; log('Lightning Staff boost!'); }
+      else if (wName.includes('Ice') && spell.name === 'Frost') { dmg+=3; log('Ice Staff boost!'); }
+      else if (wName.includes('Wind') && spell.name === 'Gust') { dmg+=3; log('Wind Staff boost!'); }
+      else if (wName.includes('Earth') && spell.name === 'Pebble') { dmg+=3; log('Earth Staff boost!'); }
+      else if (wName.includes('Acid') && spell.name === 'Acid') { dmg+=3; log('Acid Staff boost!'); }
+      else if (wName.includes('Water') && spell.name === 'Water') { dmg+=3; log('Water Staff boost!'); }
+  }
   
   if (isEffectActive('ArcaneFlux')) dmg = Math.ceil(dmg * 1.5);
 
@@ -3291,81 +3297,86 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
   
   spawnFloatText(dmg, target.x, target.y, '#60a5fa');
 
+  
   // --- NEW: Elemental Spell Effects (25% Proc Chance) ---
-  if (spell.name === 'Ember' && Math.random() < 0.25) {
-      target.burning = true; target.burnTicks = Math.max(target.burnTicks|0, 3);
-      spawnFloatText("BURN", target.x, target.y, '#f97316');
-      log(`The ${target.type} catches fire!`);
-  }
-  else if (spell.name === 'Frost' && Math.random() < 0.25) {
-      if (typeof applySlow === 'function') applySlow(target, 3);
-      spawnFloatText("SLOWED", target.x, target.y, '#38bdf8');
-      log(`The ${target.type} is chilled to the bone!`);
-  }
-  else if (spell.name === 'Pebble' && Math.random() < 0.25) {
-      if (typeof applyStun === 'function') applyStun(target, 2);
-      spawnFloatText("STUNNED", target.x, target.y, '#facc15');
-      log(`The ${target.type} is stunned by the impact!`);
-  }
-  else if (spell.name === 'Gust' && Math.random() < 0.25) {
-      const dx = Math.sign(target.x - state.player.x);
-      const dy = Math.sign(target.y - state.player.y);
-      let pushed = false;
-      for (let step = 0; step < 2; step++) {
-          const pushX = target.x + dx;
-          const pushY = target.y + dy;
-          if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
-              target.x = pushX; target.y = pushY;
-              pushed = true;
-          } else break;
-      }
-      if (pushed) {
-          spawnFloatText("PUSHED", target.x, target.y, '#9ca3af');
-          log(`The ${target.type} is blown back!`);
-      }
-  }
-  else if (spell.name === 'Spark' && Math.random() < 0.25) {
-      // Chain Lightning Logic
-      let currentTarget = target;
-      let chainChance = 1.0; 
-      let chainDmg = Math.max(1, Math.floor(dmg * 0.75));
-      const hitList = new Set([target]);
+  // Wrapped in a single random check to strictly prevent JS conditional fallthrough
+  if (Math.random() < 0.25) {
+      switch (spell.name) {
+          case 'Ember':
+              target.burning = true; target.burnTicks = Math.max(target.burnTicks|0, 3);
+              spawnFloatText("BURN", target.x, target.y, '#f97316');
+              log(`The ${target.type} catches fire!`);
+              break;
+          case 'Frost':
+              if (typeof applySlow === 'function') applySlow(target, 3);
+              target.frozenTicks = Math.max(target.frozenTicks|0, 3); // Gives Ice its own unique label for rendering
+              spawnFloatText("FROZEN", target.x, target.y, '#38bdf8');
+              log(`The ${target.type} is chilled to the bone!`);
+              break;
+          case 'Pebble':
+              if (typeof applyStun === 'function') applyStun(target, 2);
+              spawnFloatText("STUNNED", target.x, target.y, '#facc15');
+              log(`The ${target.type} is stunned by the impact!`);
+              break;
+          case 'Gust':
+              const dx = Math.sign(target.x - state.player.x);
+              const dy = Math.sign(target.y - state.player.y);
+              let pushed = false;
+              for (let step = 0; step < 2; step++) {
+                  const pushX = target.x + dx;
+                  const pushY = target.y + dy;
+                  if (inBounds(pushX, pushY) && state.tiles[pushY][pushX] === 1 && !enemyAt(pushX, pushY)) {
+                      target.x = pushX; target.y = pushY;
+                      pushed = true;
+                  } else break;
+              }
+              if (pushed) {
+                  spawnFloatText("PUSHED", target.x, target.y, '#9ca3af');
+                  log(`The ${target.type} is blown back!`);
+              }
+              break;
+          case 'Spark':
+              // Chain Lightning Logic
+              let currentTarget = target;
+              let chainChance = 1.0; 
+              let chainDmg = Math.max(1, Math.floor(dmg * 0.75));
+              const hitList = new Set([target]);
 
-      // Allow up to 3 extra bounces max, decaying chance and damage each time
-      for (let bounces = 0; bounces < 3; bounces++) {
-          if (Math.random() > chainChance) break;
-          
-          // Find adjacent enemy not yet hit
-          const nextTarget = state.enemies.find(en => 
-              en.hp > 0 && !hitList.has(en) && 
-              Math.abs(en.x - currentTarget.x) <= 1 && Math.abs(en.y - currentTarget.y) <= 1
-          );
-          
-          if (!nextTarget) break; // No one close enough to jump to
-          
-          hitList.add(nextTarget);
-          nextTarget.hp -= chainDmg;
-          spawnFloatText(chainDmg + " (Chain)", nextTarget.x, nextTarget.y, '#fde047');
-          spawnParticles(nextTarget.x, nextTarget.y, '#fde047', 6);
-          log(`Lightning chains to the ${nextTarget.type} for ${chainDmg}!`);
-          
-          if (nextTarget.hp <= 0) handleEnemyDeath(nextTarget, 'magic');
-          
-          currentTarget = nextTarget;
-          chainDmg = Math.max(1, Math.floor(chainDmg * 0.75)); // Decay damage 25%
-          chainChance *= 0.50; // Decay jump chance 50%
+              for (let bounces = 0; bounces < 3; bounces++) {
+                  if (Math.random() > chainChance) break;
+                  
+                  const nextTarget = state.enemies.find(en => 
+                      en.hp > 0 && !hitList.has(en) && 
+                      Math.abs(en.x - currentTarget.x) <= 1 && Math.abs(en.y - currentTarget.y) <= 1
+                  );
+                  
+                  if (!nextTarget) break; 
+                  
+                  hitList.add(nextTarget);
+                  nextTarget.hp -= chainDmg;
+                  spawnFloatText(chainDmg + " (Chain)", nextTarget.x, nextTarget.y, '#fde047');
+                  spawnParticles(nextTarget.x, nextTarget.y, '#fde047', 6);
+                  log(`Lightning chains to the ${nextTarget.type} for ${chainDmg}!`);
+                  
+                  if (nextTarget.hp <= 0) handleEnemyDeath(nextTarget, 'magic');
+                  
+                  currentTarget = nextTarget;
+                  chainDmg = Math.max(1, Math.floor(chainDmg * 0.75)); 
+                  chainChance *= 0.50; 
+              }
+              break;
+          case 'Acid':
+              target.poisoned = true; 
+              target.poisonTicks = Math.max(target.poisonTicks|0, 4);
+              spawnFloatText("POISONED", target.x, target.y, '#22c55e');
+              log(`The ${target.type} is covered in corrosive acid!`);
+              break;
+          case 'Water':
+              target.slipperyTicks = Math.max(target.slipperyTicks|0, 3);
+              spawnFloatText("SLIPPERY", target.x, target.y, '#3b82f6');
+              log(`The ground beneath the ${target.type} becomes slick with water!`);
+              break;
       }
-  }
-  else if (spell.name === 'Acid' && Math.random() < 0.25) {
-      target.poisoned = true; 
-      target.poisonTicks = Math.max(target.poisonTicks|0, 4);
-      spawnFloatText("POISONED", target.x, target.y, '#22c55e');
-      log(`The ${target.type} is covered in corrosive acid!`);
-  }
-  else if (spell.name === 'Water' && Math.random() < 0.25) {
-      target.slipperyTicks = Math.max(target.slipperyTicks|0, 3);
-      spawnFloatText("SLIPPERY", target.x, target.y, '#3b82f6');
-      log(`The ground beneath the ${target.type} becomes slick with water!`);
   }
   // ------------------------------------------------------
 
@@ -3381,9 +3392,19 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
       log("The overcharged spell erupts in an Arcane Chain!");
   }
 
+  // AFTER
   // --- FIX: Magic Aether Nova (mag_a3 is gone, keeping base overcharge logic cleanly) ---
 
   log(`Your ${spell.name} hits for ${dmg}${synergyNote}.`);
+
+  // --- FIX: Staff Durability Tick ---
+  // Staffs bypass the standard melee attack() pipeline and route directly here. 
+  // We need to manually tick their durability down upon a successful magic hit.
+  if (state.player.weapon && state.player.weapon.type === 'staff') {
+      if (typeof handleSuccessfulHitDurabilityTick === 'function') {
+          handleSuccessfulHitDurabilityTick();
+      }
+  }
 
   // TUTORIAL Step 9 (Magic)
   if (state.gameMode === 'tutorial' && state.tutorialStep === 9) {

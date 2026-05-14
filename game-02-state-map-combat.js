@@ -2051,7 +2051,8 @@ function getSpellStats(name){
         // --- NEW: Staff Elemental Synergy ---
         let synergyDmg = 0;
         const w = state.player.weapon;
-        if (w && w.type === 'staff') {
+        // Don't apply synergy damage to basic staff attacks
+        if (w && w.type === 'staff' && (!state.equippedSpell || !state.equippedSpell.isBasic)) {
             const spellMap = { 'Ember': 'Fire', 'Frost': 'Ice', 'Spark': 'Lightning', 'Gust': 'Wind', 'Pebble': 'Earth', 'Acid': 'Acid', 'Water': 'Water' }; // NEW: Added Acid/Water mappings
             const elem = spellMap[name];
             if (elem) {

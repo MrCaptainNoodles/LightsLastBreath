@@ -260,15 +260,15 @@ function floorEnemyKinds(){
   const scale = 1 + Math.max(0, f - 1) * 0.10; // Increased to 15% per floor
 
   // base (floor 1) stats, then scale every floor
-  const base = {
-    Rat:      { hp: 4, atk:[1,2], xp: 3 },
-    Bat:      { hp: 3, atk:[1,2], xp: 3 }, // Weak but heals
-    Spider:   { hp: 5, atk:[2,3], xp: 4 }, // Slows you
-    Slime:    { hp: 5, atk:[1,3], xp: 4 },
-    Goblin:   { hp: 6, atk:[2,6], xp: 5 },
-    Skeleton: { hp: 7, atk:[2,7], xp: 6 },
-    Mage:     { hp: 8, atk:[3,6], xp: 7 }
-  };
+      const base = {
+        Rat:      { hp: 10, atk:[1,2], xp: 3 },
+        Bat:      { hp: 10, atk:[1,2], xp: 3 }, // Weak but heals
+        Spider:   { hp: 12, atk:[2,3], xp: 4 }, // Slows you
+        Slime:    { hp: 12, atk:[1,3], xp: 4 },
+        Goblin:   { hp: 14, atk:[2,6], xp: 5 },
+        Skeleton: { hp: 16, atk:[2,7], xp: 6 },
+        Mage:     { hp: 18, atk:[3,6], xp: 7 }
+      };
 
   // progressive availability
   const pool = [];
@@ -674,9 +674,12 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
       if (e.poisonTicks <= 0) e.poisoned = false;
     }
 
-    // NEW: Slippery (Water) Tick management
+    // NEW: Slippery (Water) & Frozen Tick management
     if (e.slipperyTicks > 0) {
       e.slipperyTicks--;
+    }
+    if (e.frozenTicks > 0) {
+      e.frozenTicks--;
     }
 
     // --- NEW: Reaper Logic ---
@@ -1171,6 +1174,7 @@ for (let yy=0; yy<s && !adjacent; yy++){
   }
 }
 
+
 if (adjacent){
   
   // --- NEW: Enemy Accuracy Check ---
@@ -1186,7 +1190,12 @@ if (adjacent){
   
   if (Math.random() > accuracy) {
         spawnFloatText("Miss", state.player.x, state.player.y, '#9ca3af');
-        log(`The ${eName} slips and misses the attack!`);
+        // FIX: Differentiate natural misses from the Water element status effect
+        if (e.slipperyTicks && e.slipperyTicks > 0) {
+            log(`The ${eName} slips on the wet ground and misses!`);
+        } else {
+            log(`The ${eName} fumbles and misses the attack!`);
+        }
         continue; // Skip the rest of the attack logic
       }
       // ---------------------------------

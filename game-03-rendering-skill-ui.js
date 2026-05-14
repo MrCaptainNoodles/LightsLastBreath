@@ -1339,11 +1339,19 @@ if (enemy._flashColor && enemy._flashTime > Date.now()) {
     // Simple filter hack: brightness/sepia/hue-rotate to approximate color
     if (color === 'red') ctx.filter = 'brightness(0.6) sepia(1) hue-rotate(-50deg) saturate(5)'; 
     else if (color === 'green') ctx.filter = 'brightness(1.2) sepia(1) hue-rotate(50deg) saturate(5)';
+// AFTER
 } else if (enemy.burning) {
     ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(3)';
 } else if (enemy.bleeding) {
-        ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(1) brightness(0.7)';
-    } else if ((enemy.boss || enemy.elite) && enemy.tint){
+    ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(1) brightness(0.7)';
+// AFTER
+} else if (enemy.frozenTicks > 0) { 
+    ctx.filter = 'sepia(1) hue-rotate(180deg) saturate(2) brightness(1.2)'; // Light icy blue tint
+} else if (enemy.slipperyTicks > 0) { 
+    ctx.filter = 'sepia(1) hue-rotate(210deg) saturate(1.5)'; // Deep water blue tint
+} else if (enemy.poisoned) { 
+    ctx.filter = 'sepia(1) hue-rotate(50deg) saturate(3)'; // Toxic green acid/poison tint
+} else if ((enemy.boss || enemy.elite) && enemy.tint){
       ctx.filter = enemy.tint;
     }
 
@@ -2485,9 +2493,6 @@ if (state.jester) {
     }
 }
 
-
-
-      
 // --- NEW: Draw Volatile Aether Bombs ---
 if (state.explosions) {
   for (const bomb of state.explosions) {
@@ -2569,6 +2574,87 @@ for (const e of state.enemies){
     }
   }
   // ------------------------------------------------------
+
+// --- NEW: Draw Bomb Explosions (3x3 Sprite) - OUTSIDE TILE LOOP ---
+if (state.bombEffects) {
+    const now = Date.now();
+    state.bombEffects = state.bombEffects.filter(b => now < b.start + b.duration);
+    
+    for (const b of state.bombEffects) {
+        // Check if explosion center is seen
+        if (!state.seen.has(key(b.x, b.y))) continue;
+
+        const exX = (b.x - 1 - ox) * tile;
+        const exY = (b.y - 1 - oy) * tile;
+        const exSize = tile * 3;
+        
+        const elapsed = now - b.start;
+        const progress = elapsed / b.duration; // 0.0 to 1.0
+        
+        ctx.save();
+        // Fade out near the end
+        if (progress > 0.6) ctx.globalAlpha = 1 - ((progress - 0.6) * 2.5);
+        
+        // Bypass gridN to prevent Math.floor shrinkage over large areas
+        const unit = exSize / 36;
+        const R = (cx, cy, cw, ch, color) => {
+            ctx.fillStyle = color;
+            // Add a tiny subpixel overlap (+0.5) to prevent visual grid tearing
+            ctx.fillRect(exX + cx * unit, exY + cy * unit, cw * unit + 0.5, ch * unit + 0.5);
+        };
+
+        const darkOrange = '#ea580c';
+        const brightOrange = '#f97316';
+        const yellow = '#facc15';
+        const white = '#ffffff';
+
+        // Base blast shape (expand slightly based on progress)
+        const p = Math.min(1, progress * 2); // Expand quickly
+        
+        if (p > 0.1) {
+            // Outer smoke/dark fire
+            R(6, 6, 24, 24, darkOrange);
+            R(4, 10, 28, 16, darkOrange);
+            R(10, 4, 16, 28, darkOrange);
+        }
+        if (p > 0.3) {
+            // Mid fire
+            R(9, 9, 18, 18, brightOrange);
+            R(7, 12, 22, 12, brightOrange);
+            R(12, 7, 12, 22, brightOrange);
+        }
+        if (p > 0.5) {
+            // Inner heat
+            R(12, 12, 12, 12, yellow);
+            R(10, 14, 16, 8, yellow);
+            R(14, 10, 8, 16, yellow);
+        }
+        if (p > 0.7) {
+            // Core flash
+            R(15, 15, 6, 6, white);
+        }
+        
+        // Random sparks/debris shooting out
+        ctx.globalAlpha = 1;
+        const seed = b.start; // Pseudo-random based on start time
+        for (let i = 0; i < 8; i++) {
+            // Simple predictable spread
+            const angle = (Math.PI * 2 / 8) * i + (seed % 10);
+            const dist = 10 + (progress * 15);
+            const pxPos = 18 + Math.cos(angle) * dist;
+            const pyPos = 18 + Math.sin(angle) * dist;
+            if (pxPos > 0 && pxPos < 35 && pyPos > 0 && pyPos < 35) {
+                R(Math.floor(pxPos), Math.floor(pyPos), 2, 2, i%2===0 ? yellow : white);
+            }
+        }
+
+        ctx.restore();
+        
+        // Ensure animation continues while effect is active
+        state._animating = true;
+    }
+}
+// ----------------------------------------------
 
   // projectiles (magic bolts / arrows) on top of tiles, under player
   if (Array.isArray(state.projectiles) && state.projectiles.length){
@@ -2701,25 +2787,54 @@ ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
   }
 
-  // --- NEW: Enemy Intent Icons ---
+  // --- NEW: Enemy Intent Icons & HP Bars ---
   ctx.font = "bold 16px sans-serif";
   ctx.textAlign = "center";
   for (const e of state.enemies) {
-    // Only show intent if we can see the enemy
+    // Only show intent/HP if we can see the enemy
     const kxy = key(e.x, e.y);
     if (!state.seen.has(kxy)) continue;
     
-    // Convert logic coords to screen coords (same math as main loop)
-    const sx = (e.x - ox) * tile + tile/2;
-    const sy = (e.y - oy) * tile - 10; // Floating above head
+    // Safety fallback for hpMax if it wasn't explicitly set on spawn
+    if (!e.hpMax) e.hpMax = e.hp;
+    
+    const size = e.size || 1;
+    // Convert logic coords to screen coords (accounting for potential larger sizes)
+    const sx = (e.x - ox) * tile;
+    const sy = (e.y - oy) * tile;
+    
+    const centerX = sx + (tile * size) / 2;
+    const topY = sy - 10; // Floating above head
 
+    // Intent Icons (shifted slightly up to make room for the HP bar)
     if (e.charging) {
       ctx.fillStyle = '#ff0000';
-      ctx.fillText("⚠️", sx, sy); // Telegraphed Attack Warning
+      ctx.fillText("⚠️", centerX, topY - 5); // Telegraphed Attack Warning
     } else if (e.stunTicks > 0) {
-      ctx.fillText("💫", sx, sy); // Stunned
+      ctx.fillText("💫", centerX, topY - 5); // Stunned
     } else if (e.sleep) {
-      ctx.fillText("💤", sx, sy); // Asleep
+      ctx.fillText("💤", centerX, topY - 5); // Asleep
+    }
+
+    // --- NEW: Small HP Bar ---
+    // Don't draw HP bar if it's a boss (they have the big HUD) or if dead
+    if (!e.boss && e.hp > 0 && e.hpMax > 0) {
+        const barW = tile * 0.8;
+        const barH = 4;
+        const barX = centerX - barW / 2;
+        const barY = sy - 6;
+
+        const pct = Math.max(0, Math.min(1, e.hp / e.hpMax));
+        
+        // Background (Dark border + Red missing HP)
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+        ctx.fillStyle = '#7f1d1d'; 
+        ctx.fillRect(barX, barY, barW, barH);
+        
+        // Foreground (Green/Yellow/Red depending on health percentage)
+        ctx.fillStyle = pct > 0.5 ? '#22c55e' : (pct > 0.25 ? '#eab308' : '#ef4444');
+        ctx.fillRect(barX, barY, barW * pct, barH);
     }
   }
 
@@ -2727,6 +2842,10 @@ ctx.fillStyle = grad;
 
   // --- Particle Rendering (Optimized) ---
   let activeEffects = false;
+
+  if (state.bombEffects && state.bombEffects.length > 0) {
+      activeEffects = true;
+  }
 
   if (state.particles && state.particles.length > 0) {
     activeEffects = true;
