@@ -261,13 +261,13 @@ function floorEnemyKinds(){
 
   // base (floor 1) stats, then scale every floor
       const base = {
-        Rat:      { hp: 10, atk:[1,2], xp: 3 },
-        Bat:      { hp: 10, atk:[1,2], xp: 3 }, // Weak but heals
-        Spider:   { hp: 12, atk:[2,3], xp: 4 }, // Slows you
-        Slime:    { hp: 12, atk:[1,3], xp: 4 },
-        Goblin:   { hp: 14, atk:[2,6], xp: 5 },
-        Skeleton: { hp: 16, atk:[2,7], xp: 6 },
-        Mage:     { hp: 18, atk:[3,6], xp: 7 }
+        Rat:      { hp: 4, atk:[1,2], xp: 3 },
+        Bat:      { hp: 3, atk:[1,2], xp: 3 }, // Weak but heals
+        Spider:   { hp: 5, atk:[2,3], xp: 4 }, // Slows you
+        Slime:    { hp: 5, atk:[1,3], xp: 4 },
+        Goblin:   { hp: 6, atk:[2,6], xp: 5 },
+        Skeleton: { hp: 7, atk:[2,7], xp: 6 },
+        Mage:     { hp: 8, atk:[3,6], xp: 7 }
       };
 
   // progressive availability
