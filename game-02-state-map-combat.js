@@ -62,6 +62,32 @@ function renderLog(){
 }
 
 function log(s, color = null){
+  // FIX: Consolidate repeating logs
+  if (state._log.length > 0) {
+    const lastEntry = state._log[state._log.length - 1];
+    const lastText = typeof lastEntry === 'object' ? lastEntry.text : lastEntry;
+    
+    // Check if the base text matches (ignoring trailing " (xN)")
+    const baseMatch = lastText.match(/^(.*?)(?: \([xX]\d+\))?$/);
+    const lastBaseText = baseMatch ? baseMatch[1] : lastText;
+
+    if (s === lastBaseText) {
+      // Find current count, default to 1, then increment
+      const countMatch = lastText.match(/\([xX](\d+)\)$/);
+      const count = countMatch ? parseInt(countMatch[1], 10) + 1 : 2;
+      
+      const newText = `${s} (x${count})`;
+      
+      if (typeof lastEntry === 'object') {
+          state._log[state._log.length - 1].text = newText;
+      } else {
+          state._log[state._log.length - 1] = newText;
+      }
+      renderLog();
+      return; // Stop here, don't push a new entry
+    }
+  }
+
   // Support both simple strings and colored messages
   const entry = color ? { text: s, color: color } : s;
   

@@ -222,26 +222,34 @@ function tryMove(dx,dy){
       }
   }
 
+ // NEW: set facing from movement BEFORE collision checks so player turns even if blocked
+  if (dx>0) state.player.facing='right';
+  else if (dx<0) state.player.facing='left';
+  else if (dy>0) state.player.facing='down';
+  else if (dy<0) state.player.facing='up';
+
   const nx=state.player.x+dx, ny=state.player.y+dy;
-  if(!inBounds(nx,ny)) return;
+  if(!inBounds(nx,ny)) { draw(); return; } // FIX: Call draw() to reflect facing change
   const t=state.tiles[ny][nx];
   if(t===0) { 
     // Wall bump dust (Reduced count)
     spawnParticles(nx - (dx*0.4), ny - (dy*0.4), '#9ca3af', 3); 
+    draw(); // FIX: Call draw() to reflect facing change
     return; 
   }
-  if(enemyAt(nx,ny)) { log('An enemy blocks the way.'); return; }
-  if(t===2) { log(`A door blocks the way. Press ${getInputName('interact')} to open/unlock.`); return; }
+  if(enemyAt(nx,ny)) { log('An enemy blocks the way.'); draw(); return; }
+  if(t===2) { log(`A door blocks the way. Press ${getInputName('interact')} to open/unlock.`); draw(); return; }
   if(t===13 || t===14) { 
       if (state.skills?.lockpicking?.perks?.['loc_c2']) {
           log(`A sealed door blocks the way. Press ${getInputName('interact')} to lockpick it!`);
       } else {
           log(`A magically sealed door blocks the way. You need a key or puzzle solution.`);
       }
+      draw();
       return; 
   }
-  if(t===3) { log(`A chest blocks the way. Press ${getInputName('interact')} to open.`); return; }
-  if(t===6) { log(`A mystical shrine blocks the way. Press ${getInputName('interact')} to interact.`); return; }
+  if(t===3) { log(`A chest blocks the way. Press ${getInputName('interact')} to open.`); draw(); return; }
+  if(t===6) { log(`A mystical shrine blocks the way. Press ${getInputName('interact')} to interact.`); draw(); return; }
   
   // 1. ADDED: Block movement into scenery
   
@@ -324,11 +332,13 @@ function tryMove(dx,dy){
         }
       } else {
         log("The boulder won't budge.");
+        draw();
         return;
       }
     } else if (pType === 'lever' || pType === 'lever_locked') {
       if (pType === 'lever_locked') {
         log("The lever is jammed permanently.");
+        draw();
         return;
       }
       if (SFX.lockSuccess) SFX.lockSuccess();
@@ -355,6 +365,7 @@ function tryMove(dx,dy){
       return;
 } else {
       log(`A ${pType} blocks the way. Press ${getInputName('attack')} to smash it!`);
+      draw();
       return;
     }
   }
@@ -411,11 +422,11 @@ function tryMove(dx,dy){
     }
   }
   // NEW: block NPC tiles BEFORE moving
-  if (isMerchantTile(nx, ny)) { log('The merchant blocks the way.'); return; }
-  if (isBlacksmithTile(nx, ny)) { log('The blacksmith blocks the way.'); return; }
-  if (isJesterTile(nx, ny)) { log('The jester blocks the way.'); return; }
-  if (isCartographerTile(nx, ny)) { log('The cartographer blocks the way.'); return; }
-  if (isClericTile(nx, ny)) { log('The priestess blocks the way.'); return; }
+  if (isMerchantTile(nx, ny)) { log('The merchant blocks the way.'); draw(); return; }
+  if (isBlacksmithTile(nx, ny)) { log('The blacksmith blocks the way.'); draw(); return; }
+  if (isJesterTile(nx, ny)) { log('The jester blocks the way.'); draw(); return; }
+  if (isCartographerTile(nx, ny)) { log('The cartographer blocks the way.'); draw(); return; }
+  if (isClericTile(nx, ny)) { log('The priestess blocks the way.'); draw(); return; }
 
   // --- NEW: Gold Well Interaction ---
   if (state.goldWell) {
@@ -423,17 +434,12 @@ function tryMove(dx,dy){
      // Block movement into the 2x2 area (x,y to x+1,y+1)
      if (nx >= w.x && nx <= w.x+1 && ny >= w.y && ny <= w.y+1) {
         log(`A Golden Well blocks the way. Press ${getInputName('interact')} to interact.`);
+        draw();
         return;
      }
   }
 
-// NEW: set facing from movement
-  if (dx>0) state.player.facing='right';
-  else if (dx<0) state.player.facing='left';
-  else if (dy>0) state.player.facing='down';
-  else if (dy<0) state.player.facing='up';
-
-  // Handle Player Slow (Spider web)
+// Handle Player Slow (Spider web)
   if (state.player.slowed && state.player.slowTicks > 0) {
       // 50% chance to fail movement? Or move every other turn? 
       // Let's do: Movement takes 2 turns of enemy time.
@@ -445,12 +451,6 @@ function tryMove(dx,dy){
           log('You break free of the webs.');
       }
   }
-
-  // Set facing based on final direction (dx, dy)
-  if (dx>0) state.player.facing='right';
-  else if (dx<0) state.player.facing='left';
-  else if (dy>0) state.player.facing='down';
-  else if (dy<0) state.player.facing='up';
 
 // --- NEW: Glacial Freeze (Slide) for non-Sprint ---
   if (isEffectActive('GlacialFreeze')) { // FIX: Use isEffectActive

@@ -2791,9 +2791,11 @@ ctx.fillStyle = grad;
   ctx.font = "bold 16px sans-serif";
   ctx.textAlign = "center";
   for (const e of state.enemies) {
-    // Only show intent/HP if we can see the enemy
-    const kxy = key(e.x, e.y);
-    if (!state.seen.has(kxy)) continue;
+    // FIX: Only show intent/HP if the enemy is CURRENTLY visible (in FOV and Line of Sight)
+    const d = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
+    const rad = state.player.tempVisionRange || state.fovRadius;
+    const vis = d <= rad && (state._inPuzzleRoom || checkLOS(state.player.x, state.player.y, e.x, e.y));
+    if (!vis) continue;
     
     // Safety fallback for hpMax if it wasn't explicitly set on spawn
     if (!e.hpMax) e.hpMax = e.hp;

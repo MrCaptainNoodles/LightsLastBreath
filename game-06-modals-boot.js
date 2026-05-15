@@ -2644,7 +2644,7 @@ wrap.addEventListener('touchend',e=>{
 });
 
 // --- Controller & Input UI Support ---
-window.lastInputType = 'keyboard'; // Attached to window so it never drops out of scope!
+window.lastInputType = null; // FIX: Set to null initially so boot() forces the first UI update
 let menuIdx = 0;
 const gpState = { buttons: {}, moving: false };
 
@@ -3161,6 +3161,12 @@ if (state.gameMode === 'tutorial' && state.tutorialStep === 1){
   if (k === 'a' || k === 'arrowleft') state._tutMoveWASD.a = true;
   if (k === 's' || k === 'arrowdown') state._tutMoveWASD.s = true;
   if (k === 'd' || k === 'arrowright') state._tutMoveWASD.d = true;
+  
+  // FIX: Regenerate stamina during the tutorial movement phase since enemyStep() is bypassed
+  if (state.player.stamina < state.player.staminaMax) {
+     state.player.stamina++;
+     updateBars();
+  }
 
   if (state._tutMoveWASD.w && state._tutMoveWASD.a && state._tutMoveWASD.s && state._tutMoveWASD.d){
             state.tutorialStep = 2;
