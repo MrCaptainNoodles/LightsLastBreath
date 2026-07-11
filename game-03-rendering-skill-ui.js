@@ -1,6 +1,8 @@
 // ====== Rendering ======
 const canvas=document.getElementById('view');
 const ctx=canvas.getContext('2d');
+let renderer3D, scene, camera, sceneObjects;
+
 function setupCanvas(){
   const dpr=window.devicePixelRatio||1;
   const wrap=document.getElementById('cw');
@@ -1562,6 +1564,78 @@ function drawPickupPixel(ctx, item, px, py, tile){
            P(2,4,sL,2,4); P(5,3,sL,2,5); P(8,4,sL,2,4); 
            P(3,4,sM,1,4); P(6,3,sM,1,5); P(9,4,sM,1,4); // Blade shadows
         } 
+        // CHANGE: Rewrote vector calculations to support high-detail unique 12x12 block renderings for all 24 newly expanded equipment pieces across their 4 respective tiers
+        else if (t === 'helmet') {
+           if (n.includes('cap')) { // Leather Cap
+              P(3,7, '#7c2d12', 6, 2); P(2,8, '#9a3412', 8, 1); P(4,6, '#9a3412', 4, 1); P(5,5, '#ea580c', 2, 1);
+           } else if (n.includes('iron helm')) {
+              P(3,4, sM, 6, 5); P(4,3, sL, 4, 1); P(3,6, sD, 6, 1); P(5,4, sL, 2, 2);
+           } else if (n.includes('visor')) { // Steel Visor
+              P(3,3, sM, 6, 6); P(4,2, sL, 4, 1); P(3,5, '#0f172a', 6, 1); P(4,6, sL, 4, 2);
+           } else { // Mythril Crown
+              P(3,5, '#22d3ee', 6, 4); P(3,3, '#22d3ee', 1, 2); P(5,2, '#06b6d4', 2, 3); P(8,3, '#22d3ee', 1, 2); P(5,4, '#d946ef', 2, 1);
+           }
+        }
+        else if (t === 'chest') {
+           if (n.includes('tunic')) { // Cloth Tunic
+              P(4,3, '#0284c7', 4, 7); P(2,4, '#38bdf8', 2, 3); P(8,4, '#38bdf8', 2, 3); P(5,3, '#f1f5f9', 2, 1);
+           } else if (n.includes('jacket')) { // Chainmail Jacket
+              P(4,3, '#475569', 4, 7); P(2,4, '#64748b', 2, 4); P(8,4, '#64748b', 2, 4); P(4,5, '#334155', 4, 1);
+           } else if (n.includes('scale')) { // Scale Mail
+              P(4,3, '#16a34a', 4, 7); P(2,4, '#15803d', 2, 4); P(8,4, '#15803d', 2, 4); P(5,4, '#b45309', 2, 5);
+           } else { // Platemail Heavy
+              P(3,2, sM, 6, 8); P(2,4, sM, 1, 4); P(9,4, sM, 1, 4); P(4,3, sL, 4, 2); P(3,6, sD, 6, 1);
+           }
+        }
+        else if (t === 'gauntlets') {
+           if (n.includes('leather')) { // Leather Gloves
+              P(2,6, '#7c2d12', 3, 4); P(7,6, '#7c2d12', 3, 4);
+           } else if (n.includes('mitts')) { // Reinforced Mitts
+              P(2,5, '#451a03', 3, 5); P(7,5, '#451a03', 3, 5); P(3,7, '#fbbf24', 1, 1); P(8,7, '#fbbf24', 1, 1);
+           } else if (n.includes('plate')) { // Plate Gauntlets
+              P(2,4, sM, 3, 6); P(7,4, sM, 3, 6); P(2,4, sL, 1, 4); P(7,4, sL, 1, 4);
+           } else { // Dread Bracers
+              P(2,4, '#7f1d1d', 3, 6); P(7,4, '#7f1d1d', 3, 6); P(1,5, '#ef4444', 1, 2); P(10,5, '#ef4444', 1, 2);
+           }
+        }
+        else if (t === 'pants') {
+           if (n.includes('trousers')) { // Cloth Trousers
+              P(4,3, '#1e3a8a', 4, 2); P(4,5, '#3b82f6', 2, 6); P(6,5, '#3b82f6', 2, 6);
+           } else if (n.includes('chaps')) { // Leather Chaps
+              P(4,3, '#78350f', 4, 3); P(3,5, '#451a03', 3, 6); P(6,5, '#451a03', 3, 6);
+           } else if (n.includes('chausses')) { // Chainmail Chausses
+              P(4,3, '#334155', 4, 2); P(4,5, '#475569', 2, 6); P(6,5, '#475569', 2, 6);
+           } else { // Plate Greaves
+              P(4,3, sD, 4, 2); P(4,5, sM, 2, 6); P(6,5, sM, 2, 6); P(4,6, sL, 1, 4); P(7,6, sL, 1, 4);
+           }
+        }
+        else if (t === 'boots') {
+           if (n.includes('leather')) { // Leather Boots
+              P(3,6, '#451a03', 2, 4); P(7,6, '#451a03', 2, 4); P(2,9, '#78350f', 3, 2); P(7,9, '#78350f', 3, 2);
+           } else if (n.includes('soles')) { // Reinforced Soles
+              P(3,5, '#78350f', 2, 5); P(7,5, '#78350f', 2, 5); P(2,9, sM, 3, 2); P(7,9, sM, 3, 2);
+           } else if (n.includes('sabatons')) { // Iron Sabatons
+              P(3,5, sD, 2, 5); P(7,5, sD, 2, 5); P(2,9, sM, 4, 2); P(7,9, sM, 4, 2);
+           } else { // Greaves of Haste
+              P(3,4, '#1e3a8a', 2, 6); P(7,4, '#1e3a8a', 2, 6); P(2,8, gL, 2, 2); P(8,8, gL, 2, 2);
+           }
+        }
+        else if (t === 'ring') {
+           const hoopCol = n.includes('haste') ? gM : (n.includes('warrior') ? '#ef4444' : sM);
+           const gemCol = n.includes('haste') ? '#38bdf8' : (n.includes('life') ? '#22c55e' : '#60a5fa');
+           P(4,4, hoopCol, 4, 4); P(5,5, dark, 2, 2); P(5,3, gemCol, 2, 1);
+        }
+        else if (t === 'necklace') {
+           if (n.includes('bone')) {
+              P(3,2, '#e2e8f0', 6, 1); P(3,3, '#cbd5e1', 1, 3); P(8,3, '#cbd5e1', 1, 3); P(5,5, '#f1f5f9', 2, 3); P(5,6, dark, 1, 1);
+           } else if (n.includes('silver') || n.includes('life')) {
+              P(3,2, sM, 6, 1); P(3,3, sD, 1, 4); P(8,3, sD, 1, 4); P(5,6, '#22c55e', 2, 2);
+           } else if (n.includes('gold') || n.includes('medallion')) {
+              P(3,2, gM, 6, 1); P(3,3, gD, 1, 3); P(8,3, gD, 1, 3); P(4,5, gM, 4, 4); P(5,6, gL, 2, 2);
+           } else { // Ruby Torc
+              P(3,2, gM, 6, 2); P(2,4, gD, 2, 2); P(8,4, gD, 2, 2); P(5,5, '#ef4444', 2, 2);
+           }
+        }
         else { // Shortsword
            P(2,9,wD,2,2); // Pommel
            P(3,8,wM,2,1); // Grip
@@ -2942,10 +3016,10 @@ function updateBars(){
   if (!state._maxStatsRecalculated) {
         state._maxStatsRecalculated = true;
         
-        // Base stats derived from level
-        let expectedHpMax = 20 + ((state.player.level - 1) * 2); // Assuming +2 HP per level
-        let expectedMpMax = 20 + (state.player.level - 1); // Assuming +1 MP per level
-        let expectedStaminaMax = 20;
+        // CHANGE: Incorporate saved class-specific stat modifiers into the base level calculations
+        let expectedHpMax = 20 + ((state.player.level - 1) * 2) + (state.player.classHpBonus || 0); 
+        let expectedMpMax = 20 + (state.player.level - 1) + (state.player.classMpBonus || 0); 
+        let expectedStaminaMax = 20 + (state.player.classStaminaBonus || 0);
 
         // Add Skill Perks
       if (state.skills?.survivability?.perks?.['sur_base']) expectedHpMax += (2 * state.skills.survivability.perks['sur_base']);

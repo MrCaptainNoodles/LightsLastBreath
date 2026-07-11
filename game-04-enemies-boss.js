@@ -283,15 +283,19 @@ function floorEnemyKinds(){
   // build scaled kinds
   const kinds = pool.map(name=>{
     const b = base[name];
+    
+    // --- ANTI-MITIGATION SCALING: Calculate active player stats to dynamically adjust baseline challenge ---
+    const playerDef = typeof window.getEquipmentBonus === 'function' ? window.getEquipmentBonus('defense') : 0;
+    const playerHpMax = state.player?.hpMax || 20;
+    
     return {
       type: name,
-      // Softened HP: Base scale + flat 0.5 per floor (was 1)
-      hp: Math.max(1, Math.round(b.hp * scale) + Math.floor((f - 1) * 0.5)),
+      // CHANGE: Scale enemy baseline pool health to scale dynamically with both depth and player max HP metrics
+      hp: Math.max(1, Math.round(b.hp * scale) + Math.floor((f - 1) * 0.5) + Math.floor(playerHpMax * 0.20)),
       atk: [
-        // Softened: +1 Min Damage every 4 floors (was every 2 floors)
-        Math.max(0, Math.floor(b.atk[0] * scale) + Math.floor((f - 1) / 4)),
-        // Softened: +1 Max Damage every 2 floors (was EVERY floor)
-        Math.max(1, Math.floor(b.atk[1] * scale) + Math.floor((f - 1) / 2))
+        // CHANGE: Infuse a scaling ratio of the player's flat armor defense directly into enemy attacks so threats consistently pierce mitigation layers
+        Math.max(0, Math.floor(b.atk[0] * scale) + Math.floor((f - 1) / 4) + Math.floor(playerDef * 0.80)),
+        Math.max(1, Math.floor(b.atk[1] * scale) + Math.floor((f - 1) / 2) + Math.floor(playerDef * 1.15) + 2)
       ],
       xp: Math.max(1, Math.round(b.xp * (1 + Math.max(0, f - 1) * 0.10)))
     };
@@ -520,10 +524,24 @@ function enemyStep(){
   // -------------------------
 
 // === player status that ticks once per enemy phase ===
-  // Trinket: Amulet of Life (1 HP per 50 turns)
-  if (state.player.trinket?.name === 'Amulet of Life') {
+  // 1. Generic Equipment HP Regeneration
+  const gearRegen = window.getEquipmentBonus('hpRegen') || 0;
+  if (gearRegen > 0) {
+      state.player.genTicker = (state.player.genTicker || 0) + 1;
+      if (state.player.genTicker >= 20) {
+          state.player.genTicker = 0;
+          if (state.player.hp < state.player.hpMax) {
+              state.player.hp = Math.min(state.player.hp + gearRegen, state.player.hpMax);
+              updateBars();
+              spawnFloatText("+" + gearRegen, state.player.x, state.player.y, '#4ade80');
+          }
+      }
+  }
+
+  // 2. Trinket: Amulet of Life (1 HP per 20 turns)
+  if (state.player.trinket?.name === 'Amulet of Life' || (state.player.equipment.necklace?.name === 'Amulet of Life')) {
     state.player.regenTicker = (state.player.regenTicker || 0) + 1;
-    if (state.player.regenTicker >= 20) { // Buffed: 50 -> 20 turns
+    if (state.player.regenTicker >= 20) { 
       state.player.regenTicker = 0;
       if (state.player.hp < state.player.hpMax) {
         state.player.hp++;

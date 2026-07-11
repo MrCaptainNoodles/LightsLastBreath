@@ -773,6 +773,14 @@ input[type=range].custom-slider::-webkit-slider-thumb {
 #invModal .sheet {
   width: min(760px, 96vw); 
 }
+
+/* --- WHAT'S NEW OVERRIDES: Widen the sheet layout and add breathing room next to the scroll bar --- */
+#whatsNewModal .sheet {
+  width: min(680px, 95vw);
+}
+#whatsNewModal .sheet > div[style*="overflow-y:auto"] {
+  padding-right: 16px;
+}
 #invBody {
   padding: 6px; /* Stops horizontal clipping */
 }

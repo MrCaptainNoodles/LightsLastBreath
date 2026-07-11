@@ -638,18 +638,33 @@
       <button class="btn" id="btnCloseWhatsNew" onclick="document.getElementById('whatsNewModal').style.display='none';">Close</button>
     </div>
     <div style="margin-top:12px; font-size:14px; line-height:1.5; color:var(--text); max-height: 60vh; overflow-y:auto;">
-      
+      </ul>
+        <div style="font-weight:bold; font-size:16px; margin-bottom:4px; color:#facc15;">July 10th 2026</div>
+        <ul style="margin-top:0; padding-left:20px; margin-bottom:16px; opacity:0.9; list-style-type: disc;">
+            <li>Completely reworked the Inventory UI and system.
+              <ul style="list-style-type: none; padding-left: 16px; margin-top: 4px; margin-bottom: 4px; opacity: 0.85;">
+                <li>- Gear is now within a 30 space grid area. When you run out of space you will be prompted to scrap existing gear or leave the new piece, the same as it used to be.</li>
+                <li>- Added 24 different armor pieces. Four pieces per category. Helmet, Necklace, Chest, Pants, Gloves, Boots, and two Rings.</li>
+                <li>- Both Armor and Weapons can now have a random effect added on to them. The deeper you venture into the dungeon, the more effects can be stacked.</li>
+              </ul>
+            </li>
+            <li>Reworked the tutorial to account for this new inventory system.
+              <ul style="list-style-type: none; padding-left: 16px; margin-top: 4px; margin-bottom: 4px; opacity: 0.85;">
+                <li>- Preventing players from soft locking themselves in the tutorial by killing the rats with a regular attack instead of the weapon art.</li>
+              </ul>
+            </li>
+        </ul>
+
       <div style="font-weight:bold; font-size:16px; margin-bottom:4px; color:#facc15;">May 14th 2026 (Round 2)</div>
         <ul style="margin-top:0; padding-left:20px; margin-bottom:16px; opacity:0.9; list-style-type: disc;">
             <li>Fixed stamina not recovering in the tutorial.</li>
             <li>Fixed character sprite not changing direction when moving towards an object.</li>
             <li>Fixed keyboard controls not showing up initially.</li>
-            <li>Adjusted the event log to now say "A chest blocks the way. Press E to open. (x10)". 
-              Instead of repeating the message ten times.</li>
+            <li>Adjusted the event log to now say "A chest blocks the way. Press E to open. (x10)". Instead of repeating the message ten times.</li>
             <li>Enemy health bars will now no longer show up outside the players FOV.</li>
             <li>Reverted earlier change to enemies. Their original base health has been restored.</li> 
+        </ul>
 
-</ul>
         <div style="font-weight:bold; font-size:16px; margin-bottom:4px; color:#facc15;">May 14th 2026</div>
         <ul style="margin-top:0; padding-left:20px; margin-bottom:16px; opacity:0.9; list-style-type: disc;">
             <li>Added color effects to enemies to signify their statuses.</li>
@@ -657,7 +672,8 @@
             <li>Added a health bar for enemies.</li>
             <li>Slight bug fixes.</li>
             <li>Slight enemy adjustment.</li>
-</ul>
+        </ul>
+
         <div style="font-weight:bold; font-size:16px; margin-bottom:4px; color:#facc15;">May 13th 2026</div>
         <ul style="margin-top:0; padding-left:20px; margin-bottom:16px; opacity:0.9; list-style-type: disc;">
             <li>Added the "What's New!" button.</li>
@@ -666,12 +682,7 @@
             <li>Added two new Spells/Staffs (Water & Acid)</li>
             <li>Added visual indicator for the different variants of the charged attacks.</li>
             <li>Added 5 Spell Combinations.</li>
-    
         </ul>
-        
-    </div>
-  </div>
-</div>
 
 <div class="modal" id="scoreModal" style="display:none">
   <div class="sheet">

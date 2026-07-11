@@ -766,442 +766,483 @@ document.getElementById('btnSpells').onclick=()=>{ updateSpellBody(); spellModal
 
 
 
+window.handleInvUse = function(type) {
+  if (type === 'potion') usePotion();
+  if (type === 'tonic') useTonic();
+  if (type === 'antidote') useAntidote();
+  if (type === 'bomb') useBomb();
+  if (type === 'warp') useWarpStone();
+  updateInvBody();
+};
+
+window.showItemTooltip = function(name, statsStr, details, slotContext) {
+  const tooltip = document.getElementById('invTooltip');
+  if (!tooltip) return;
+  try {
+    const stats = JSON.parse(statsStr || '{}');
+    
+    let typeLabel = "Armor Piece";
+    let baseAttrLabel = "Base Defense: Roll Attribute";
+    
+    if (slotContext) {
+      typeLabel = {
+        helmet: "Head Armor",
+        necklace: "Accessory",
+        chest: "Chest Armor",
+        pants: "Pants Armor",
+        gauntlets: "Hand Armor",
+        boots: "Feet Armor",
+        ring1: "Ring Armor",
+        ring2: "Ring Armor",
+        weapon: "Weapon",
+        shield: "Shield (Off-Hand)"
+      }[slotContext] || "Armor Piece";
+    } else {
+      const n = name.toLowerCase();
+      if (n.includes('helm') || n.includes('cap')) typeLabel = "Head Armor";
+      else if (n.includes('plate') || n.includes('tunic') || n.includes('chain') || n.includes('jacket')) typeLabel = "Chest Armor";
+      else if (n.includes('gloves') || n.includes('gauntlets')) typeLabel = "Hand Armor";
+      else if (n.includes('pants') || n.includes('trousers') || n.includes('greaves')) typeLabel = "Pants Armor";
+      else if (n.includes('boots') || n.includes('sabatons')) typeLabel = "Feet Armor";
+      else if (n.includes('ring') || n.includes('band') || n.includes('loop')) typeLabel = "Ring Armor";
+      else if (n.includes('amulet') || n.includes('medallion') || n.includes('necklace')) typeLabel = "Accessory";
+      else if (n.includes('shield') || n.includes('buckler')) typeLabel = "Shield (Off-Hand)";
+    }
+
+    // Inherent baseline blueprints registry for progressive tier items to mask built-in values from random rolling evaluations
+    const inherentRegistry = {
+      'Leather Cap': { defense: 1 },
+      'Iron Helm': { defense: 3, maxHp: 5 },
+      'Steel Visor': { defense: 5, maxHp: 10 },
+      'Mythril Crown': { defense: 7, maxMp: 15, maxHp: 10 },
+      'Cloth Tunic': { defense: 1, maxMp: 5 },
+      'Chainmail Jacket': { defense: 4 },
+      'Scale Mail': { defense: 6, maxHp: 10 },
+      'Platemail Heavy': { defense: 9, maxHp: 20 },
+      'Leather Gloves': { defense: 1, maxStamina: 2 },
+      'Reinforced Mitts': { defense: 2, maxStamina: 4 },
+      'Plate Gauntlets': { defense: 3, attack: 1 },
+      'Dread Bracers': { defense: 5, attack: 3 },
+      'Cloth Trousers': { defense: 1, maxMp: 3 },
+      'Leather Chaps': { defense: 2, maxStamina: 3 },
+      'Chainmail Chausses': { defense: 4, maxHp: 5 },
+      'Plate Greaves': { defense: 6, maxHp: 15 },
+      'Leather Boots': { defense: 1, maxStamina: 2 },
+      'Reinforced Soles': { defense: 2, maxStamina: 4 },
+      'Iron Sabatons': { defense: 4, maxHp: 5 },
+      'Greaves of Haste': { defense: 5, maxStamina: 8 },
+      'Bone Amulet': { hpRegen: 1 },
+      'Silver Chain': { maxMp: 8 },
+      'Gold Medallion': { critChance: 5 },
+      'Ruby Torc': { attack: 3, maxHp: 15 }
+    };
+    const baseConfig = inherentRegistry[name] || {};
+
+    const ws = typeof weaponStatsFor === 'function' ? weaponStatsFor(name) : null;
+    if (ws) {
+      if (!slotContext) typeLabel = typeNice ? typeNice(ws.type) : ws.type.toUpperCase();
+      
+      // Separate armor layouts from accessory items to eliminate zero-defense print headers
+      if (['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(ws.type)) {
+         baseAttrLabel = `Base Defense: ${stats.defense || 0}`;
+      } else if (ws.type === 'necklace') {
+         baseAttrLabel = `Accessory Item`;
+      } else {
+         baseAttrLabel = `Base Damage: ${ws.min} - ${ws.max}`;
+      }
+    } else if (name.includes("Shield") || name.includes("Buckler") || slotContext === 'shield') {
+      baseAttrLabel = "Block Modifier: 20%";
+    }
+    
+    // Evaluate pure random magical modifiers by filtering out baseline structural configs
+    let bonusLines = [];
+    const bonusAttack = stats.attack - (baseConfig.attack || 0);
+    const bonusMaxHp = stats.maxHp - (baseConfig.maxHp || 0);
+    const bonusMaxMp = stats.maxMp - (baseConfig.maxMp || 0);
+    const bonusMaxStamina = stats.maxStamina - (baseConfig.maxStamina || 0);
+    const bonusCritChance = stats.critChance - (baseConfig.critChance || 0);
+    const bonusBlockChance = stats.blockChance - (baseConfig.blockChance || 0);
+    const bonusHpRegen = stats.hpRegen - (baseConfig.hpRegen || 0);
+    const bonusVampiric = stats.vampiric - (baseConfig.vampiric || 0);
+
+    if (bonusAttack > 0) bonusLines.push(`<div style="color:#f6ad55;">+${bonusAttack} Attack Power</div>`);
+    
+    const isArmorPiece = ['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(slotContext || (ws ? ws.type : ''));
+    const bonusDefense = stats.defense - (baseConfig.defense || 0);
+    if (bonusDefense > 0 && !isArmorPiece) bonusLines.push(`<div style="color:#63b3ed;">+${bonusDefense} Flat Defense</div>`);
+    
+    if (bonusMaxHp > 0) bonusLines.push(`<div style="color:#fc8181;">+${bonusMaxHp} Max Health</div>`);
+    if (bonusMaxMp > 0) bonusLines.push(`<div style="color:#a78bfa;">+${bonusMaxMp} Max Mana</div>`);
+    if (bonusMaxStamina > 0) bonusLines.push(`<div style="color:#4ade80;">+${bonusMaxStamina} Max Stamina</div>`);
+    if (bonusCritChance > 0) bonusLines.push(`<div style="color:#f9d65c;">+${bonusCritChance}% Critical Strike Chance</div>`);
+    if (bonusBlockChance > 0) bonusLines.push(`<div style="color:#38bdf8;">+${bonusBlockChance}% Deflection Block Chance</div>`);
+    if (bonusHpRegen > 0) bonusLines.push(`<div style="color:#f472b6;">+${bonusHpRegen} HP Regeneration / Turn</div>`);
+    if (bonusVampiric > 0) bonusLines.push(`<div style="color:#f87171;">+${bonusVampiric}% Vampiric Life Steal Factor</div>`);
+    
+    const bonusContent = bonusLines.length ? bonusLines.join('') : '<div style="opacity:0.4; font-style:italic;">No magical bonuses</div>';
+    const headerTitle = name === 'Empty' ? `Empty ${typeLabel}` : name;
+
+    tooltip.innerHTML = `
+      <div style="color:#f9d65c; font-size:14px; font-weight:bold; border-bottom:1px solid #2c3e50; padding-bottom:4px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">${headerTitle}</div>
+      <div style="color:#95a5a6; font-size:11px; margin-bottom:4px;"><span style="color:#7f8c8d;">Type:</span> ${typeLabel} ${details ? `| ${details}` : ''}</div>
+      <div style="color:#ecf0f1; font-size:11px; font-weight:bold; margin-bottom:6px; background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px; display:inline-block;">${baseAttrLabel}</div>
+      <div style="font-size:11px; display:flex; flex-direction:column; gap:2px; border-top:1px dashed #2c3e50; padding-top:4px;">${bonusContent}</div>
+    `;
+    tooltip.style.opacity = '1';
+    tooltip.style.visibility = 'visible';
+  } catch(e) {
+    tooltip.textContent = name;
+  }
+};
+
+window.clearItemTooltip = function() {
+  const tooltip = document.getElementById('invTooltip');
+  if (tooltip) {
+    tooltip.style.opacity = '0';
+    tooltip.style.visibility = 'hidden';
+  }
+};
+
+window.handleStashMouseEnter = function(idx) {
+  if (!window._stashedCache || !window._stashedCache[idx]) return;
+  const item = window._stashedCache[idx];
+  window.showItemTooltip(item.name, JSON.stringify(item.stats || {}), '', null);
+};
+
+window.handleSlotMouseEnter = function(slot, slotLabel) {
+  let name = 'Empty';
+  let itemObj = null;
+  if (slot === 'weapon') {
+    name = state.player.weapon && state.player.weapon.name !== 'Fists' ? state.player.weapon.name : 'Empty';
+    itemObj = state.player.weapon && state.player.weapon.name !== 'Fists' ? state.player.weapon : null;
+  } else if (slot === 'shield') {
+    name = state.player.shield ? state.player.shield.name : 'Empty';
+    itemObj = state.player.shield;
+  } else {
+    name = state.player.equipment[slot] ? state.player.equipment[slot].name : 'Empty';
+    itemObj = state.player.equipment[slot];
+  }
+  let details = '';
+  if (slot === 'weapon' && itemObj) details = `ATK: ${itemObj.min}-${itemObj.max}`;
+  if (slot === 'shield' && itemObj) details = `Durability: ${itemObj.dur}`;
+  
+  window.showItemTooltip(name, JSON.stringify(itemObj ? (itemObj.stats || {}) : {}), details, slot);
+};
+
+window.handleGridItemClick = function(idx) {
+  if (!window._stashedCache || !window._stashedCache[idx]) return;
+  const item = window._stashedCache[idx];
+  
+  // CHANGE: Intercept clicks on stashed trinket elements and redirect them into the specialized equipGearItem routine
+  const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
+  if (item.isTrinket || trinketPool.includes(item.name)) {
+    window.equipGearItem(item.name);
+    return;
+  }
+  
+  if (state.inventory.stashed && state.inventory.stashed[item.name]) {
+    const arr = state.inventory.stashed[item.name];
+    const matchIdx = arr.findIndex(x => JSON.stringify(x.stats) === JSON.stringify(item.stats));
+    if (matchIdx !== -1) arr.splice(matchIdx, 1);
+  }
+  
+  if (state.inventory.weapons && state.inventory.weapons[item.name] > 0) {
+    state.inventory.weapons[item.name]--;
+    if (state.inventory.weapons[item.name] <= 0) delete state.inventory.weapons[item.name];
+  }
+
+  const wType = window.getWeaponType ? window.getWeaponType(item.name) : 'hand';
+  if (wType === 'shield' || item.name.includes('Shield')) {
+    if (state.player.shield) {
+      const oldShield = state.player.shield;
+      state.inventory.weapons[oldShield.name] = (state.inventory.weapons[oldShield.name] || 0) + 1;
+      (state.inventory.stashed[oldShield.name] ||= []).push(oldShield);
+    }
+    state.player.shield = item;
+    state.player.shieldName = item.name;
+    state.player.blockChance = item.name.includes('Buckler') ? 0.15 : item.name.includes('Tower') ? 0.35 : item.name.includes('Ancient') ? 0.25 : 0.20;
+  } else if (['one','two','spear','axe','hand','staff'].includes(wType)) {
+    if (state.player.weapon && state.player.weapon.name !== 'Fists') {
+      const oldWep = state.player.weapon;
+      // Subtract all weapon stat allocations cleanly during unequip swaps to prevent resource pool leakage
+      if (oldWep.stats) {
+        if (oldWep.stats.maxHp) { state.player.hpMax = Math.max(5, state.player.hpMax - oldWep.stats.maxHp); state.player.hp = Math.min(state.player.hp, state.player.hpMax); }
+        if (oldWep.stats.maxMp) { state.player.mpMax = Math.max(0, state.player.mpMax - oldWep.stats.maxMp); state.player.mp = Math.min(state.player.mp, state.player.mpMax); }
+        if (oldWep.stats.maxStamina) { state.player.staminaMax = Math.max(5, state.player.staminaMax - oldWep.stats.maxStamina); state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax); }
+        if (oldWep.stats.attack) { state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - oldWep.stats.attack); }
+      }
+      state.inventory.weapons[oldWep.name] = (state.inventory.weapons[oldWep.name] || 0) + 1;
+      (state.inventory.stashed[oldWep.name] ||= []).push(oldWep);
+    }
+    const baseStats = typeof weaponStatsFor === 'function' ? weaponStatsFor(item.name) : { min: 1, max: 2 };
+    // CHANGE: Replace the generic fallback value with type-specific durability configurations
+    const fallbackDurability = typeof defaultDurabilityFor === 'function' ? defaultDurabilityFor(item.name) : 20;
+    state.player.weapon = {
+      name: item.name, type: wType,
+      min: item.min || baseStats.min || 1, max: item.max || baseStats.max || 2,
+      base: item.base || { min: baseStats.min || 1, max: baseStats.max || 2 },
+      dur: item.dur !== undefined ? item.dur : fallbackDurability, 
+      durMax: item.durMax !== undefined ? item.durMax : fallbackDurability,
+      stats: item.stats || { attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0, vampiric: 0 }
+    };
+    // --- TUTORIAL INTEGRATION: Intercept weapon equipment from the new grid UI view ---
+    if (state.gameMode === 'tutorial' && (state.tutorialStep === 3 || state.tutorialStep === 4) && item.name === 'Warhammer') {
+      state.tutorialStep = 5;
+      state.player.stamina = 20; // Refill stamina for the upcoming Weapon Art tutorial step
+      if (typeof hideBanner === 'function') hideBanner();
+      if (typeof showBanner === 'function') showBanner(`Step 5: Weapon Arts: Walk to the 3 rats and press (${getInputName('art')}).`, 999999);
+    }
+    // Map weapon attribute lines into core status metrics
+    if (item.stats) {
+      if (item.stats.maxHp) { state.player.hpMax += item.stats.maxHp; state.player.hp += item.stats.maxHp; }
+      if (item.stats.maxMp) { state.player.mpMax += item.stats.maxMp; state.player.mp += item.stats.maxMp; }
+      if (item.stats.maxStamina) { state.player.staminaMax += item.stats.maxStamina; state.player.stamina += item.stats.maxStamina; }
+      if (item.stats.attack) { state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack; }
+    }
+    if (typeof recomputeWeapon === 'function') recomputeWeapon();
+  } else {
+    let slot = 'helmet';
+    if (item.type) {
+      slot = item.type;
+    } else {
+      const n = item.name;
+      if (n.includes('Helm') || n.includes('Cap') || n.includes('Visor') || n.includes('Crown')) slot = 'helmet';
+      else if (n.includes('Tunic') || n.includes('Jacket') || n.includes('Mail') || (n.includes('Platemail') && !n.includes('Gauntlets') && !n.includes('Greaves'))) slot = 'chest';
+      else if (n.includes('Gloves') || n.includes('Mitts') || n.includes('Gauntlets') || n.includes('Bracers')) slot = 'gauntlets';
+      else if (n.includes('Boots') || n.includes('Soles') || n.includes('Sabatons') || n.includes('of Haste')) slot = 'boots'; 
+      else if (n.includes('Pants') || n.includes('Chaps') || n.includes('Chausses') || n.includes('Greaves')) slot = 'pants';
+      else if (n.includes('Amulet') || n.includes('Chain') || n.includes('Medallion') || n.includes('Torc')) slot = 'necklace';
+      else if (n.includes('Ring') || n.includes('Band')) slot = !state.player.equipment.ring1 ? 'ring1' : 'ring2';
+    }
+    
+    if (state.player.equipment[slot]) window.unequipSlot(slot);
+    state.player.equipment[slot] = item;
+    
+    // FIX: Apply all random statutory pools (HP, MP, and Stamina) to match the unequip de-allocation behavior
+    // CHANGE: Force uniform stat application across all equipment types
+  if (item.stats) {
+      if (item.stats.maxHp) { state.player.hpMax += item.stats.maxHp; state.player.hp += item.stats.maxHp; }
+      if (item.stats.maxMp) { state.player.mpMax += item.stats.maxMp; state.player.mp += item.stats.maxMp; }
+      if (item.stats.maxStamina) { state.player.staminaMax += item.stats.maxStamina; state.player.stamina += item.stats.maxStamina; }
+      // Apply Combat modifiers
+      if (item.stats.attack) { state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack; recomputeWeapon(); }
+  }
+  }
+  window.clearItemTooltip();
+  if (typeof updateBars === 'function') updateBars();
+  if (typeof updateEquipUI === 'function') updateEquipUI();
+  updateInvBody();
+};
+
+window.handleSlotGridClick = function(slot) {
+  if (slot === 'weapon') {
+    if (state.player.weapon && state.player.weapon.name !== 'Fists') {
+      const oldWep = state.player.weapon;
+      // --- FIX: Symmetrically remove ALL weapon stat allocations (ATK, HP, MP, STM) during manual slot unequips to prevent residual trailing stats from stacking on Fists ---
+      if (oldWep.stats) {
+        if (oldWep.stats.attack) state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - oldWep.stats.attack);
+        if (oldWep.stats.maxHp) {
+          state.player.hpMax = Math.max(5, state.player.hpMax - oldWep.stats.maxHp);
+          state.player.hp = Math.max(1, state.player.hp - oldWep.stats.maxHp);
+          state.player.hp = Math.min(state.player.hp, state.player.hpMax);
+        }
+        if (oldWep.stats.maxMp) {
+          state.player.mpMax = Math.max(0, state.player.mpMax - oldWep.stats.maxMp);
+          state.player.mp = Math.max(0, state.player.mp - oldWep.stats.maxMp);
+          state.player.mp = Math.min(state.player.mp, state.player.mpMax);
+        }
+        if (oldWep.stats.maxStamina) {
+          state.player.staminaMax = Math.max(5, state.player.staminaMax - oldWep.stats.maxStamina);
+          state.player.stamina = Math.max(0, state.player.stamina - oldWep.stats.maxStamina);
+          state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
+        }
+      }
+      state.inventory.weapons[oldWep.name] = (state.inventory.weapons[oldWep.name] || 0) + 1;
+      (state.inventory.stashed[oldWep.name] ||= []).push(oldWep);
+      state.player.weapon = {name:'Fists', min:1, max:2, type:'hand', base:{min:1,max:2}, dur:null, durMax:null};
+      if (typeof recomputeWeapon === 'function') recomputeWeapon();
+    }
+  } else if (slot === 'shield') {
+    if (state.player.shield) {
+      const oldShield = state.player.shield;
+      state.inventory.weapons[oldShield.name] = (state.inventory.weapons[oldShield.name] || 0) + 1;
+      (state.inventory.stashed[oldShield.name] ||= []).push(oldShield);
+      state.player.shield = null; state.player.shieldName = ''; state.player.blockChance = 0;
+    }
+  } else {
+    if (state.player.equipment && state.player.equipment[slot]) window.unequipSlot(slot);
+  }
+  window.clearItemTooltip();
+  if (typeof updateBars === 'function') updateBars();
+  if (typeof updateEquipUI === 'function') updateEquipUI();
+  updateInvBody();
+};
+
 function updateInvBody(){
   const b = document.getElementById('invBody');
-  const tab = (state.ui && state.ui.invTab) || 'items';
+  const modalSheet = document.querySelector('#invModal .sheet');
+  if (modalSheet) {
+    modalSheet.style.width = 'min(860px, 98vw)';
+    modalSheet.style.maxHeight = '98vh';
+    modalSheet.style.position = 'relative';
+  }
 
-  // Tabs header
-  b.innerHTML = `
-    <div class="row" style="gap:6px; margin-bottom:8px;">
-      <button class="btn" id="tabItems" ${tab==='items' ? 'disabled':''}>Items</button>
-      <button class="btn" id="tabTrinkets" ${tab==='trinkets' ? 'disabled':''}>Trinkets</button>
-      <button class="btn" id="tabShield" ${tab==='shield' ? 'disabled':''}>Shields</button>
-      <button class="btn" id="tabWeapons" ${tab==='weapons' ? 'disabled':''}>Weapons</button>
-    </div>
-    <div id="invSection"></div>
-  `;
-  const sec = b.querySelector('#invSection');
+  if (!state.player.equipment) {
+    state.player.equipment = { helmet: null, chest: null, gauntlets: null, pants: null, boots: null, ring1: null, ring2: null, necklace: null };
+  }
 
-  // ---- Trinkets tab ----
-  function renderTrinkets(){
-    sec.innerHTML = '';
-    // 1. Equipped
-    if(state.player.trinket){
-      const t = state.player.trinket;
-      const row = document.createElement('div');
-      row.className = 'row'; row.style.justifyContent = 'space-between';
-      row.innerHTML = `<span style="color:#facc15; font-weight:bold;">${t.name}</span> (Equipped)`;
-      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Unequip';
-      btn.onclick=()=>{
-        // Revert stats
-        if(t.name==='Ring of Haste'){ state.player.staminaMax--; state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax); updateBars(); }
-        // Return to inv
-        state.inventory.trinkets = state.inventory.trinkets||{};
-        state.inventory.trinkets[t.name] = (state.inventory.trinkets[t.name]||0)+1;
-        state.player.trinket = null;
-        updateInvBody();
-      };
-      row.appendChild(btn); sec.appendChild(row);
+  const renderSlotCell = (slot, slotLabel) => {
+    let name = 'Empty';
+    if (slot === 'weapon') {
+      name = state.player.weapon && state.player.weapon.name !== 'Fists' ? state.player.weapon.name : 'Empty';
+    } else if (slot === 'shield') {
+      name = state.player.shield ? state.player.shield.name : 'Empty';
+    } else {
+      name = state.player.equipment[slot] ? state.player.equipment[slot].name : 'Empty';
     }
-    // 2. Inventory
-    const list = state.inventory.trinkets||{};
-    for(const [name,count] of Object.entries(list)){
-      if(count<=0) continue;
-      const row = document.createElement('div');
-      row.className = 'row'; row.style.justifyContent = 'space-between';
-      row.innerHTML = `${name} x${count}`;
-      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Equip';
-      btn.onclick=()=>{
-        // 1. Swap: Auto-Unequip current if exists
-        if(state.player.trinket){
-          const old = state.player.trinket;
-          // Revert stats of the OLD item
-          if(old.name==='Ring of Haste'){ state.player.staminaMax--; state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax); updateBars(); }
-          // Return OLD to inventory
-          state.inventory.trinkets[old.name] = (state.inventory.trinkets[old.name]||0)+1;
+    const color = name === 'Empty' ? '#4a5568' : '#f6ad55';
+
+    return `<div onclick="window.handleSlotGridClick('${slot}')" 
+                 onmouseenter="window.handleSlotMouseEnter('${slot}', '${slotLabel}')" 
+                 onmouseleave="window.clearItemTooltip()"
+                 style="border: 1px solid #4a5568; padding: 4px; text-align: center; border-radius: 6px; cursor: pointer; background: #1a202c; color: ${color}; font-size: 10px; min-height: 48px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+      <canvas id="canvas_slot_${slot}" width="24" height="24" style="width:24px; height:24px; display:block;"></canvas>
+      <strong style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; font-size: 8.5px; display: block; margin-top: 2px;">${name === 'Empty' ? slotLabel : name}</strong>
+    </div>`;
+  };
+
+  const allStashedItems = [];
+  // CHANGE: Inject collected trinkets from state.inventory.trinkets directly into allStashedItems so they populate rows inside the user grid storage layout
+  if (state.inventory.trinkets) {
+    for (const [name, qty] of Object.entries(state.inventory.trinkets)) {
+      if (qty > 0) {
+        for (let i = 0; i < qty; i++) {
+          allStashedItems.push({ name: name, type: 'ring', isTrinket: true, stats: { maxStamina: name === 'Ring of Haste' ? 2 : 0, hpRegen: name === 'Amulet of Life' ? 1 : 0, attack: name === "Warrior's Ring" ? 1 : 0 } });
         }
-
-        // 2. Equip the NEW item
-        state.inventory.trinkets[name]--;
-        state.player.trinket = {name};
-        
-        // Apply stats of the NEW item
-        if(name==='Ring of Haste'){ state.player.staminaMax+=2; state.player.stamina+=2; updateBars(); }
-        if(name==="Warrior's Ring"){ state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus||0) + 1; recomputeWeapon(); }
-        
-        log(`Equipped ${name}.`);
-        updateInvBody();
-      };
-      row.appendChild(btn); sec.appendChild(row);
-    }
-    if(sec.innerHTML==='') sec.innerHTML = '<div>(none)</div>';
-  }
-
-  // ---- Items tab ----
-  function renderItems(){
-  
-  let juryRigHtml = '';
-  if (state.skills?.lockpicking?.perks?.['loc_c3']) {
-      juryRigHtml = `
-      <div class="row" style="justify-content:space-between; margin-bottom:8px;">
-        <div>Arrows x${state.inventory.arrows || 0}</div>
-        <button class="btn" id="btnJuryRig" ${(state.inventory.arrows || 0) >= 3 ? '' : 'disabled'}>Jury-Rig Lockpick (3 Arrows)</button>
-      </div>`;
-  }
-
-  let trapHtml = '';
-  if (state.skills?.lockpicking?.perks?.['loc_c6']) {
-      trapHtml = `<div class="row" style="justify-content:space-between"><div>Spike Traps x${state.inventory.traps || 0}</div><button class="btn" id="btnUseTrap" ${state.inventory.traps ? '' : 'disabled'}>Place Trap</button></div>`;
-  }
-
-  sec.innerHTML = `
-    <div class="row" style="justify-content:space-between"><div>Gold x${state.inventory.gold||0}</div></div>
-    <div class="row" style="justify-content:space-between; border-bottom:1px solid var(--chipBorder); padding-bottom:8px; margin-bottom:8px;">
-      <div>Lockpicks x${state.inventory.lockpicks}</div>
-    </div>
-    ${juryRigHtml}
-
-    <div class="row" style="justify-content:space-between"><div>Potions x${state.inventory.potions}</div><button class="btn" id="btnUsePot" ${state.inventory.potions ? '' : 'disabled'}>Use</button></div>
-    <div class="row" style="justify-content:space-between"><div>Tonics x${state.inventory.tonics}</div><button class="btn" id="btnUseTon" ${state.inventory.tonics ? '' : 'disabled'}>Use</button></div>
-    <div class="row" style="justify-content:space-between"><div>Antidotes x${state.inventory.antidotes || 0}</div><button class="btn" id="btnUseAnt" ${state.inventory.antidotes ? '' : 'disabled'}>Use</button></div>
-    
-    <div style="margin-top:8px; padding-top:8px; border-top:1px solid var(--chipBorder); opacity:0.9; font-size:12px; font-weight:800;">COMBAT ITEMS</div>
-    <div class="row" style="justify-content:space-between"><div>Bombs x${state.inventory.bombs || 0}</div><button class="btn" id="btnUseBomb" ${state.inventory.bombs ? '' : 'disabled'}>Throw</button></div>
-    <div class="row" style="justify-content:space-between"><div>Warp Stones x${state.inventory.warpStones || 0}</div><button class="btn" id="btnUseWarp" ${state.inventory.warpStones ? '' : 'disabled'}>Warp</button></div>
-    ${trapHtml}
-  `;
-  sec.querySelector('#btnUsePot')?.addEventListener('click', usePotion);
-  sec.querySelector('#btnUseTon')?.addEventListener('click', useTonic);
-  sec.querySelector('#btnUseAnt')?.addEventListener('click', useAntidote);
-  
-  // Wire new buttons
-  sec.querySelector('#btnUseBomb')?.addEventListener('click', useBomb);
-  sec.querySelector('#btnUseWarp')?.addEventListener('click', useWarpStone);
-  sec.querySelector('#btnUseTrap')?.addEventListener('click', useTrap);
-  sec.querySelector('#btnJuryRig')?.addEventListener('click', () => {
-      if ((state.inventory.arrows || 0) >= 3) {
-          state.inventory.arrows -= 3;
-          state.inventory.lockpicks++;
-          if (typeof SFX !== 'undefined' && SFX.lockSuccess) SFX.lockSuccess(); 
-          updateInvBody();
       }
+    }
+  }
+  if (state.inventory.stashed) {
+    for (const [name, arr] of Object.entries(state.inventory.stashed)) {
+      if (Array.isArray(arr)) {
+        arr.forEach(item => { allStashedItems.push({ ...item }); });
+      }
+    }
+  }
+  for (const [name, qty] of Object.entries(state.inventory.weapons || {})) {
+    const type = window.getWeaponType ? window.getWeaponType(name) : 'hand';
+    const managedCount = state.inventory.stashed?.[name]?.length || 0;
+    const leftover = qty - managedCount;
+    for (let i = 0; i < leftover; i++) {
+      allStashedItems.push({ name: name, type: type, stats: { attack:0, defense:0, maxHp:0 } });
+    }
+  }
+  window._stashedCache = allStashedItems;
+
+  let gridCellsHtml = '';
+  allStashedItems.forEach((item, idx) => {
+    gridCellsHtml += `<div onclick="window.handleGridItemClick(${idx})"
+                           onmouseenter="window.handleStashMouseEnter(${idx})" 
+                           onmouseleave="window.clearItemTooltip()"
+                           style="border:1px solid #2d3748; background:#111622; padding:4px; border-radius:6px; text-align:center; cursor:pointer; min-height:54px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+       <canvas id="canvas_stash_${idx}" width="24" height="24" style="width:24px; height:24px; display:block;"></canvas>
+       <span style="font-size:8.5px; color:#dfe7f2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70px; margin-top:1px;">${item.name}</span>
+    </div>`;
   });
 
-  // --- NEW: Render Cursed Idols ---
-  if (state.inventory.idols) {
-      const d = document.createElement('div');
-      d.style.cssText = 'margin-top:10px; padding-top:8px; border-top:1px solid var(--chipBorder); font-size:12px; font-weight:800; color:#ef4444;';
-      d.textContent = 'CURSED IDOLS';
-      sec.appendChild(d);
-      for(const [name, count] of Object.entries(state.inventory.idols)){
-          if(count > 0){
-              const r = document.createElement('div');
-              r.style.cssText = 'display:flex; justify-content:space-between; margin-top:4px; font-size:13px;';
-              r.innerHTML = `<span>${name}</span> <span style="opacity:0.7">x${count}</span>`;
-              sec.appendChild(r);
-          }
+  // Changed baseline floor from 12 slots (2 rows of 6) to 30 slots (5 rows of 6)
+  const totalSlots = Math.max(30, Math.ceil(allStashedItems.length / 6) * 6);
+  for (let i = 0; i < Math.max(0, totalSlots - allStashedItems.length); i++) {
+    gridCellsHtml += `<div style="border:1px dashed #243241; background:rgba(0,0,0,0.1); border-radius:6px; min-height:54px;"></div>`;
+  }
+
+ b.innerHTML = `
+    <div style="display: flex; gap: 14px; min-height: 560px; font-family: monospace; width: 100%;">
+      <div style="width: 175px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 10px; border: 1px solid #243241; display: flex; flex-direction: column; gap: 6px; font-size:11px;">
+        <div style="font-weight: bold; color: #f9d65c; border-bottom: 1px solid #243241; padding-bottom: 4px; text-align: center; font-size:12px; letter-spacing:0.5px;">SUPPLIES</div>
+        
+        <div style="display:flex; align-items:center; gap:6px;"><canvas id="side_canv_gold" width="20" height="24" style="width:20px; height:24px;"></canvas> <span>Gold: <strong style="color:#4ade80;">${state.inventory.gold||0}</strong></span></div>
+        <div style="display:flex; align-items:center; gap:6px;"><canvas id="side_canv_picks" width="20" height="24" style="width:20px; height:24px;"></canvas> <span>Picks: <strong>${state.inventory.lockpicks||0}</strong></span></div>
+        <div style="display:flex; align-items:center; gap:6px; border-top:1px dashed #243241; padding-top:4px;"><canvas id="side_canv_pot" width="20" height="24" style="width:20px; height:24px;"></canvas> <button class="btn" style="padding:2px 4px; font-size:10px; flex:1;" onclick="window.handleInvUse('potion')" ${state.inventory.potions?'':'disabled'}>Potion (${state.inventory.potions})</button></div>
+        <div style="display:flex; align-items:center; gap:6px;"><canvas id="side_canv_ton" width="20" height="24" style="width:20px; height:24px;"></canvas> <button class="btn" style="padding:2px 4px; font-size:10px; flex:1;" onclick="window.handleInvUse('tonic')" ${state.inventory.tonics?'':'disabled'}>Tonic (${state.inventory.tonics})</button></div>
+        <div style="display:flex; align-items:center; gap:6px;"><canvas id="side_canv_ant" width="20" height="24" style="width:20px; height:24px;"></canvas> <button class="btn" style="padding:2px 4px; font-size:10px; flex:1;" onclick="window.handleInvUse('antidote')" ${state.inventory.antidotes?'':'disabled'}>Antid (${state.inventory.antidotes||0})</button></div>
+        <div style="display:flex; align-items:center; gap:6px; border-top:1px dashed #243241; padding-top:4px;"><canvas id="side_canv_bomb" width="20" height="24" style="width:20px; height:24px;"></canvas> <button class="btn" style="padding:2px 4px; font-size:10px; flex:1;" onclick="window.handleInvUse('bomb')" ${state.inventory.bombs?'':'disabled'}>Bomb (${state.inventory.bombs||0})</button></div>
+        <div style="display:flex; align-items:center; gap:6px;"><canvas id="side_canv_warp" width="20" height="24" style="width:20px; height:24px;"></canvas> <button class="btn" style="padding:2px 4px; font-size:10px; flex:1;" onclick="window.handleInvUse('warp')" ${state.inventory.warpStones?'':'disabled'}>Warp (${state.inventory.warpStones||0})</button></div>
+        <div style="display:flex; align-items:center; gap:6px; border-top:1px dashed #243241; padding-top:4px;"><canvas id="side_canv_arrows" width="20" height="24" style="width:20px; height:24px;"></canvas> <span>Arrows: <strong>${state.inventory.arrows||0}</strong></span></div>
+      </div>
+
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid #2d3748; border-radius: 10px; padding: 6px;">
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 250px; margin: 0 auto;">
+            <div></div>${renderSlotCell('helmet', 'Helmet')}<div></div>
+            ${renderSlotCell('necklace', 'Necklace')}${renderSlotCell('chest', 'Chest')}${renderSlotCell('shield', 'Shield')}
+            ${renderSlotCell('weapon', 'Weapon')}${renderSlotCell('pants', 'Pants')}${renderSlotCell('gauntlets', 'Gloves')}
+            ${renderSlotCell('ring1', 'Ring 1')}${renderSlotCell('boots', 'Boots')}${renderSlotCell('ring2', 'Ring 2')}
+          </div>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.4); border: 1px solid #243241; border-radius: 10px; padding: 6px; flex: 1; display: flex; flex-direction: column;">
+          <div style="font-weight: bold; color: #f9d65c; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; text-align: center;">Inventory Grid Storage</div>
+          <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; background: #0b141d; padding: 4px; border-radius: 6px; border:1px solid #1a202c; max-height:340px; overflow-y:auto;">
+            ${gridCellsHtml}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="invTooltip" style="position: absolute; right: calc(100% + 14px); top: 0; width: 280px; height: auto; max-height: 98vh; min-height: 240px; padding: 14px; background: #0b131f; border: 2px solid #34495e; border-radius: 8px; font-size: 11px; color: #a3b8cc; box-sizing: border-box; overflow-y: auto; opacity: 0; visibility: hidden; transition: opacity 0.15s ease, visibility 0.15s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.8); z-index: 11000;">
+    </div>
+  `;
+
+  setTimeout(() => {
+    const drawSupply = (id, kind, payload) => {
+      const cv = document.getElementById(id); if (!cv) return;
+      const cctx = cv.getContext('2d'); cctx.clearRect(0,0,20,24);
+      if (typeof drawPickupPixel === 'function') drawPickupPixel(cctx, { kind, payload }, 0, 0, 20);
+    };
+    drawSupply('side_canv_gold', 'gold', 1);
+    drawSupply('side_canv_picks', 'lockpicks', 1);
+    drawSupply('side_canv_pot', 'potion', 1);
+    drawSupply('side_canv_ton', 'tonic', 1);
+    drawSupply('side_canv_ant', 'antidote', 1);
+    drawSupply('side_canv_bomb', 'bomb', 1);
+    drawSupply('side_canv_warp', 'warp', 1);
+    drawSupply('side_canv_arrows', 'arrows', 1);
+
+    const drawWepOrItem = (id, name) => {
+      const cv = document.getElementById(id); if (!cv) return;
+      const cctx = cv.getContext('2d'); cctx.clearRect(0,0,24,24);
+      if (typeof drawPickupPixel === 'function') {
+        let type = window.getWeaponType ? window.getWeaponType(name) : 'hand';
+        if (name.includes('Shield')) type = 'shield';
+        // CHANGE: Support rendering for equipped rings and amulets inside the inventory cells layout
+        const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
+        let kind = type === 'shield' ? 'shield' : 'weapon';
+        if (trinketPool.includes(name)) { kind = 'ring'; type = 'ring'; }
+        drawPickupPixel(cctx, { kind: kind, payload: { name: name, type: type } }, 0, 0, 24);
       }
-  }
-}
-
-
-  // ---- Shield tab ----
-function renderShield(){
-    sec.innerHTML = '';
-    
-    // Helper to render a shield row
-    const renderRow = (name, count, isEquipped) => {
-        const row = document.createElement('div');
-        row.className = 'row';
-        row.style.justifyContent = 'space-between';
-        
-        const dur = isEquipped && state.player.shield ? ` (Dur ${state.player.shield.dur})` : '';
-        
-        // Calculate Block %
-        let blockChance = '20%';
-        if (name.includes('Buckler')) blockChance = '15%';
-        else if (name.includes('Tower')) blockChance = '35%';
-        else if (name.includes('Ancient')) blockChance = '25%';
-
-        const left = document.createElement('div');
-        const countTxt = isEquipped ? (count > 0 ? `x${count} (1 Equipped)` : `(Equipped)`) : `x${count}`;
-        
-        // Green text if equipped
-        const nameHtml = isEquipped 
-            ? `<span style="color:#4ade80; font-weight:bold;">${name}</span>` 
-            : name;
-
-        left.innerHTML = `${nameHtml} ${countTxt} <span style="opacity:0.7; font-size:12px;">(${blockChance} Block)${dur}</span>`;
-        
-        const btn = document.createElement('button');
-        btn.className = 'btn';
-        btn.textContent = isEquipped ? 'Unequip' : 'Equip';
-        btn.onclick = () => { isEquipped ? unequipShield() : equipShield(name); };
-        
-        row.append(left, btn);
-        sec.appendChild(row);
     };
 
-    // 1. Render Currently Equipped Shield (if it exists)
-    const currentName = state.player.shieldName;
-    if (currentName) {
-        // If it's a generic "Standard", handle it
-        if (currentName === 'Standard') {
-            const count = state.inventory.shields|0;
-            renderRow('Standard Shield', count, true);
-        } 
-        // If it's a named shield (Tower, etc.)
-        else {
-            const count = state.inventory.weapons[currentName] || 0;
-            renderRow(currentName, count, true);
-        }
-    }
-
-    // 2. Render Inventory Shields (Standard)
-    // Only if NOT equipped (otherwise handled above)
-    if (state.inventory.shields > 0 && currentName !== 'Standard') {
-        renderRow('Standard Shield', state.inventory.shields, false);
-    }
-
-    // 3. Render Inventory Shields (Named)
-    // Only if NOT equipped (otherwise handled above)
-    for (const [name, count] of Object.entries(state.inventory.weapons || {})) {
-        if (getWeaponType(name) !== 'shield') continue;
-        if (name === currentName) continue; // Already rendered as equipped
-        renderRow(name, count, false);
-    }
-
-    if (sec.innerHTML === '') sec.innerHTML = '<div>(none)</div>';
-    
-    const tip = document.createElement('div');
-    tip.style.opacity = 0.8;
-    tip.style.marginTop = '15px';
-    tip.style.borderTop = '1px solid rgba(255,255,255,0.1)';
-    tip.style.paddingTop = '5px';
-    tip.textContent = 'Shields block damage based on their Block Chance.';
-    sec.appendChild(tip);
-  }
-
-  // ---- Weapons tab ----
-  function renderWeapons(){
-    sec.innerHTML = '<div id="weaponsList"></div>';
-    const wDiv = sec.querySelector('#weaponsList');
-    const entries = Object.entries(state.inventory.weapons);
-
-    // Helper to get type safely (handles Key of Destiny + Affixes)
-    const getType = (name) => {
-      if (name === 'Key of Destiny') return 'one';
-      // FIX: Force anything containing "Shield" to be type 'shield'
-      if (name.includes('Shield')) return 'shield';
-      return weaponStatsFor(name)?.type || 'hand';
-    };
-
-    // Sort by Skill Name so groups stay together
-    entries.sort((a, b) => {
-      const skillA = typeNice(getType(a[0]));
-      const skillB = typeNice(getType(b[0]));
-      return skillA.localeCompare(skillB);
+    if (state.player.weapon && state.player.weapon.name !== 'Fists') drawWepOrItem('canvas_slot_weapon', state.player.weapon.name);
+    if (state.player.shield) drawWepOrItem('canvas_slot_shield', state.player.shield.name);
+    ['helmet','chest','gauntlets','pants','boots','ring1','ring2','necklace'].forEach(slot => {
+      if (state.player.equipment[slot]) drawWepOrItem(`canvas_slot_${slot}`, state.player.equipment[slot].name);
     });
 
-    if (!entries.length) {
-      wDiv.innerHTML = '<div>(none)</div>';
-      return;
-    }
-    
-    wDiv.innerHTML = '';
-    let lastSkill = null; // Tracks the current group header
-
-    for (const [name,count] of entries) {
-      // --- NEW: Header Logic ---
-      const wType = getType(name); 
-      
-      // --- FIX: Hide Shields from Weapon Tab ---
-      if (wType === 'shield') continue;
-      // ---------------------------------------
-
-      const skillLabel = typeNice(wType); // e.g. "One-Handed"
-
-      if (skillLabel !== lastSkill) {
-        const h = document.createElement('div');
-        h.style.cssText = 'color:#f9d65c; font-weight:800; font-size:12px; text-transform:uppercase; margin:10px 0 4px 0; border-bottom:1px solid rgba(255,255,255,0.1); opacity:0.8;';
-        h.textContent = skillLabel;
-        wDiv.appendChild(h);
-        lastSkill = skillLabel;
+    allStashedItems.forEach((item, idx) => {
+      drawWepOrItem(`canvas_slot_stash_${idx}`, item.name);
+      const cv = document.getElementById(`canvas_stash_${idx}`); if (!cv) return;
+      const cctx = cv.getContext('2d');
+      if (typeof drawPickupPixel === 'function') {
+        let type = window.getWeaponType ? window.getWeaponType(item.name) : 'hand';
+        if (item.name.includes('Shield')) type = 'shield';
+        // CHANGE: Dynamic type check mapping so rings use 'ring' kind for drawPickupPixel rendering
+        const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
+        let kind = type === 'shield' ? 'shield' : 'weapon';
+        if (trinketPool.includes(item.name) || item.type === 'ring') kind = 'ring';
+        drawPickupPixel(cctx, { kind: kind, payload: { name: item.name, type: item.type || type } }, 0, 0, 24);
       }
-      // ------------------------
-
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.style.justifyContent = 'space-between';
-
-      const left = document.createElement('div');
-      
-      // Determine stats: Use ACTUAL equipped stats (including Omen buffs to base) if equipped
-      const isEquipped = state.player.weapon && state.player.weapon.name === name;
-      let ws;
-      
-      if (isEquipped && state.player.weapon.base) {
-          // Use the live modified base stats from the player object
-        ws = { ...state.player.weapon.base, type: state.player.weapon.type };
-    } else {
-// -------------------- START OF FIX BLOCK --------------------
-        // Check for 'Key of Destiny' or default to standard stats lookup
-        if (name === 'Key of Destiny') {
-            // Hardcode base stats for Key of Destiny when unequipped
-            ws = { min: 5, max: 7, type: 'one' }; 
-        } else {
-            // Use the template stats for unequipped items (will return null for 'Key of Destiny')
-            ws = weaponStatsFor(name) || (name === 'Fists' 
-                ? { min: 1, max: 2, type: 'hand' } 
-                : { min: 1, max: 1, type: wType });
-        }
-// -------------------- END OF FIX BLOCK --------------------
-    }
-
-// --- FIX: Include Global Omen Bonus ---
-const flat = state.globalWeaponFlatBonus || 0;
-const bonus = skillDamageBonus(ws.type) + flat;
-// --------------------------------------
-const pMin  = ws.min + bonus;
-const pMax  = ws.max + bonus;
-
-// --- NEW: Apply Floor Modifiers to Display ---
-let dMin = pMin, dMax = pMax;
-let dStyle = ''; 
-let dNote  = '';
-
-if (state.floorEffect === 'AntiMagic') {
-    if (wType === 'staff') {
-        dStyle = 'color:#f87171; text-decoration:line-through;'; // Red + Strike
-        dNote = ' (SILENCED)';
-    } else {
-        dMin = Math.ceil(dMin * 1.5);
-        dMax = Math.ceil(dMax * 1.5);
-        dStyle = 'color:#4ade80; font-weight:bold;'; // Green (Buff)
-    }
-} else if (state.floorEffect === 'ArcaneFlux') {
-    if (wType === 'staff') {
-        dMin = Math.ceil(dMin * 1.5);
-        dMax = Math.ceil(dMax * 1.5);
-        dStyle = 'color:#4ade80; font-weight:bold;'; // Green (Buff)
-    } else {
-        dMin = Math.max(1, Math.ceil(dMin * 0.25));
-        dMax = Math.max(1, Math.ceil(dMax * 0.25));
-        dStyle = 'color:#f87171; font-weight:bold;'; // Red (Nerf)
-    }
-}
-// ---------------------------------------------
-
-const durTxt = (isEquipped && Number.isFinite(state.player.weapon.durMax))
-  ? ` — Dur ${state.player.weapon.dur}/${state.player.weapon.durMax}` : '';
-
-// --- NEW: Comparison Logic (Updated to use modified values) ---
-let diffHTML = '';
-if (!isEquipped) {
-  const cur = state.player.weapon; // Note: 'cur' stats in state are technically raw, but we want to compare apples to apples
-  
-  // Recalculate equipped effective dmg for fair comparison
-  let curMin = cur.min, curMax = cur.max;
-  const curIsStaff = (cur.type === 'staff');
-
-  if (state.floorEffect === 'ArcaneFlux') {
-      const mult = curIsStaff ? 1.5 : 0.25;
-      curMin = Math.ceil(curMin * mult); curMax = Math.ceil(curMax * mult);
-  } else if (state.floorEffect === 'AntiMagic') {
-      const mult = curIsStaff ? 0 : 1.5; // 0 effectively handles silence for math
-      curMin = Math.ceil(curMin * mult); curMax = Math.ceil(curMax * mult);
-  }
-  
-  const curAvg = (curMin + curMax) / 2;
-  const rowAvg = (dMin + dMax) / 2;
-  
-  const diff = rowAvg - curAvg;
-  if (diff > 0) diffHTML = ` <span style="color:#4ade80; font-weight:bold;">(+${diff.toFixed(1)})</span>`;
-  else if (diff < 0) diffHTML = ` <span style="color:#f87171; font-weight:bold;">(${diff.toFixed(1)})</span>`;
-  else diffHTML = ` <span style="color:#9ca3af;">(=)</span>`;
-}
-
-left.innerHTML = `${name} x${count} — <span style="${dStyle}">Dmg ${dMin}–${dMax}${dNote}</span>${durTxt}${diffHTML}`;// -----------------------------
-
-
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      
-      // --- NEW: Cursed Logic ---
-      const curWep = state.player.weapon;
-      if (curWep && curWep.cursed) {
-        // If we are currently holding a cursed weapon...
-        if (isEquipped) {
-          btn.textContent = "BOUND";
-          btn.disabled = true;
-          btn.style.color = "#ef4444"; // Red text
-          btn.title = "Visit a Cleric to remove this curse.";
-        } else {
-          // Cannot equip other things while cursed
-          btn.textContent = "Equip";
-          btn.disabled = true;
-          btn.style.opacity = "0.5";
-        }
-      } else {
-        // Normal behavior
-        btn.textContent = isEquipped ? 'Unequip' : 'Equip';
-      }
-      // --------------------------
-
-      // Hide button when you truly have zero copies (keeps row but disables action)
-      const stashCount = (state.inventory.stashed?.[name]?.length) || 0;
-      const hasCopies  = (name === 'Fists') || (count && count > 0) || (stashCount > 0);
-      if (!hasCopies && !isEquipped) {
-        left.style.opacity = 0.6;
-        row.append(left);
-        wDiv.appendChild(row);
-        continue;
-      }
-
-      btn.addEventListener('click', ()=>{
-        const currentlyEquipped = state.player.weapon && state.player.weapon.name === name;
-        if (currentlyEquipped){
-          if (!state.inventory.stashed) state.inventory.stashed = {};
-          const cur = state.player.weapon;
-          if (Number.isFinite(cur?.durMax) && cur.dur > 0){
-            (state.inventory.stashed[cur.name] ||= []).push({ ...cur, base: { ...cur.base } });
-          }
-          state.player.weapon = {name:'Fists', min:1, max:2, type:'hand', base:{min:1,max:2}, dur:null, durMax:null};
-          recomputeWeapon(); updateEquipUI(); log(`Unequipped ${name}.`); updateInvBody();
-         } else {
-          equipWeaponByName(name);
-
-          // >>> Tutorial: after equipping the Shortsword, move to next step
-          if (state.gameMode === 'tutorial' &&
-              state.tutorialStep === 2 &&
-              name === 'Shortsword') {
-            state.tutorialStep = 3;
-            say("Nice. Now attack a rat with SPACE.");
-          }
-          // <<<
-
-          log(`Equipped ${name}.`);
-          updateInvBody();
-        }
-      });
-
-      row.append(left, btn);
-      wDiv.appendChild(row);
-    }
-  }
-
-  // Render selected tab
-  if (tab==='items')      renderItems();
-  else if (tab==='shield')renderShield();
-  else                    renderWeapons();
-
-  // Wire tabs
-  b.querySelector('#tabItems')  ?.addEventListener('click', ()=>{ state.ui.invTab='items';   updateInvBody(); });
-  b.querySelector('#tabShield') ?.addEventListener('click', ()=>{ state.ui.invTab='shield';  updateInvBody(); });
-  b.querySelector('#tabWeapons')?.addEventListener('click', ()=>{ state.ui.invTab='weapons'; updateInvBody(); });
-  b.querySelector('#tabTrinkets')?.addEventListener('click', ()=>{ state.ui.invTab='trinkets'; updateInvBody(); });
-
-  if (tab==='trinkets') renderTrinkets();
+    });
+  }, 0);
 }
 
 
@@ -2876,9 +2917,13 @@ function pollGamepad() {
             } else if (navs.length > 0) {
                if (!navs.includes(focusEl)) {
                    // If lost or first move, snap to the very first item
-                   document.querySelectorAll('.controller-focus').forEach(e => e.classList.remove('controller-focus'));
+                   document.querySelectorAll('.controller-focus').forEach(e => {
+                       if (typeof e.onmouseleave === 'function') e.onmouseleave(); // Clear previous tooltips
+                       e.classList.remove('controller-focus');
+                   });
                    focusEl = navs[0];
                    focusEl.classList.add('controller-focus');
+                   if (typeof focusEl.onmouseenter === 'function') focusEl.onmouseenter(); // Fire tooltip if it exists
                    focusEl.scrollIntoView({behavior:'smooth', block:'nearest'});
                } else {
                    // Find best neighbor
@@ -2908,8 +2953,10 @@ function pollGamepad() {
                        }
                    });
                    if (best) {
+                       if (typeof focusEl.onmouseleave === 'function') focusEl.onmouseleave(); // Clear old tooltip
                        focusEl.classList.remove('controller-focus');
                        best.classList.add('controller-focus');
+                       if (typeof best.onmouseenter === 'function') best.onmouseenter(); // Trigger new item popup info
                        best.scrollIntoView({behavior:'smooth', block:'nearest'});
                    }
                }
@@ -3827,7 +3874,7 @@ function doRestart(className){
   state.noFog = false; // <--- CRITICAL: Turns fog back on so you don't see the black void
   
 // 4. Force Clear Canvas
-  state._animating = false;
+  state._animating = true;
 
   // FIX: Correct ID is "bossHud" (camelCase), not "boss-hud"
   const hud = document.getElementById('bossHud');
@@ -4003,7 +4050,8 @@ function doRestart(className){
   artCooldown: 0,
   shield: null,
   trinket: null,  // NEW: Slot for passive gear
-  regenTicker: 0  // NEW: Counter for HP regen effects
+  regenTicker: 0,  // NEW: Counter for HP regen effects
+  equipment:{ helmet: null, chest: null, gauntlets: null, pants: null, boots: null, ring1: null, ring2: null, necklace: null }
 };
 
   // --- Apply Class Stats Modifiers ---
@@ -4139,6 +4187,16 @@ function doRestart(className){
   } else if (className === 'Vampire') {
     state.inventory.weapons['Vampiric Shortsword'] = 1; equipWeaponByName('Vampiric Shortsword');
     state.inventory.trinkets = {'Amulet of Life': 1}; // Note: Will require player to equip via inventory, but puts it in their bag!
+  }
+
+// CHANGE: Calculate and preserve baseline class stat deltas to protect negative modifications from reset loops
+  state.player.classHpBonus = state.player.hpMax - 20;
+  state.player.classMpBonus = state.player.mpMax - 20;
+  state.player.classStaminaBonus = state.player.staminaMax - 20;
+
+  // CHANGE: Purge starter duplicate items from inventory collections so they only remain equipped on your person
+  if (state.player.weapon && state.player.weapon.name !== 'Fists') {
+     delete state.inventory.weapons[state.player.weapon.name];
   }
 
   // Finalize
@@ -4474,6 +4532,26 @@ function countWeaponsInCategory(targetType) {
   return count;
 }
 
+// CHANGE: Added total system grid capacity calculator tracking weapons, stashed structures, and active trinkets against the layout maximum limit
+function isInventoryFull() {
+  let total = 0;
+  if (state.inventory.trinkets) {
+    for (const [name, qty] of Object.entries(state.inventory.trinkets)) {
+      if (qty > 0) total += qty;
+    }
+  }
+  if (state.inventory.stashed) {
+    for (const [name, arr] of Object.entries(state.inventory.stashed)) {
+      if (Array.isArray(arr)) total += arr.length;
+    }
+  }
+  for (const [name, qty] of Object.entries(state.inventory.weapons || {})) {
+    const managedCount = state.inventory.stashed?.[name]?.length || 0;
+    if (qty > managedCount) total += (qty - managedCount);
+  }
+  return total >= 30; // 30 is the max size cap of the inventory grid storage layout
+}
+
 window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
   // 1. Inject HTML if missing
   if (!document.getElementById('swapModal')) {
@@ -4483,13 +4561,13 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
       <div class="sheet" style="width:min(600px, 94vw)">
         <div class="title" style="margin-bottom:10px; text-align:center; color:#f9d65c">Inventory Full</div>
         <div id="swapMsg" style="text-align:center; margin-bottom:15px; opacity:0.9">
-           You can only carry ${MAX_WEAPON_CAT} weapons of this type.
+           Your item grid storage space is completely full.
         </div>
         
         <div style="display:grid; grid-template-columns:1fr 1px 1fr; gap:10px; align-items:start;">
            <div style="display:flex; flex-direction:column; gap:8px;">
               <div style="font-weight:bold; text-align:center; font-size:12px; opacity:0.7">SCRAP ONE:</div>
-              <div id="swapList" style="display:flex; flex-direction:column; gap:6px;"></div>
+              <div id="swapList" style="display:flex; flex-direction:column; gap:6px; max-height:240px; overflow-y:auto; padding-right:4px;"></div>
            </div>
            
            <div style="background:rgba(255,255,255,0.2); height:100%;"></div>
@@ -4508,17 +4586,13 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
   const newBtn = document.getElementById('swapNewBtn');
   const msg = document.getElementById('swapMsg');
   
-  const wType = getWeaponType(newItemPayload.name);
-  const niceType = typeNice(wType);
-  
-  msg.textContent = `Your ${niceType} bag is full (${MAX_WEAPON_CAT}/${MAX_WEAPON_CAT}). Scrap an old one to take the new one?`;
+  // CHANGE: Enforce generalized grid capacity reporting messages
+  msg.textContent = `Your inventory grid storage is full (30/30). Scrap an old item to take the new one?`;
   list.innerHTML = '';
 
-  // 1. Helper to format stats (Shield-aware)
+  // 1. Helper to format stats (Shield/Armor aware)
   const fmt = (name, min, max) => {
-     // Check if it's a shield based on name
      const type = getWeaponType(name);
-     
      if (type === 'shield') {
         let chance = '20%';
         if (name.includes('Buckler')) chance = '15%';
@@ -4526,91 +4600,77 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
         else if (name.includes('Ancient')) chance = '25%';
         return `<b>${name}</b><br><span style="font-size:12px; opacity:0.8">Block: ${chance}</span>`;
      }
-
-     // Normal Weapon Logic
      let dMin = min, dMax = max;
      const isStaff = (type === 'staff');
-
-     // Arcane Flux: Staffs x1.5, Melee x0.25
      if (state.floorEffect === 'ArcaneFlux') {
         if (isStaff) { dMin = Math.ceil(dMin * 1.5); dMax = Math.ceil(dMax * 1.5); }
         else         { dMin = Math.ceil(dMin * 0.25); dMax = Math.ceil(dMax * 0.25); }
-     } 
-     // Anti-Magic: Staffs Silenced, Melee x1.5
-     else if (state.floorEffect === 'AntiMagic') {
+     } else if (state.floorEffect === 'AntiMagic') {
         if (isStaff) return `<b>${name}</b><br><span style="font-size:12px; opacity:0.8; color:#f87171; text-decoration:line-through;">SILENCED</span>`;
         dMin = Math.ceil(dMin * 1.5); dMax = Math.ceil(dMax * 1.5); 
      }
-     
-     return `<b>${name}</b><br><span style="font-size:12px; opacity:0.8">Dmg: ${dMin}-${dMax}</span>`;
+     return `<b>${name}</b>${min || max ? `<br><span style="font-size:12px; opacity:0.8">Dmg: ${dMin}-${dMax}</span>` : ''}`;
   };
 
-  // 2. Populate "Scrap" List (Current Inventory)
-  for (const [name, qty] of Object.entries(state.inventory.weapons || {})) {
-    if (getWeaponType(name) !== wType) continue; // Only show matching category
-    
-    const stats = weaponStatsFor(name) || { min:0, max:0 };
+  // CHANGE: Generate scrap button targets for every weapon, armor piece, or trinket currently occupying storage space
+  const itemsToScrap = [];
+  if (state.inventory.trinkets) {
+     for (const [tName, qty] of Object.entries(state.inventory.trinkets)) {
+        if (qty > 0) itemsToScrap.push({ name: tName, isTrinket: true });
+     }
+  }
+  for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
+     if (count > 0) itemsToScrap.push({ name: wName, isTrinket: false });
+  }
+
+  itemsToScrap.forEach(item => {
+    const stats = weaponStatsFor(item.name) || { min:0, max:0 };
     const btn = document.createElement('button');
     btn.className = 'btn';
-    btn.style.cssText = 'text-align:left; padding:8px; border:1px solid #ef4444; color:#fca5a5;';
+    btn.style.cssText = 'text-align:left; padding:8px; border:1px solid #ef4444; color:#fca5a5; width:100%;';
     const xpVal = 10 + (state.floor * 2);
-    btn.innerHTML = `SCRAP (+${xpVal} XP): ${fmt(name, stats.min, stats.max)}`;
+    btn.innerHTML = `SCRAP (+${xpVal} XP): ${fmt(item.name, stats.min, stats.max)}`;
     
-    // ACTION: Scrap Old -> Take New
     btn.onclick = () => {
-       // Remove Old
-       state.inventory.weapons[name]--;
-       if (state.inventory.weapons[name] <= 0) delete state.inventory.weapons[name];
+       if (item.isTrinket) {
+          state.inventory.trinkets[item.name]--;
+          if (state.inventory.trinkets[item.name] <= 0) delete state.inventory.trinkets[item.name];
+       } else {
+          state.inventory.weapons[item.name]--;
+          if (state.inventory.weapons[item.name] <= 0) delete state.inventory.weapons[item.name];
+          if (state.inventory.stashed?.[item.name]) state.inventory.stashed[item.name].pop();
+       }
        
-       // Add New
+       // Add the new piece into inventory array
        state.inventory.weapons[newItemPayload.name] = (state.inventory.weapons[newItemPayload.name]||0) + 1;
+       if (newItemPayload.stats !== undefined || newItemPayload.dur !== undefined) {
+          state.inventory.stashed = state.inventory.stashed || {};
+          if (!state.inventory.stashed[newItemPayload.name]) state.inventory.stashed[newItemPayload.name] = [];
+          state.inventory.stashed[newItemPayload.name].push(newItemPayload);
+       }
        
-       // Clear Floor
        delete state.pickups[pickupKey];
        state.tiles[y][x] = 1;
        
-// --- NEW: Grant Weapon Skill XP (Shields->Survivability, Staffs->Magic) ---
-       const xpAmt = 10 + (state.floor * 2);
-       
-       // Detect special cases
-       const isShield = (wType === 'shield');
-       const isStaff  = (wType === 'staff');
-
-       // Redirect XP: Shield->Survivability, Staff->Magic, Others->WeaponType
-       let targetSkill = wType;
-       if (isShield) targetSkill = 'survivability';
-       if (isStaff)  targetSkill = 'magic';
-       
+       const wType = getWeaponType(item.name);
+       const targetSkill = item.isTrinket ? 'magic' : (wType === 'shield' ? 'survivability' : wType);
        ensureSkill(targetSkill);
        const s = state.skills[targetSkill];
-       s.shown = true; 
-       s.xp += xpAmt;
+       s.shown = true; s.xp += xpVal;
        
-       // Handle Level Up
        let leveled = false;
        while(s.xp >= s.next){ 
-           s.xp -= s.next; 
-           s.lvl++; 
-           s.next = Math.floor(s.next * SKILL_XP_GROWTH); 
-           leveled = true;
+           s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * SKILL_XP_GROWTH); leveled = true;
        }
-       
        if(leveled) {
-           // Nice name for log
-           const skillName = (isShield ? "Survivability" : (isStaff ? "Magic" : typeNice(wType)));
-           log(`${skillName} advanced to ${s.lvl}!`);
-           
+           log(`${item.isTrinket ? "Magic" : (wType === 'shield' ? "Survivability" : typeNice(wType))} advanced to ${s.lvl}!`);
            renderSkills(); 
-           // Only recompute weapon damage if it wasn't a shield
-           if (!isShield && typeof recomputeWeapon === 'function') recomputeWeapon();
+           if (targetSkill !== 'survivability' && typeof recomputeWeapon === 'function') recomputeWeapon();
        }
 
-       spawnFloatText(`+${xpAmt} XP`, state.player.x, state.player.y, '#a78bfa');
-       // -------------------------------------
-
-       log(`Dismantled ${name}. Learned from its design.`);
-       SFX.weaponBreak(); // Crunch sound for scrapping
-       SFX.pickup();      // Pickup sound
+       spawnFloatText(`+${xpVal} XP`, state.player.x, state.player.y, '#a78bfa');
+       log(`Dismantled ${item.name}. Learned from its design.`);
+       SFX.weaponBreak(); SFX.pickup();
        
        m.style.display = 'none';
        state._inputLocked = false;
@@ -4619,10 +4679,11 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
        draw();
     };
     list.appendChild(btn);
-  }
+  });
 
   // 3. Populate "Leave" Button (New Item)
-  newBtn.innerHTML = `LEAVE: ${fmt(newItemPayload.name, newItemPayload.min, newItemPayload.max)}`;
+  const newStats = weaponStatsFor(newItemPayload.name) || { min:0, max:0 };
+  newBtn.innerHTML = `LEAVE: ${fmt(newItemPayload.name, newStats.min, newStats.max)}`;
   newBtn.onclick = () => {
      log(`You leave the ${newItemPayload.name} on the floor.`);
      m.style.display = 'none';

@@ -17,10 +17,8 @@ function collectIfPickup(){
   if(state.tiles[state.player.y][state.player.x]===5 && state.pickups[kxy]){
     const it=state.pickups[kxy];
     if(it.kind==='weapon'){
-        // --- NEW: Check Category Limit ---
-        const wType = getWeaponType(it.payload.name);
-        const curCount = countWeaponsInCategory(wType);
-        if (curCount >= MAX_WEAPON_CAT) {
+        // CHANGE: Replaced the old 5-item type cap check with a check against the maximum grid layout capacity (30 slots)
+        if (isInventoryFull()) {
             openWeaponSwapModal(it.payload, kxy, state.player.x, state.player.y);
             return; 
         }
@@ -28,8 +26,8 @@ function collectIfPickup(){
         SFX.pickup();
         state.inventory.weapons[it.payload.name]=(state.inventory.weapons[it.payload.name]||0)+1;
         
-        // --- FIX: Preserve thrown weapon durability ---
-        if (it.payload.dur !== undefined) {
+        // --- FIX: Preserve thrown weapon durability and equipment stats ---
+        if (it.payload.dur !== undefined || it.payload.stats !== undefined) {
             state.inventory.stashed = state.inventory.stashed || {};
             if (!state.inventory.stashed[it.payload.name]) state.inventory.stashed[it.payload.name] = [];
             state.inventory.stashed[it.payload.name].push(it.payload);
@@ -50,7 +48,8 @@ function collectIfPickup(){
         // --- TUTORIAL Step 4 (Pickup -> Equip) ---
       if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && it.payload.name === 'Warhammer'){
         hideBanner();
-        showBanner(`Warhammer acquired! Press (${getInputName('inventory')}) and go to weapons to equip it.`, 999999);
+        // CHANGE: Update tutorial instructions to explicitly reflect clicking the item icon in the new grid layout system
+        showBanner(`Warhammer acquired! Press (${getInputName('inventory')}) and click it's icon to equip it.`, 999999);
       }
       // -----------------------------------------
 
@@ -1546,15 +1545,10 @@ function openChest(x,y){
       // Show RED banner immediately (and don't push to lootMsg)
       showBanner(`${pick} (Cursed object added!)`, 4000, '#ef4444');
     } else if (isStarterChest || Math.random() < weaponChance){
-    const w = randomWeapon();
+    const w = randomWeapon(isStarterChest);
     
-    // --- NEW: Check Inventory Limit ---
-    // Ensure helper functions exist (defined at bottom of script)
-    const wType = (typeof getWeaponType === 'function') ? getWeaponType(w.name) : 'hand';
-    const curCount = (typeof countWeaponsInCategory === 'function') ? countWeaponsInCategory(wType) : 0;
-    const limit = (typeof MAX_WEAPON_CAT !== 'undefined') ? MAX_WEAPON_CAT : 5;
-
-    if (curCount >= limit) {
+    // CHANGE: Updated chest opening drops to spawn the swap modal only when the absolute inventory storage capacity limits are exceeded
+    if (isInventoryFull()) {
        // Bag Full: Drop weapon on floor & trigger Swap
        const k = key(x,y);
        state.pickups[k] = { kind:'weapon', payload:w };
@@ -1569,6 +1563,14 @@ function openChest(x,y){
     } else {
        // Normal Add
        state.inventory.weapons[w.name] = (state.inventory.weapons[w.name] || 0) + 1;
+       
+       // CHANGE: Stash the generated unique item instance details so that gear/armor stats can be successfully read and equipped by equipGearItem
+       if (w.stats !== undefined || w.dur !== undefined) {
+          state.inventory.stashed = state.inventory.stashed || {};
+          if (!state.inventory.stashed[w.name]) state.inventory.stashed[w.name] = [];
+          state.inventory.stashed[w.name].push(w);
+       }
+
           lootMsg.push(`${w.name} (now x${state.inventory.weapons[w.name]})`);
 
           // --- NEW: Codex Unlock (Chest Weapons) ---
@@ -1759,7 +1761,8 @@ function openChest(x,y){
 
 
 
-function equipWeaponByName(name){
+// Appended optional item payload instantiation data to prevent baseline execution reference breaks
+function equipWeaponByName(name, item = null){
   // --- NEW: Redirect Shields to off-hand ---
   const st = weaponStatsFor(name);
   if (st && st.type === 'shield') {
@@ -1776,11 +1779,31 @@ function equipWeaponByName(name){
     return; 
   }
 
+  // --- FIX: Symmetrically remove old weapon stats before applying new ones to prevent tracking leaks ---
+  const cur = state.player.weapon;
+  if (cur && cur.stats) {
+    if (cur.stats.attack) state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - cur.stats.attack);
+    if (cur.stats.maxHp) {
+      state.player.hpMax = Math.max(5, state.player.hpMax - cur.stats.maxHp);
+      state.player.hp = Math.max(1, state.player.hp - cur.stats.maxHp);
+      state.player.hp = Math.min(state.player.hp, state.player.hpMax);
+    }
+    if (cur.stats.maxMp) {
+      state.player.mpMax = Math.max(0, state.player.mpMax - cur.stats.maxMp);
+      state.player.mp = Math.max(0, state.player.mp - cur.stats.maxMp);
+      state.player.mp = Math.min(state.player.mp, state.player.mpMax);
+    }
+    if (cur.stats.maxStamina) {
+      state.player.staminaMax = Math.max(5, state.player.staminaMax - cur.stats.maxStamina);
+      state.player.stamina = Math.max(0, state.player.stamina - cur.stats.maxStamina);
+      state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
+    }
+  }
+
   // Ensure stash exists
   if (!state.inventory.stashed) state.inventory.stashed = {};
 
   // 1) Preserve the CURRENTLY EQUIPPED weapon (if it has durability and isn't Fists)
-  const cur = state.player.weapon;
   if (cur && cur.name !== 'Fists' && Number.isFinite(cur.durMax) && cur.dur > 0){
     (state.inventory.stashed[cur.name] ||= []).push({ ...cur, base: { ...cur.base } });
   }
@@ -1815,6 +1838,14 @@ function equipWeaponByName(name){
   }
 
   state.player.weapon = { ...w, base: { ...w.base } };
+  // --- FIX: Symmetrically re-apply ALL stashed weapon stat modifications (ATK, HP, MP, STM) to prevent stat loss ---
+  if (state.player.weapon.stats) {
+    const s = state.player.weapon.stats;
+    if (s.attack) state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + s.attack;
+    if (s.maxHp) { state.player.hpMax += s.maxHp; state.player.hp += s.maxHp; }
+    if (s.maxMp) { state.player.mpMax += s.maxMp; state.player.mp += s.maxMp; }
+    if (s.maxStamina) { state.player.staminaMax += s.maxStamina; state.player.stamina += s.maxStamina; }
+  }
   ensureSkill(state.player.weapon.type);
   recomputeWeapon();
   updateEquipUI();
@@ -1863,8 +1894,9 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
   const nameLower = name.toLowerCase();
   const cType = isCursed ? (nameLower.includes('blood') ? 'blood' : (nameLower.includes('greed') ? 'greed' : (nameLower.includes('frailty') ? 'frailty' : 'rust'))) : null; 
 
+  // CHANGE: Retain the item's rolled 'stats' object so that MP/Stamina bonuses persist
   state.player.weapon = {
-    name, // Keep full name "Cursed Shortsword"
+    name, 
     min: stats[0] + bonMin, 
     max: stats[1] + bonMax, 
     type: stats[2],
@@ -1872,9 +1904,20 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
     dur: durMax, 
     durMax,
     vampiric: isVamp,
-    cursed: isCursed, // <--- CRITICAL FIX
-    curseType: cType,  // <--- CRITICAL FIX
+    cursed: isCursed,
+    curseType: cType,
+    stats: item?.stats || { attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0, vampiric: 0 }
   };
+  
+  // --- FIX: Apply secondary stat bonuses from the newly created weapon copy ---
+  if (state.player.weapon.stats) {
+    const s = state.player.weapon.stats;
+    if (s.attack) state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + s.attack;
+    if (s.maxHp) { state.player.hpMax += s.maxHp; state.player.hp += s.maxHp; }
+    if (s.maxMp) { state.player.mpMax += s.maxMp; state.player.mp += s.maxMp; }
+    if (s.maxStamina) { state.player.staminaMax += s.maxStamina; state.player.stamina += s.maxStamina; }
+  }
+
   ensureSkill(stats[2]);
   recomputeWeapon();
   updateEquipUI();
@@ -1962,8 +2005,28 @@ function breakEquippedWeaponIfNeeded(){
       delete state.inventory.weapons[w.name];
     }
   }
-    SFX.weaponBreak();
+    
+  SFX.weaponBreak();
   log(`${w.name} breaks!`);
+  // --- FIX: Symmetrically remove the flat attack, HP, MP, and Stamina bonuses of the broken item before reverting to Fists ---
+  if (w && w.stats) {
+    if (w.stats.attack) state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - w.stats.attack);
+    if (w.stats.maxHp) {
+      state.player.hpMax = Math.max(5, state.player.hpMax - w.stats.maxHp);
+      state.player.hp = Math.max(1, state.player.hp - w.stats.maxHp);
+      state.player.hp = Math.min(state.player.hp, state.player.hpMax);
+    }
+    if (w.stats.maxMp) {
+      state.player.mpMax = Math.max(0, state.player.mpMax - w.stats.maxMp);
+      state.player.mp = Math.max(0, state.player.mp - w.stats.maxMp);
+      state.player.mp = Math.min(state.player.mp, state.player.mpMax);
+    }
+    if (w.stats.maxStamina) {
+      state.player.staminaMax = Math.max(5, state.player.staminaMax - w.stats.maxStamina);
+      state.player.stamina = Math.max(0, state.player.stamina - w.stats.maxStamina);
+      state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
+    }
+  }
   state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
   recomputeWeapon();
   updateEquipUI();
@@ -2293,6 +2356,13 @@ function attack(){
       }
       log('No enemy adjacent.'); return; 
     }
+    
+    // --- TUTORIAL FAIL-SAFE: Prevent basic melee attacks from damaging or clearing tutorial targets on Step 5 ---
+    if (state.gameMode === 'tutorial' && state.tutorialStep === 5) {
+      log("Standard attacks can't break their guard! Use your Weapon Art ability instead.");
+      return;
+    }
+
     const w = state.player.weapon;
     
     // Reaper Invincibility
@@ -2452,9 +2522,13 @@ function attack(){
         target.armor = 0;
     }
     let finalDmg = Math.max(1, dmg - currentArmor);
-
-    target.hp -= finalDmg;
-    if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); 
+  // --- TUTORIAL FAIL-SAFE: Block standard damage to tutorial dummies prior to Step 5 ---
+  if (state.gameMode === 'tutorial' && target.tutorialDummy && state.tutorialStep < 5) {
+    log("Wait for the objective instructions before attacking these rats!");
+    return;
+  }
+  target.hp -= finalDmg;
+  if (typeof flashEnemy === 'function') flashEnemy(target, 'red');
     
     let dmgColor = (currentArmor > 0) ? '#94a3b8' : (isCrit ? '#ff0' : '#fff');
     spawnFloatText(finalDmg + (isCrit ? "!" : ""), target.x, target.y, dmgColor);
@@ -2776,8 +2850,12 @@ function useWeaponArt(){
         if (e && !hitList.has(e)) {
           hitList.add(e);
           const dmg = Math.floor(rand(w.min, w.max) * 1.2);
-          e.hp -= dmg;
-          spawnFloatText(dmg+"!", e.x, e.y, '#ffae00');
+      // --- TUTORIAL FAIL-SAFE: Block weapon art damage to tutorial dummies prior to Step 5 ---
+      if (state.gameMode === 'tutorial' && e.tutorialDummy && state.tutorialStep < 5) {
+        return;
+      }
+      e.hp -= dmg;
+      spawnFloatText(dmg+"!", e.x, e.y, '#ffae00');
           
           // --- NEW: Meteor Strike (two_c2) ---
           if (state.skills?.two?.perks?.['two_c2']) {
@@ -3515,7 +3593,39 @@ const stats = {
     'Buckler':        [1,2,'shield'], 
     'Kite Shield':    [2,3,'shield'], 
     'Tower Shield':   [3,4,'shield'], 
-    'Ancient Shield': [2,4,'shield']
+    'Ancient Shield': [2,4,'shield'],
+    // CHANGE: Mapped all newly integrated armor pieces and jewelry slots to allow standard lookups across mechanics
+    // CHANGE: Comprehensive updates to registry slot types for all 24 progressive tier equipment items to enable accurate item property lookup across the entire engine state machine
+   // CHANGE: Comprehensive updates to registry slot types for all 24 progressive tier equipment items to guarantee merchant systems parse item categories seamlessly
+    'Leather Cap':    [0,0,'helmet'],
+    'Iron Helm':      [0,0,'helmet'],
+    'Steel Visor':    [0,0,'helmet'],
+    'Mythril Crown':  [0,0,'helmet'],
+    
+    'Cloth Tunic':    [0,0,'chest'],
+    'Chainmail Jacket':[0,0,'chest'],
+    'Scale Mail':     [0,0,'chest'],
+    'Platemail Heavy':[0,0,'chest'],
+    
+    'Leather Gloves': [0,0,'gauntlets'],
+    'Reinforced Mitts':[0,0,'gauntlets'],
+    'Plate Gauntlets':[0,0,'gauntlets'],
+    'Dread Bracers':  [0,0,'gauntlets'],
+    
+    'Cloth Trousers': [0,0,'pants'],
+    'Leather Chaps':  [0,0,'pants'],
+    'Chainmail Chausses':[0,0,'pants'],
+    'Plate Greaves':  [0,0,'pants'],
+    
+    'Leather Boots':  [0,0,'boots'],
+    'Reinforced Soles':[0,0,'boots'],
+    'Iron Sabatons':  [0,0,'boots'],
+    'Greaves of Haste':[0,0,'boots'],
+    
+    'Bone Amulet':    [0,0,'necklace'],
+    'Silver Chain':   [0,0,'necklace'],
+    'Gold Medallion': [0,0,'necklace'],
+    'Ruby Torc':      [0,0,'necklace']
   }[baseName];
   
   return stats ? { name, min:stats[0]+bonMin, max:stats[1]+bonMax, type:stats[2] } : null;
@@ -3774,10 +3884,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
            const stashedCnt = (state.inventory.stashed?.[wName]?.length) || 0;
 
            if (equipped && count <= 1 && stashedCnt === 0) {
-              // Swap to Fists if selling last equipped weapon
-              state.player.weapon = {name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null};
-              if (typeof recomputeWeapon === 'function') recomputeWeapon();
-              if (typeof updateEquipUI === 'function') updateEquipUI();
+              // --- FIX: Route through equipWeaponByName to properly trigger old stat teardown handlers ---
+              equipWeaponByName('Fists');
               log(`Sold your last ${wName}. Equipped Fists.`);
            }
            
@@ -3796,6 +3904,26 @@ document.addEventListener('DOMContentLoaded', ()=>{
           state.inventory.trinkets[tName]--;
           if (state.inventory.trinkets[tName] <= 0) delete state.inventory.trinkets[tName];
         });
+      }
+    }
+
+    // CHANGE: Render Cursed Idols into inventory lists but skip adding selling controls. This safely blocks the player from discarding them at a merchant unless cleansed via active Cleric dialogue logic.
+    for (const [iName, count] of Object.entries(state.inventory.idols || {})) {
+      if (count > 0) {
+        hasItems = true;
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:rgba(127,29,29,0.15); padding:8px; border-radius:6px; border:1px solid #7f1d1d;';
+        const txt = document.createElement('span');
+        txt.textContent = `${iName} x${count} [BOUND]`;
+        txt.style.color = '#ef4444';
+        txt.style.fontWeight = 'bold';
+        const lbl = document.createElement('span');
+        lbl.style.fontSize = '12px';
+        lbl.style.opacity = '0.6';
+        lbl.textContent = 'Cannot Sell Cursed Objects';
+        row.appendChild(txt);
+        row.appendChild(lbl);
+        listDiv.appendChild(row);
       }
     }
 
@@ -3842,5 +3970,147 @@ document.addEventListener('DOMContentLoaded', ()=>{
     setMobileControlsVisible?.(false);
   };
 });
+
+window.equipGearItem = function(name) {
+  // CHANGE: Intercept incoming equipment request names. If the item name belongs to the pre-existing trinket roster, bypass the stashed weapon array and construct a valid ring item object dynamically from the trinkets stack.
+  const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
+  if (trinketPool.includes(name) || (state.inventory.trinkets && state.inventory.trinkets[name] > 0)) {
+    if (!state.inventory.trinkets || !state.inventory.trinkets[name] || state.inventory.trinkets[name] <= 0) return;
+    
+    let slot = !state.player.equipment.ring1 ? 'ring1' : 'ring2';
+    window.unequipSlot(slot);
+    
+    let trinketItem = {
+      name: name,
+      type: 'ring',
+      stats: { attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, hpRegen: 0 }
+    };
+    
+    // Map the defined modifiers to the corresponding item properties matching your active loop specs
+    if (name === 'Ring of Haste') trinketItem.stats.maxStamina = 2;
+    else if (name === 'Amulet of Life') trinketItem.stats.hpRegen = 1;
+    else if (name === "Warrior's Ring") trinketItem.stats.attack = 1;
+    
+    state.player.equipment[slot] = trinketItem;
+    
+    // Dynamically expand character sheet totals if the active trinket grants stat increases
+    if (trinketItem.stats.maxStamina) {
+      state.player.staminaMax += trinketItem.stats.maxStamina;
+      state.player.stamina += trinketItem.stats.maxStamina;
+    }
+    
+    state.inventory.trinkets[name]--;
+    if (state.inventory.trinkets[name] <= 0) delete state.inventory.trinkets[name];
+    
+    if (typeof log === 'function') log(`Equipped ${name} into ${slot.toUpperCase()} slot.`);
+    if (typeof updateBars === 'function') updateBars();
+    if (typeof updateEquipUI === 'function') updateEquipUI();
+    if (typeof updateInvBody === 'function') updateInvBody();
+    return;
+  }
+
+  if (!state.inventory.stashed || !state.inventory.stashed[name] || state.inventory.stashed[name].length === 0) return;
+  const item = state.inventory.stashed[name].pop();
+  
+  // CHANGE: Replaced brittle substring checking with an explicit registry lookup against weaponStatsFor().
+  // This utilizes the exact type assigned during item creation ('helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace')
+  // to ensure items map exclusively to their corresponding equipment slots.
+  const itemLookup = weaponStatsFor(name);
+  let slot = itemLookup ? itemLookup.type : 'weapon';
+
+  if (slot === 'ring') {
+    slot = !state.player.equipment.ring1 ? 'ring1' : 'ring2';
+  }
+  if (slot === 'weapon') {
+    state.inventory.stashed[name].push(item);
+    equipWeaponByName(name);
+    return;
+  }
+
+  window.unequipSlot(slot);
+  state.player.equipment[slot] = item;
+  
+  if (state.inventory.weapons[name] > 0) {
+    state.inventory.weapons[name]--;
+    if (state.inventory.weapons[name] <= 0) delete state.inventory.weapons[name];
+  }
+
+  // CHANGE: Fix character sheet parameters so that item.stats attributes for MP and Stamina update dynamically during item swap
+  if (item.stats) {
+    if (item.stats.maxHp) {
+      state.player.hpMax += item.stats.maxHp;
+      state.player.hp += item.stats.maxHp;
+    }
+    if (item.stats.maxMp) {
+      state.player.mpMax += item.stats.maxMp;
+      state.player.mp += item.stats.maxMp;
+    }
+    if (item.stats.maxStamina) {
+      state.player.staminaMax += item.stats.maxStamina;
+      state.player.stamina += item.stats.maxStamina;
+    }
+    // --- FIX: Symmetrically add flat attack modifications to balance out unequip subtraction ---
+    if (item.stats.attack) {
+      state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack;
+      if (typeof recomputeWeapon === 'function') recomputeWeapon();
+    }
+    // -----------------------------------------------------------------------------------------
+  }
+
+  if (typeof log === 'function') log(`Equipped ${name} into ${slot.toUpperCase()} slot.`);
+  if (typeof updateBars === 'function') updateBars();
+  if (typeof updateEquipUI === 'function') updateEquipUI();
+};
+
+window.unequipSlot = function(slot) {
+  if (!state.player || !state.player.equipment || !state.player.equipment[slot]) return;
+  const item = state.player.equipment[slot];
+  
+  // CHANGE: Revert all secondary attributes safely when unequipping an item to prevent stat leakage
+  if (item.stats) {
+    if (item.stats.maxHp) {
+      state.player.hpMax = Math.max(5, state.player.hpMax - item.stats.maxHp);
+      // --- FIX: Symmetrically deduct current HP before clamping to prevent healing leaks on re-equip ---
+      state.player.hp = Math.max(1, state.player.hp - item.stats.maxHp);
+      state.player.hp = Math.min(state.player.hp, state.player.hpMax);
+    }
+    if (item.stats.maxMp) {
+      state.player.mpMax = Math.max(0, state.player.mpMax - item.stats.maxMp);
+      // --- FIX: Symmetrically deduct current MP before clamping to prevent mana generation leaks on re-equip ---
+      state.player.mp = Math.max(0, state.player.mp - item.stats.maxMp);
+      state.player.mp = Math.min(state.player.mp, state.player.mpMax);
+    }
+    if (item.stats.maxStamina) {
+      state.player.staminaMax = Math.max(5, state.player.staminaMax - item.stats.maxStamina);
+      // --- FIX: Symmetrically deduct current Stamina before clamping to prevent stamina regeneration leaks on re-equip ---
+      state.player.stamina = Math.max(0, state.player.stamina - item.stats.maxStamina);
+      state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
+    }
+    // Safely deduct flat attack modifications to prevent unequip compounding loops
+    if (item.stats.attack) {
+      state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - item.stats.attack);
+      if (typeof recomputeWeapon === 'function') recomputeWeapon();
+    }
+  }
+
+  state.player.equipment[slot] = null;
+  
+  const name = item.name;
+  // CHANGE: Intercept unequipping rings. If the unequipped name matches a members of the established trinket roster, redirect it to increment the trinket count instead of polluting the weapon stash list.
+  const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
+  if (trinketPool.includes(name)) {
+    state.inventory.trinkets = state.inventory.trinkets || {};
+    state.inventory.trinkets[name] = (state.inventory.trinkets[name] || 0) + 1;
+  } else {
+    state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+    if (!state.inventory.stashed) state.inventory.stashed = {};
+    if (!state.inventory.stashed[name]) state.inventory.stashed[name] = [];
+    state.inventory.stashed[name].push(item);
+  }
+
+  if (typeof log === 'function') log(`Unequipped ${name} from ${slot.toUpperCase()} slot.`);
+  if (typeof updateBars === 'function') updateBars();
+  if (typeof updateEquipUI === 'function') updateEquipUI();
+};
 
 

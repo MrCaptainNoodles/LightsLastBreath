@@ -294,9 +294,99 @@ if (lootBtn) lootBtn.addEventListener('click', () => {
           }
       }
       draw?.();
-      hideDebug?.();
-      log('[debug] Spawned all weapons.');
-  });
+            hideDebug?.();
+            log('[debug] Spawned all weapons.');
+        });
+
+        // CHANGE: Dynamically inject a "Spawn All Armor" button into the debug panel row and wire up its generation loop
+        let allArmorBtn = document.getElementById('dbgSpawnAllArmor');
+        if (!allArmorBtn && allWepBtn) {
+            allArmorBtn = document.createElement('button');
+            allArmorBtn.id = 'dbgSpawnAllArmor';
+            allArmorBtn.className = 'btn';
+            allArmorBtn.textContent = 'Spawn All Armor';
+            allArmorBtn.style.borderColor = '#60a5fa';
+            allWepBtn.parentNode.appendChild(allArmorBtn);
+
+            allArmorBtn.addEventListener('click', () => {
+                // CHANGE: Expanded pool to fully populate all 24 progressive tier-scaled armor choices and accessories with correct property schemas
+                const armorPool = [
+                  { name: 'Leather Cap', type: 'helmet', stats: { defense: 1, attack: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Iron Helm', type: 'helmet', stats: { defense: 3, maxHp: 5, attack: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Steel Visor', type: 'helmet', stats: { defense: 5, maxHp: 10, attack: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Mythril Crown', type: 'helmet', stats: { defense: 7, maxHp: 10, maxMp: 15, attack: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  
+                  { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5, attack: 0, maxHp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4, attack: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Scale Mail', type: 'chest', stats: { defense: 6, maxHp: 10, attack: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Platemail Heavy', type: 'chest', stats: { defense: 9, maxHp: 20, attack: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  
+                  { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2, attack: 0, maxHp: 0, maxMp: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Reinforced Mitts', type: 'gauntlets', stats: { defense: 2, maxStamina: 4, attack: 0, maxHp: 0, maxMp: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3, attack: 1, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Dread Bracers', type: 'gauntlets', stats: { defense: 5, attack: 3, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  
+                  { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1, maxMp: 3, attack: 0, maxHp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Leather Chaps', type: 'pants', stats: { defense: 2, maxStamina: 3, attack: 0, maxHp: 0, maxMp: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Chainmail Chausses', type: 'pants', stats: { defense: 4, maxHp: 5, attack: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Plate Greaves', type: 'pants', stats: { defense: 6, maxHp: 15, attack: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  
+                  { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2, attack: 0, maxHp: 0, maxMp: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4, attack: 0, maxHp: 0, maxMp: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4, maxHp: 5, attack: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5, maxStamina: 8, attack: 0, maxHp: 0, maxMp: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  
+                  { name: 'Bone Amulet', type: 'necklace', stats: { hpRegen: 1, attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0 } },
+                  { name: 'Silver Chain', type: 'necklace', stats: { maxMp: 8, attack: 0, defense: 0, maxHp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Gold Medallion', type: 'necklace', stats: { critChance: 5, attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, blockChance: 0, hpRegen: 0 } },
+                  { name: 'Ruby Torc', type: 'necklace', stats: { attack: 3, maxHp: 15, defense: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 } }
+                ];
+                let idx = 0;
+                for (let r = 1; r < 8; r++) {
+                    for (let y = state.player.y - r; y <= state.player.y + r; y++) {
+                        for (let x = state.player.x - r; x <= state.player.x + r; x++) {
+                            if (idx >= armorPool.length) break;
+                            if (!inBounds(x, y)) continue;
+                            if (state.tiles[y][x] !== 1) continue;
+                            const k = key(x, y);
+                            if (state.pickups[k] || enemyAt(x, y)) continue;
+
+                            state.tiles[y][x] = 5;
+                            
+                            // Create copy of the base armor data blueprint
+                            let itemChoice = { ...armorPool[idx], min: 0, max: 0 };
+                            
+                            // CHANGE: Apply the Floor 1 random modifier roll pool to debug-spawned items so they match real loot progression drops
+                            let availableStats = ['attack', 'defense', 'maxHp', 'maxMp', 'maxStamina', 'critChance', 'blockChance', 'hpRegen'];
+                            if (itemChoice.stats) {
+                               // Filter out built-in native attributes to ensure the random roll lands on a new property line
+                               availableStats = availableStats.filter(s => !itemChoice.stats[s] || itemChoice.stats[s] === 0);
+                            }
+                            shuffle(availableStats);
+                            
+                            const rolledStat = availableStats[0];
+                            const f = state.floor || 1;
+                            
+                            // Roll numerical ranges matching natural world drops
+                            if (rolledStat === 'attack') itemChoice.stats.attack += rand(1, 2 + Math.floor(f / 8));
+                            else if (rolledStat === 'defense') itemChoice.stats.defense += rand(1, 1 + Math.floor(f / 10));
+                            else if (rolledStat === 'maxHp') itemChoice.stats.maxHp += rand(5, 10 + Math.floor(f / 6) * 5);
+                            else if (rolledStat === 'maxMp') itemChoice.stats.maxMp += rand(2, 4 + Math.floor(f / 8) * 2);
+                            else if (rolledStat === 'maxStamina') itemChoice.stats.maxStamina += rand(2, 3 + Math.floor(f / 10) * 2);
+                            else if (rolledStat === 'critChance') itemChoice.stats.critChance += rand(3, 5 + Math.floor(f / 12) * 2);
+                            else if (rolledStat === 'blockChance') itemChoice.stats.blockChance += rand(2, 4 + Math.floor(f / 15) * 2);
+                            else if (rolledStat === 'hpRegen') itemChoice.stats.hpRegen += rand(1, 1 + Math.floor(f / 15));
+
+                            state.pickups[k] = { kind: 'weapon', payload: itemChoice };
+                            idx++;
+                        }
+                    }
+                }
+                draw?.();
+                hideDebug?.();
+                log('[debug] Spawned all armor and accessories.');
+            });
+        }
 
 // --- NEW: Unlock All Classes Cheat ---
 const clsBtn = document.getElementById('dbgUnlockClasses');

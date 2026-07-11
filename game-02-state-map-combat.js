@@ -11,7 +11,8 @@ const state = {
   weapon:{name:'Fists',min:1,max:2,type:'hand',base:{min:1,max:2},dur:null,durMax:null},
   poisoned:false, poisonTicks:0,
   facing:'down',
-  bow:{ range:5, loaded:0 }     // ← NEW: starts unloaded; you have a bow on day one
+  bow:{ range:5, loaded:0 },     // ← NEW: starts unloaded; you have a bow on day one
+  equipment:{ helmet: null, chest: null, gauntlets: null, pants: null, boots: null, ring1: null, ring2: null, necklace: null }
 },
     gameOver: false,
 lockedDoors: new Set(),
@@ -226,6 +227,11 @@ function gen(){
    }
 
    state.noFog = false;
+   // --- TUTORIAL VISION: Max out player vision fields and disable fog during the tutorial ---
+   if (state.gameMode === 'tutorial') {
+     state.fovRadius = 99;
+     state.noFog = true;
+   }
    
    // Apply Cursed Descent flag from previous floor
    state.cursedFloor = state.nextFloorCursed || false;
@@ -1913,7 +1919,7 @@ const skillBonus = magicPowerBonus(); // +1 dmg bonus for every 2 Magic levels (
 
 
 
-function randomWeapon(){
+function randomWeapon(isStarter = false){
 const pool=[
     {name:'Shortsword',min:3,max:5,type:'one'},
     {name:'Claymore',min:5,max:9,type:'two'},
@@ -1934,21 +1940,129 @@ const pool=[
     {name:'Earth Staff',min:2,max:4,type:'staff'},
     {name:'Acid Staff',min:2,max:4,type:'staff'},
     {name:'Water Staff',min:2,max:4,type:'staff'},
-    
-  // SHIELDS REMOVED FROM WEAPON POOL. They now spawn only via the 'shield' pickup kind.
+    // CHANGE: Expanded all slots to have exactly 4 tiers of equipment with solid default types pre-assigned to prevent cross-slot overlap
+    {name:'Leather Cap',min:0,max:0,type:'helmet'},
+    {name:'Iron Helm',min:0,max:0,type:'helmet'},
+    {name:'Steel Visor',min:0,max:0,type:'helmet'},
+    {name:'Mythril Crown',min:0,max:0,type:'helmet'},
+    {name:'Cloth Tunic',min:0,max:0,type:'chest'},
+    {name:'Chainmail Jacket',min:0,max:0,type:'chest'},
+    {name:'Scale Mail',min:0,max:0,type:'chest'},
+    {name:'Platemail Heavy',min:0,max:0,type:'chest'},
+    {name:'Leather Gloves',min:0,max:0,type:'gauntlets'},
+    {name:'Reinforced Mitts',min:0,max:0,type:'gauntlets'},
+    {name:'Plate Gauntlets',min:0,max:0,type:'gauntlets'},
+    {name:'Dread Bracers',min:0,max:0,type:'gauntlets'},
+    {name:'Cloth Trousers',min:0,max:0,type:'pants'},
+    {name:'Leather Chaps',min:0,max:0,type:'pants'},
+    {name:'Chainmail Chausses',min:0,max:0,type:'pants'},
+    {name:'Plate Greaves',min:0,max:0,type:'pants'},
+    {name:'Leather Boots',min:0,max:0,type:'boots'},
+    {name:'Reinforced Soles',min:0,max:0,type:'boots'},
+    {name:'Iron Sabatons',min:0,max:0,type:'boots'},
+    {name:'Greaves of Haste',min:0,max:0,type:'boots'},
+    {name:'Bone Amulet',min:0,max:0,type:'necklace'},
+    {name:'Silver Chain',min:0,max:0,type:'necklace'},
+    {name:'Gold Medallion',min:0,max:0,type:'necklace'},
+    {name:'Ruby Torc',min:0,max:0,type:'necklace'}
   ];
-  let choice = { ...pool[rand(0,pool.length-1)] }; // Shallow copy to avoid modifying the template
+  const activePool = isStarter ? pool.filter(item => !['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'ring', 'necklace'].includes(item.type)) : pool;
+  let choice = { ...activePool[rand(0,activePool.length-1)] }; // Shallow copy to avoid modifying the template
+
+  const f = state.floor || 1;
+  // CHANGE: Calculate floor depth scaling multiplier (+1 flat per 5 floors) to apply to base attributes
+  const depthBonus = Math.floor(f / 5);
+
+  choice.stats = { attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 };
+  
+  // CHANGE: Setup explicit inherent base statistics for all 24 new items grouped by slot types with deep dungeon scaling
+  if (choice.type === 'helmet') {
+    if (choice.name === 'Leather Cap') choice.stats.defense = 1 + depthBonus;
+    else if (choice.name === 'Iron Helm') { choice.stats.defense = 3 + depthBonus; choice.stats.maxHp = 5; }
+    else if (choice.name === 'Steel Visor') { choice.stats.defense = 5 + depthBonus; choice.stats.maxHp = 10; }
+    else if (choice.name === 'Mythril Crown') { choice.stats.defense = 7 + depthBonus; choice.stats.maxMp = 15; choice.stats.maxHp = 10; }
+  }
+  else if (choice.type === 'chest') {
+    if (choice.name === 'Cloth Tunic') { choice.stats.defense = 1 + depthBonus; choice.stats.maxMp = 5; }
+    else if (choice.name === 'Chainmail Jacket') choice.stats.defense = 4 + depthBonus;
+    else if (choice.name === 'Scale Mail') { choice.stats.defense = 6 + depthBonus; choice.stats.maxHp = 10; }
+    else if (choice.name === 'Platemail Heavy') { choice.stats.defense = 9 + depthBonus; choice.stats.maxHp = 20; }
+  }
+  else if (choice.type === 'gauntlets') {
+    if (choice.name === 'Leather Gloves') { choice.stats.defense = 1 + depthBonus; choice.stats.maxStamina = 2; }
+    else if (choice.name === 'Reinforced Mitts') { choice.stats.defense = 2 + depthBonus; choice.stats.maxStamina = 4; }
+    else if (choice.name === 'Plate Gauntlets') { choice.stats.defense = 3 + depthBonus; choice.stats.attack = 1; }
+    else if (choice.name === 'Dread Bracers') { choice.stats.defense = 5 + depthBonus; choice.stats.attack = 3; }
+  }
+  else if (choice.type === 'pants') {
+    if (choice.name === 'Cloth Trousers') { choice.stats.defense = 1 + depthBonus; choice.stats.maxMp = 3; }
+    else if (choice.name === 'Leather Chaps') { choice.stats.defense = 2 + depthBonus; choice.stats.maxStamina = 3; }
+    else if (choice.name === 'Chainmail Chausses') { choice.stats.defense = 4 + depthBonus; choice.stats.maxHp = 5; }
+    else if (choice.name === 'Plate Greaves') { choice.stats.defense = 6 + depthBonus; choice.stats.maxHp = 15; }
+  }
+  else if (choice.type === 'boots') {
+    if (choice.name === 'Leather Boots') { choice.stats.defense = 1 + depthBonus; choice.stats.maxStamina = 2; }
+    else if (choice.name === 'Reinforced Soles') { choice.stats.defense = 2 + depthBonus; choice.stats.maxStamina = 4; }
+    else if (choice.name === 'Iron Sabatons') { choice.stats.defense = 4 + depthBonus; choice.stats.maxHp = 5; }
+    else if (choice.name === 'Greaves of Haste') { choice.stats.defense = 5 + depthBonus; choice.stats.maxStamina = 8; }
+  }
+  else if (choice.type === 'necklace') {
+    if (choice.name === 'Bone Amulet') choice.stats.hpRegen = 1 + Math.floor(depthBonus / 2);
+    else if (choice.name === 'Silver Chain') choice.stats.maxMp = 8 + (depthBonus * 2);
+    else if (choice.name === 'Gold Medallion') choice.stats.critChance = 5 + Math.floor(depthBonus / 2);
+    else if (choice.name === 'Ruby Torc') { choice.stats.attack = 3 + Math.floor(depthBonus / 2); choice.stats.maxHp = 15; }
+  }
+  
+  // Determine number of stat bonus lines dynamically based on floor depth scaling loops
+  let linesCount = 1;
+  if (!isStarter) {
+    if (f >= 40) linesCount = rand(3, 4);
+    else if (f >= 25) linesCount = rand(2, 3);
+    else if (f >= 10) linesCount = rand(1, 2);
+    else linesCount = 1; // RESTORED: Floor 1-9 loot now correctly rolls exactly 1 random bonus property
+  }
+
+  // CHANGE: Filter out any stats that this specific item type already features as a baseline property
+  // This guarantees that the rolled magical bonus line is always a separate stat, preventing tooltip subtraction blanks!
+  let availableStats = ['attack', 'defense', 'maxHp', 'maxMp', 'maxStamina', 'critChance', 'blockChance', 'hpRegen'];
+  
+  if (choice.stats) {
+    availableStats = availableStats.filter(statKey => !choice.stats[statKey] || choice.stats[statKey] === 0);
+  }
+  
+  shuffle(availableStats);
+
+  for (let i = 0; i < linesCount; i++) {
+    const stat = availableStats[i];
+    if (stat === 'attack') choice.stats.attack += rand(1, 2 + Math.floor(f / 8));
+    else if (stat === 'defense') choice.stats.defense += rand(1, 1 + Math.floor(f / 10));
+    else if (stat === 'maxHp') choice.stats.maxHp += rand(5, 10 + Math.floor(f / 6) * 5);
+    else if (stat === 'maxMp') choice.stats.maxMp += rand(2, 4 + Math.floor(f / 8) * 2);
+    else if (stat === 'maxStamina') choice.stats.maxStamina += rand(2, 3 + Math.floor(f / 10) * 2);
+    else if (stat === 'critChance') choice.stats.critChance += rand(3, 5 + Math.floor(f / 12) * 2);
+    else if (stat === 'blockChance') choice.stats.blockChance += rand(2, 4 + Math.floor(f / 15) * 2);
+    else if (stat === 'hpRegen') choice.stats.hpRegen += rand(1, 1 + Math.floor(f / 15));
+    else if (stat === 'vampiric') choice.stats.vampiric += rand(2, 5 + Math.floor(f / 12) * 2);
+  }
 
   // --- NEW: Affix System (25% chance) ---
+  if (state.floor === 1) {
+    delete choice.cursed;
+    delete choice.curseType;
+  }
   // --- FIX: Appraiser Perk (+25% affix chance) ---
   let affixChance = 0.25;
   if (state.skills?.dungeoneering?.perks?.['dun_b1']) { // Appraiser
       affixChance += 0.25;
   }
 
-  // MODIFIED: Exclude Key of Destiny AND Shields from getting random affixes
-  if (choice.name !== 'Key of Destiny' && choice.type !== 'shield' && Math.random() < affixChance) {
-    const roll = Math.random();
+  // MODIFIED: Exclude Key of Destiny, Shields, Floor 1 drops, and ALL Armor/Accessories from rolling weapon text affixes
+  const isArmorSlot = ['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace'].includes(choice.type);
+  if (state.floor > 1 && !isArmorSlot && choice.name !== 'Key of Destiny' && choice.type !== 'shield' && Math.random() < affixChance) {
+    let roll = Math.random();
+    if (isStarter && roll < 0.15) {
+      roll = 0.15 + Math.random() * 0.85; // Shift roll out of curse range into beneficial standard affixes
+    }
     
     // --- NEW: Cursed Weapons (5% chance within affix roll) ---
     if (roll < 0.15) { // Ultra Rare (Increased from 5% to 15%)
@@ -1991,6 +2105,11 @@ const pool=[
       unlockCodex('Ancient'); // <--- Unlock
     }
   }
+  // CHANGE: Automatically bind specific item-type durability metrics directly to the generated payload object
+  const fallbackDur = typeof defaultDurabilityFor === 'function' ? defaultDurabilityFor(choice.name) : 20;
+  choice.dur = choice.dur !== undefined ? choice.dur : fallbackDur;
+  choice.durMax = choice.durMax !== undefined ? choice.durMax : fallbackDur;
+
   return choice;
 }
 function randomSpell(){
@@ -2212,6 +2331,10 @@ function damageAfterDR(raw){
 
   let dr = 0;
   let flatReduction = 0;
+
+  if (typeof window.getEquipmentBonus === 'function') {
+    flatReduction += window.getEquipmentBonus('defense');
+  }
 
   // Survivability: Base DR and Hardened Perk
   const sv = state.skills?.survivability;
@@ -2442,6 +2565,33 @@ function ensureSkill(type){
   if(!state.skills[type]) state.skills[type]={lvl:1,xp:0,next:SKILL_XP_START,shown:false}
 }
 
+window.getEquipmentBonus = function(statName) {
+  let total = 0;
+  if (!state.player) return 0;
+  
+  // Scan primary armor slots
+  if (state.player.equipment) {
+    for (const slot in state.player.equipment) {
+      const item = state.player.equipment[slot];
+      if (item && item.stats && item.stats[statName]) {
+        total += item.stats[statName];
+      }
+    }
+  }
+  
+  // Scan equipped weapon slot
+  if (state.player.weapon && state.player.weapon.stats && state.player.weapon.stats[statName]) {
+    total += state.player.weapon.stats[statName];
+  }
+  
+  // Scan equipped shield slot
+  if (state.player.shield && state.player.shield.stats && state.player.shield.stats[statName]) {
+    total += state.player.shield.stats[statName];
+  }
+  
+  return total;
+};
+
 function skillDamageBonus(type){
   const checkType = type === 'staff' ? 'magic' : type;
   const s = state.skills[checkType];
@@ -2458,6 +2608,10 @@ function skillDamageBonus(type){
   // Mercenary (dun_c4)
   if (state.skills?.dungeoneering?.perks?.['dun_c4']) {
       bonus += Math.floor((state.inventory.gold || 0) / 100) * state.skills.dungeoneering.perks['dun_c4'];
+  }
+  
+  if (typeof window.getEquipmentBonus === 'function') {
+      bonus += window.getEquipmentBonus('attack');
   }
   
   return bonus;
