@@ -638,7 +638,6 @@
       <button class="btn" id="btnCloseWhatsNew" onclick="document.getElementById('whatsNewModal').style.display='none';">Close</button>
     </div>
     <div style="margin-top:12px; font-size:14px; line-height:1.5; color:var(--text); max-height: 60vh; overflow-y:auto;">
-      </ul>
         <div style="font-weight:bold; font-size:16px; margin-bottom:4px; color:#facc15;">July 10th 2026</div>
         <ul style="margin-top:0; padding-left:20px; margin-bottom:16px; opacity:0.9; list-style-type: disc;">
             <li>Completely reworked the Inventory UI and system.
@@ -684,7 +683,11 @@
             <li>Added 5 Spell Combinations.</li>
         </ul>
 
-<div class="modal" id="scoreModal" style="display:none">
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="scoreModal" style="display:none; z-index:10006">
   <div class="sheet">
     <div class="row"><div class="title">New High Score</div>
       <button class="btn" id="btnScoreMenu">Menu</button>
@@ -701,8 +704,7 @@
     <div id="hiscoreList" style="display:none">
       <div style="font-weight:800;margin-bottom:6px">Top 10 Runs</div>
       <div id="hiscoreTable" style="display:grid; grid-template-columns:140px 1fr 1fr 1fr 1fr; gap:8px 18px"></div>
-      
-      </div>
+    </div>
   </div>
 </div>
 

@@ -1782,7 +1782,7 @@ function equipWeaponByName(name, item = null){
   // --- FIX: Symmetrically remove old weapon stats before applying new ones to prevent tracking leaks ---
   const cur = state.player.weapon;
   if (cur && cur.stats) {
-    if (cur.stats.attack) state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - cur.stats.attack);
+    // CHANGE: Removed manual state.globalWeaponFlatBonus deduction here to prevent double-processing weapon attack stats
     if (cur.stats.maxHp) {
       state.player.hpMax = Math.max(5, state.player.hpMax - cur.stats.maxHp);
       state.player.hp = Math.max(1, state.player.hp - cur.stats.maxHp);
@@ -1841,7 +1841,7 @@ function equipWeaponByName(name, item = null){
   // --- FIX: Symmetrically re-apply ALL stashed weapon stat modifications (ATK, HP, MP, STM) to prevent stat loss ---
   if (state.player.weapon.stats) {
     const s = state.player.weapon.stats;
-    if (s.attack) state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + s.attack;
+    // CHANGE: Removed tracking additions to global flat modifiers to completely resolve weapon over-scaling issues
     if (s.maxHp) { state.player.hpMax += s.maxHp; state.player.hp += s.maxHp; }
     if (s.maxMp) { state.player.mpMax += s.maxMp; state.player.mp += s.maxMp; }
     if (s.maxStamina) { state.player.staminaMax += s.maxStamina; state.player.stamina += s.maxStamina; }
@@ -4051,7 +4051,8 @@ window.equipGearItem = function(name) {
     }
     // --- FIX: Symmetrically add flat attack modifications to balance out unequip subtraction ---
     if (item.stats.attack) {
-      state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack;
+      // CHANGE: Removed manual state.globalWeaponFlatBonus addition because window.getEquipmentBonus('attack') 
+      // already queries item slots dynamically. This prevents the +2 bonus from compounding into a +4 increase.
       if (typeof recomputeWeapon === 'function') recomputeWeapon();
     }
     // -----------------------------------------------------------------------------------------
@@ -4088,7 +4089,8 @@ window.unequipSlot = function(slot) {
     }
     // Safely deduct flat attack modifications to prevent unequip compounding loops
     if (item.stats.attack) {
-      state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - item.stats.attack);
+      // CHANGE: Removed manual state.globalWeaponFlatBonus deduction since equipment values are handled dynamically,
+      // keeping subtraction calculations balanced with Change 1.
       if (typeof recomputeWeapon === 'function') recomputeWeapon();
     }
   }

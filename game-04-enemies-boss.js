@@ -356,10 +356,11 @@ function triggerGameOver(){
   if (state.gameOver) return;
 
   // Perk: Phoenix (Revive with 50% HP once per run)
-  if (state.skills?.survivability?.perks?.['sur_b2'] && !state.run.phoenixUsed) {
+  if (state.skills?.survivability?.perks?.['sur_b2'] && !(state.run && state.run.phoenixUsed)) {
+      state.run = state.run || {};
       state.run.phoenixUsed = true;
       state.player.hp = Math.floor(state.player.hpMax * 0.5);
-      spawnFloatText("PHOENIX", state.player.x, state.player.y, '#f97316');
+      if (typeof spawnFloatText === 'function') spawnFloatText("PHOENIX", state.player.x, state.player.y, '#f97316');
       log("You rise from the ashes!");
       if (typeof updateBars === 'function') updateBars();
       return; // Intercept Game Over
@@ -368,32 +369,18 @@ function triggerGameOver(){
   // --- FIX: Delete Save on Death ---
   localStorage.removeItem('dc_save_v1');
 
-  state.gameOver = true;
-  const m = document.getElementById('gameOverModal');
-  if (m) {
-    m.style.display = 'flex';
-    
-    // KH REFERENCE: Rare death message
-    const title = m.querySelector('.title');
-    if (title) {
-        if (Math.random() < 0.10) { 
-            title.textContent = "Your heart has been lost...";
-            title.style.color = "#ff0000"; // Optional: make it red
-        } else {
-            title.textContent = "Game Over";
-            title.style.color = ""; // Reset color
-        }
-    }
-  }
-  
-  state.run.ended = true;
-  stopRunTimerFreeze(); 
-  // FIX: Instead of just calling openScoreEntry, we must hide the Game Over modal 
-  // and trigger the score flow, which is tied to the scoreModal being opened.
-  if (typeof openScoreEntry === 'function') {
-      // Hide the initial Game Over screen so the Score Entry can appear
-      m.style.display = 'none'; 
-      openScoreEntry(); 
+  // Route into finishGameOver (game-02); must not call window.triggerGameOver — that is this function.
+  if (typeof window.finishGameOver === 'function') {
+      window.finishGameOver();
+  } else {
+      state.gameOver = true;
+      state._inputLocked = true;
+      const scoreModal = document.getElementById('scoreModal');
+      if (scoreModal) {
+        scoreModal.style.display = 'flex';
+        const scoreInitials = document.getElementById('scoreInitials');
+        if (scoreInitials) scoreInitials.focus();
+      }
   }
 }
 

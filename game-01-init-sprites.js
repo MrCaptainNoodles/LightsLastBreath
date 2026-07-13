@@ -1929,6 +1929,19 @@ window.loadRun = function(){
 function goMenu(e){
   if (e?.preventDefault) e.preventDefault();
 
+  // Clear death/pause locks so menu navigation works after dying
+  state.gameOver = false;
+  state._inputLocked = false;
+  state._pauseOpen = false;
+  state._animating = false;
+  if (state.run) state.run._scoreOpened = false;
+
+  ['scoreModal', 'gameOverModal', 'pauseModal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
+
   const b = document.getElementById('banner');
   if (b) b._queue = []; 
   hideBanner();         

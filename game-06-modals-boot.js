@@ -3181,6 +3181,16 @@ window.addEventListener('keydown', (e) => {
 
     const inRun = !onTitle && !onMenu && !inOverlay && !state.gameOver;
 
+    // Death screen: Escape returns to main menu (score modal may be open or stuck invisible)
+    if (state.gameOver) {
+      const scoreM = document.getElementById('scoreModal');
+      const goM = document.getElementById('gameOverModal');
+      if (scoreM) scoreM.style.display = 'none';
+      if (goM) goM.style.display = 'none';
+      if (typeof goMenu === 'function') goMenu();
+      return;
+    }
+
     if (isPaused) {
       // Already paused → Resume
       closePauseMenu();
@@ -3198,7 +3208,8 @@ window.addEventListener('keydown', (e) => {
   }
 
   // If input is hard-locked (level-up, merchant, blacksmith, cutscenes, STAIRS), ignore keys
-  if (state._inputLocked || state._descending) {
+  // FIX: Explicitly reject keyboard processing if state.gameOver is true to stop post-mortem actions
+  if (state._inputLocked || state._descending || state.gameOver) {
     return;
   }
 
