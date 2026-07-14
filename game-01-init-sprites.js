@@ -271,8 +271,8 @@ function stopCartographerAudio(){
 function updateCartographerAudio(){
   if (!cartographerGain) return;
 
-  // if cartographer is gone (new floor / boss floor), force silence
-  if (!state.cartographer){ cartographerGain.gain.value = 0; return; }
+  // FIX: Clear audio parameters dynamically if parent state is flagged as game over or menu visible
+  if (!state.cartographer || state.gameOver || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ cartographerGain.gain.value = 0; return; }
 
   // play until you're next to the NPC
   if (isNearCartographer(state.player.x, state.player.y)){
@@ -327,7 +327,8 @@ function stopClericAudio(){
 
 function updateClericAudio(){
   if (!clericGain) return;
-  if (!state.cleric){ clericGain.gain.value = 0; return; }
+  // FIX: Stop healer audio streams immediately on death screens or if main menu views hide active context
+  if (!state.cleric || state.gameOver || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ clericGain.gain.value = 0; return; }
 
   const d = Math.abs(state.player.x - state.cleric.x) + Math.abs(state.player.y - state.cleric.y);
 
@@ -390,8 +391,8 @@ function stopJesterAudio(){
 function updateJesterAudio(){
   if (!jesterGain) return;
 
-  // if jester is gone (new floor / boss floor), force silence
-  if (!state.jester){ jesterGain.gain.value = 0; return; }
+  // FIX: Mute audio channels inside parent container sheets if player returns to landing screens
+  if (!state.jester || state.gameOver || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ jesterGain.gain.value = 0; return; }
 
   // play until you're next to the NPC
   if (isNearJester(state.player.x, state.player.y)){
@@ -636,8 +637,8 @@ function stopMerchantAudio(){
 function updateMerchantAudio(){
   if (!merchantGain) return;
 
-  // if merchant is gone (new floor / boss floor), force silence
-  if (!state.merchant){ merchantGain.gain.value = 0; return; }
+  // FIX: Kill audio channels instantly upon player death or return to main menu overlay loops
+  if (!state.merchant || state.gameOver || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ merchantGain.gain.value = 0; return; }
 
   // play until you're next to the NPC
   if (isNearMerchant(state.player.x, state.player.y)){
@@ -696,8 +697,8 @@ function stopBlacksmithAudio(){
 function updateBlacksmithAudio(){
   if (!blacksmithGain) return;
 
-  // if blacksmith is gone (new floor / boss floor), force silence
-  if (!state.blacksmith){ blacksmithGain.gain.value = 0; return; }
+  // FIX: Force clear background loops when player game-over states toggle or main dashboard opens
+  if (!state.blacksmith || state.gameOver || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ blacksmithGain.gain.value = 0; return; }
 
   // play until you're next to the NPC
   if (isNearBlacksmith(state.player.x, state.player.y)){

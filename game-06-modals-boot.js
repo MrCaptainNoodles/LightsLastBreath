@@ -809,6 +809,10 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
       else if (n.includes('shield') || n.includes('buckler')) typeLabel = "Shield (Off-Hand)";
     }
 
+    // FIX: Explicitly intercept and reclassify items inside the trinket roster as a clean "Ring" instead of generic armor
+    const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
+    if (trinketPool.includes(name)) typeLabel = "Ring";
+
     // Inherent baseline blueprints registry for progressive tier items to mask built-in values from random rolling evaluations
     const inherentRegistry = {
       'Leather Cap': { defense: 1 },
@@ -838,9 +842,13 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     };
     const baseConfig = inherentRegistry[name] || {};
 
+    // FIX: Initialize dynamic variables tracking color codes for comparative data overlays
+    let labelBg = 'rgba(255,255,255,0.05)';
+    let labelColor = '#ecf0f1';
+
     const ws = typeof weaponStatsFor === 'function' ? weaponStatsFor(name) : null;
     if (ws) {
-      if (!slotContext) typeLabel = typeNice ? typeNice(ws.type) : ws.type.toUpperCase();
+      if (!slotContext) typeLabel = trinketPool.includes(name) ? "Ring" : (typeNice ? typeNice(ws.type) : ws.type.toUpperCase());
       
       // Separate armor layouts from accessory items to eliminate zero-defense print headers
       if (['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(ws.type)) {
@@ -848,7 +856,25 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
       } else if (ws.type === 'necklace') {
          baseAttrLabel = `Accessory Item`;
       } else {
-         baseAttrLabel = `Base Damage: ${ws.min} - ${ws.max}`;
+         baseAttrLabel = `Base Damage: ${ws.min} -${ws.max}`;
+      }
+
+      // FIX: Perform automatic structural gear comparisons if the active tooltip triggers on an unequipped inventory stash cell
+      if (!slotContext) {
+        if (!['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace'].includes(ws.type)) {
+          const eqWep = state.player.weapon;
+          if (eqWep) {
+            const curMax = eqWep.base?.max || eqWep.max || 0;
+            if (ws.max > curMax) { labelBg = 'rgba(34,197,94,0.2)'; labelColor = '#4ade80'; baseAttrLabel += ' (Higher Damage)'; }
+            else if (ws.max < curMax) { labelBg = 'rgba(239,68,68,0.2)'; labelColor = '#f87171'; baseAttrLabel += ' (Lower Damage)'; }
+          }
+        } else if (['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(ws.type)) {
+          const eqArmor = state.player.equipment[ws.type];
+          const curDef = eqArmor ? (eqArmor.stats?.defense || 0) : 0;
+          const hoverDef = stats.defense || 0;
+          if (hoverDef > curDef) { labelBg = 'rgba(34,197,94,0.2)'; labelColor = '#4ade80'; baseAttrLabel += ' (Higher Defense)'; }
+          else if (hoverDef < curDef) { labelBg = 'rgba(239,68,68,0.2)'; labelColor = '#f87171'; baseAttrLabel += ' (Lower Defense)'; }
+        }
       }
     } else if (name.includes("Shield") || name.includes("Buckler") || slotContext === 'shield') {
       baseAttrLabel = "Block Modifier: 20%";
@@ -884,8 +910,8 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
 
     tooltip.innerHTML = `
       <div style="color:#f9d65c; font-size:14px; font-weight:bold; border-bottom:1px solid #2c3e50; padding-bottom:4px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">${headerTitle}</div>
-      <div style="color:#95a5a6; font-size:11px; margin-bottom:4px;"><span style="color:#7f8c8d;">Type:</span> ${typeLabel} ${details ? `| ${details}` : ''}</div>
-      <div style="color:#ecf0f1; font-size:11px; font-weight:bold; margin-bottom:6px; background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px; display:inline-block;">${baseAttrLabel}</div>
+      <div style="color:#95a5a6; font-size:11px; margin-bottom:4px;"><span style="color:#7f8c8d;">Type:</span> ${typeLabel}${details ? `| ${details}` : ''}</div>
+      <div style="color:${labelColor}; font-size:11px; font-weight:bold; margin-bottom:6px; background:${labelBg}; padding:2px 6px; border-radius:4px; display:inline-block;">${baseAttrLabel}</div>
       <div style="font-size:11px; display:flex; flex-direction:column; gap:2px; border-top:1px dashed #2c3e50; padding-top:4px;">${bonusContent}</div>
     `;
     tooltip.style.opacity = '1';
@@ -1082,7 +1108,8 @@ function updateInvBody(){
   const b = document.getElementById('invBody');
   const modalSheet = document.querySelector('#invModal .sheet');
   if (modalSheet) {
-    modalSheet.style.width = 'min(860px, 98vw)';
+    // FIX: Expand container workspace dimensions to cleanly encapsulate the newly added active spell roster column
+    modalSheet.style.width = 'min(1060px, 98vw)';
     modalSheet.style.maxHeight = '98vh';
     modalSheet.style.position = 'relative';
   }
@@ -1156,6 +1183,28 @@ function updateInvBody(){
     gridCellsHtml += `<div style="border:1px dashed #243241; background:rgba(0,0,0,0.1); border-radius:6px; min-height:54px;"></div>`;
   }
 
+ // FIX: Pre-compile quick-glance active spell templates list alongside visual highlight colors mapping current choices
+  let spellsHtml = '';
+  if (state.spells && state.spells.length > 0) {
+    state.spells.forEach((s, sIdx) => {
+      const isEquipped = state.equippedSpell && state.equippedSpell.name === s.name;
+      const highlightColor = isEquipped ? (typeof projectileColorForMagic === 'function' ? projectileColorForMagic(s.name) : '#60a5fa') : 'rgba(255,255,255,0.1)';
+      const borderStyle = isEquipped ? `1px solid ${highlightColor}` : '1px dashed rgba(255,255,255,0.1)';
+      // FIX: Added cursor pointer style and inline onclick handler to dynamically assign the selected spell and refresh inventory + combat HUD UIs
+      spellsHtml += `
+        <div onclick="state.equippedSpell = state.spells[${sIdx}]; updateInvBody(); typeof updateEquipUI === 'function' && updateEquipUI();" style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 6px; border: ${borderStyle}; background-color: ${isEquipped ? 'rgba(255,255,255,0.04)' : 'transparent'}; cursor: pointer;" title="Click to equip ${s.name}">
+          <canvas id="inv_spell_canv_${sIdx}" width="24" height="24" style="width:24px; height:24px; display:block; flex-shrink:0;"></canvas>
+          <div style="display: flex; flex-direction: column; overflow: hidden; pointer-events: none;">
+            <span style="font-weight: bold; color: ${isEquipped ? highlightColor : '#dfe7f2'}; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${s.name}</span>
+            <span style="font-size: 9px; opacity: 0.6; color: #dfe7f2;">Lv ${s.tier || 1}</span>
+          </div>
+        </div>
+      `;
+    });
+  } else {
+    spellsHtml = '<div style="text-align: center; opacity: 0.4; font-style: italic; margin-top: 12px;">No spells memorized</div>';
+  }
+
  b.innerHTML = `
     <div style="display: flex; gap: 14px; min-height: 560px; font-family: monospace; width: 100%;">
       <div style="width: 175px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 10px; border: 1px solid #243241; display: flex; flex-direction: column; gap: 6px; font-size:11px;">
@@ -1186,6 +1235,12 @@ function updateInvBody(){
           <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; background: #0b141d; padding: 4px; border-radius: 6px; border:1px solid #1a202c; max-height:340px; overflow-y:auto;">
             ${gridCellsHtml}
           </div>
+        </div>
+      </div>
+      <div style="width: 185px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 10px; border: 1px solid #243241; display: flex; flex-direction: column; gap: 6px; font-size:11px;">
+        <div style="font-weight: bold; color: #f9d65c; border-bottom: 1px solid #243241; padding-bottom: 4px; text-align: center; font-size:12px; letter-spacing:0.5px;">SPELLS INDEX</div>
+        <div style="display: flex; flex-direction: column; gap: 5px; overflow-y: auto; max-height: 520px; padding-right: 2px;">
+          ${spellsHtml}
         </div>
       </div>
     </div>
@@ -1242,6 +1297,58 @@ function updateInvBody(){
         drawPickupPixel(cctx, { kind: kind, payload: { name: item.name, type: item.type || type } }, 0, 0, 24);
       }
     });
+
+    // FIX: Sequentially paint high-fidelity pixel sprites matching element aesthetics onto sidebar canvas layouts
+    if (state.spells) {
+      state.spells.forEach((s, sIdx) => {
+        const cv = document.getElementById(`inv_spell_canv_${sIdx}`);
+        if (!cv) return;
+        const cctx = cv.getContext('2d');
+        cctx.clearRect(0, 0, 24, 24);
+        
+        // Setup internal grid helper capturing modular pixel art patterns
+        const pSize = 2; // Converts 12x12 grids into 24x24 canvas shapes
+        const P = (cx, cy, color) => { cctx.fillStyle = color; cctx.fillRect(cx * pSize, cy * pSize, pSize, pSize); };
+        
+        if (s.name === 'Ember') {
+          // Fire Ember Flame Sprite Configuration
+          const f1 = '#ef4444', f2 = '#f97316', f3 = '#facc15';
+          [ [5,1,f1], [6,2,f1], [4,3,f1], [5,3,f2], [7,3,f1], [3,4,f1], [4,4,f2], [5,4,f3], [6,4,f2], [3,5,f1], [4,5,f2], [5,5,f3], [6,5,f3], [7,5,f2], [2,6,f1], [3,6,f2], [4,6,f2], [5,6,f3], [6,6,f3], [7,6,f2], [8,6,f1], [2,7,f1], [3,7,f1], [4,7,f2], [5,7,f2], [6,7,f2], [7,7,f1], [8,7,f1], [4,8,f1], [5,8,f1], [6,8,f1] ].forEach(([x,y,c]) => P(x, y, c));
+        } else if (s.name === 'Frost') {
+          // Snowflake Geometric Ice Pattern
+          const i1 = '#67e8f9', i2 = '#e0f7fa';
+          [ [5,0,i2], [6,0,i2], [5,1,i1], [6,1,i1], [2,2,i2], [9,2,i2], [3,3,i1], [5,3,i1], [6,3,i1], [8,3,i1], [4,4,i1], [5,4,i2], [6,4,i2], [7,4,i1], [0,5,i2], [1,5,i1], [3,5,i1], [4,5,i2], [5,5,i2], [6,5,i2], [7,5,i2], [8,5,i1], [10,5,i1], [0,6,i2], [1,6,i1], [3,6,i1], [4,6,i2], [5,6,i2], [6,6,i2], [7,6,i2], [8,6,i1], [10,6,i1], [4,7,i1], [5,7,i2], [6,7,i2], [7,7,i1], [3,8,i1], [5,8,i1], [6,8,i1], [8,8,i1], [2,9,i2], [9,9,i2], [5,10,i1], [6,10,i1], [5,11,i2], [6,11,i2] ].forEach(([x,y,c]) => P(x, y, c));
+        } else if (s.name === 'Spark') {
+          // Lightning Spark Zig-Zag Shape Template
+          const l1 = '#fde047', l2 = '#eab308';
+          [ [8,0,l1], [7,1,l1], [8,1,l2], [6,2,l1], [7,2,l2], [5,3,l1], [6,3,l2], [7,3,l2], [4,4,l1], [5,4,l2], [6,4,l2], [3,5,l1], [4,5,l2], [5,5,l1], [6,5,l1], [7,5,l1], [8,5,l1], [2,6,l2], [3,6,l1], [4,6,l2], [5,6,l2], [4,7,l1], [5,7,l2], [3,8,l1], [4,8,l2], [2,9,l1], [3,9,l2], [1,10,l1], [2,10,l2], [1,11,l2] ].forEach(([x,y,c]) => P(x, y, c));
+        } else if (s.name === 'Gust') {
+          // Swirling Wind Gust Air Breeze Channels
+          const w1 = '#e2e8f0', w2 = '#94a3b8';
+          [ [2,2,w1], [3,2,w1], [4,2,w1], [5,2,w1], [6,2,w2], [6,3,w1], [5,4,w1], [4,4,w2], [2,5,w2], [3,5,w1], [4,5,w1], [5,5,w1], [6,5,w1], [7,5,w1], [8,5,w2], [8,6,w1], [7,7,w1], [6,7,w2], [4,8,w2], [5,8,w1], [6,8,w1], [7,8,w1], [8,8,w1], [9,8,w1] ].forEach(([x,y,c]) => P(x, y, c));
+        } else if (s.name === 'Pebble') {
+          // Layered Earth Pebble Rock Cluster Model
+          const e1 = '#78350f', e2 = '#a16207', e3 = '#ca8a04';
+          [ [4,3,e1], [5,3,e1], [6,3,e1], [3,4,e1], [4,4,e2], [5,4,e3], [6,4,e2], [7,4,e1], [3,5,e1], [4,5,e2], [5,5,e2], [6,5,e2], [7,5,e1], [2,6,e1], [3,6,e2], [4,6,e3], [5,6,e2], [6,6,e1], [2,7,e1], [3,7,e2], [4,7,e2], [5,7,e1], [3,8,e1], [4,8,e1] ].forEach(([x,y,c]) => P(x, y, c));
+        } else if (s.name === 'Acid') {
+          // Corrosive Bubbling Acid Droplets Layout
+          const a1 = '#22c55e', a2 = '#a3e635';
+          [ [5,1,a1], [4,2,a1], [5,2,a2], [6,2,a1], [2,4,a1], [5,4,a1], [1,5,a1], [2,5,a2], [3,5,a1], [8,6,a1], [7,7,a1], [8,7,a2], [9,7,a1], [3,9,a1], [2,10,a1], [3,10,a2], [4,10,a1] ].forEach(([x,y,c]) => P(x, y, c));
+        } else if (s.name === 'Water') {
+          // Tapered Water Teardrop arrangement
+          const q1 = '#3b82f6', q2 = '#60a5fa', q3 = '#93c5fd';
+          [ [5,1,q1], [5,2,q1], [6,2,q2], [4,3,q1], [5,3,q2], [6,3,q2], [4,4,q1], [5,4,q3], [6,4,q2], [7,4,q1], [3,5,q1], [4,5,q2], [5,5,q2], [6,5,q2], [7,5,q1], [3,6,q1], [4,6,q2], [5,6,q2], [6,6,q1], [4,7,q1], [5,7,q1], [6,7,q1] ].forEach(([x,y,c]) => P(x, y, c));
+        } else if (s.name === 'Heal') {
+          // Radiant Positive Vitality Medical Sparkle Cross
+          const h1 = '#4ade80', h2 = '#ffffff';
+          // FIX: Inserted [5,3], [6,3], [5,4], [6,4] to draw the missing vertical stem segments above the white intersection center
+          [ [5,1,h1], [6,1,h1], [5,2,h1], [6,2,h1], [5,3,h1], [6,3,h1], [5,4,h1], [6,4,h1], [1,5,h1], [2,5,h1], [3,5,h1], [4,5,h1], [5,5,h2], [6,5,h2], [7,5,h1], [8,5,h1], [9,5,h1], [10,5,h1], [1,6,h1], [2,6,h1], [3,6,h1], [4,6,h1], [5,6,h2], [6,6,h2], [7,6,h1], [8,6,h1], [9,6,h1], [10,6,h1], [5,7,h1], [6,7,h1], [5,8,h1], [6,8,h1], [5,9,h1], [6,9,h1], [5,10,h1], [6,10,h1], [2,2,h2], [9,2,h2], [2,9,h2], [9,9,h2] ].forEach(([x,y,c]) => P(x, y, c));
+        } else {
+          // Universal Arcane Element Fallback
+          cctx.fillStyle = '#a78bfa'; cctx.beginPath(); cctx.arc(12, 12, 5, 0, Math.PI * 2); cctx.fill();
+        }
+      });
+    }
   }, 0);
 }
 
@@ -4636,11 +4743,27 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
 
   itemsToScrap.forEach(item => {
     const stats = weaponStatsFor(item.name) || { min:0, max:0 };
+    
+    // FIX: Retrieve stashed stats configuration to allow full readability on structural modifiers before deletion
+    let itemObj = item;
+    if (!item.isTrinket && state.inventory.stashed?.[item.name]?.length > 0) {
+       itemObj = state.inventory.stashed[item.name][state.inventory.stashed[item.name].length - 1];
+    }
+    let bonusLines = [];
+    if (itemObj.stats) {
+       if (itemObj.stats.attack) bonusLines.push(`+${itemObj.stats.attack} Atk`);
+       if (itemObj.stats.defense) bonusLines.push(`+${itemObj.stats.defense} Def`);
+       if (itemObj.stats.maxHp) bonusLines.push(`+${itemObj.stats.maxHp} HP`);
+       if (itemObj.stats.maxMp) bonusLines.push(`+${itemObj.stats.maxMp} MP`);
+       if (itemObj.stats.maxStamina) bonusLines.push(`+${itemObj.stats.maxStamina} Stam`);
+    }
+    const bonusText = bonusLines.length ? ` [${bonusLines.join(', ')}]` : '';
+
     const btn = document.createElement('button');
     btn.className = 'btn';
     btn.style.cssText = 'text-align:left; padding:8px; border:1px solid #ef4444; color:#fca5a5; width:100%;';
     const xpVal = 10 + (state.floor * 2);
-    btn.innerHTML = `SCRAP (+${xpVal} XP): ${fmt(item.name, stats.min, stats.max)}`;
+    btn.innerHTML = `SCRAP (+${xpVal} XP): ${fmt(item.name, stats.min, stats.max)}${bonusText}`;
     
     btn.onclick = () => {
        if (item.isTrinket) {
