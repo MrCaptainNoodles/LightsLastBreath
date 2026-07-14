@@ -686,6 +686,18 @@ document.addEventListener('click', (ev)=>{
       if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
     }
     
+    // FIX: Completely clean up and close out the active merchant interaction loop when closing the inventory panel during Sell Mode
+    if (sel === '#invModal') {
+      if (state.ui?.sellMode) {
+        state.ui.sellMode = false;
+        const merchModal = document.getElementById('merchantModal');
+        if (merchModal) merchModal.style.display = 'none';
+        if (typeof playNpcDialogue === 'function') playNpcDialogue(NPC_DIALOGUE_URLS.merchant.leave);
+        state._inputLocked = false;
+        if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+      }
+    }
+
     // 4. Tutorial specific logic (keeps your existing tutorial flow working)
     if (sel === '#invModal' && state.gameMode === 'tutorial') {
       if (state.tutorialStep === 0 && !state._tutMoveDone) {
@@ -958,8 +970,103 @@ window.handleSlotMouseEnter = function(slot, slotLabel) {
 window.handleGridItemClick = function(idx) {
   if (!window._stashedCache || !window._stashedCache[idx]) return;
   const item = window._stashedCache[idx];
+
+  // FIX: Process active grid selection while Lock Mode is enabled to toggle item safety flags
+  if (state.ui?.lockMode) {
+     if (item.isTrinket) {
+        state.inventory.lockedTrinkets = state.inventory.lockedTrinkets || {};
+        state.inventory.lockedTrinkets[item.name] = state.inventory.lockedTrinkets[item.name] ? 0 : 1;
+     } else {
+        if (state.inventory.stashed?.[item.name]) {
+           const match = state.inventory.stashed[item.name].find(x => JSON.stringify(x.stats) === JSON.stringify(item.stats));
+           if (match) match.locked = !match.locked;
+        }
+     }
+     window.clearItemTooltip();
+     updateInvBody();
+     return;
+  }
+
+  // FIX: Immediately block interaction attempt if the target inventory cell copy is locked
+  if (item.locked || (item.isTrinket && state.inventory.lockedTrinkets?.[item.name])) {
+     if (typeof log === 'function') log("This item copy is locked! Disable Lock Mode to modify it.");
+     return;
+  }
   
-  // CHANGE: Intercept clicks on stashed trinket elements and redirect them into the specialized equipGearItem routine
+  // FIX: Intercept cell interactions if Scrap Mode toggle parameter conditions are evaluated as active (XP Yields completely removed)
+      if (state.ui?.scrapMode) {
+         if (item.isTrinket) {
+            state.inventory.trinkets[item.name]--;
+            if (state.inventory.trinkets[item.name] <= 0) delete state.inventory.trinkets[item.name];
+         } else {
+            state.inventory.weapons[item.name]--;
+            if (state.inventory.weapons[item.name] <= 0) delete state.inventory.weapons[item.name];
+            if (state.inventory.stashed?.[item.name]) state.inventory.stashed[item.name].pop();
+         }
+         
+         log(`Scrapped ${item.name}.`);
+         if (typeof SFX !== 'undefined' && SFX.weaponBreak) SFX.weaponBreak();
+         
+         window.clearItemTooltip();
+         if (typeof updateBars === 'function') updateBars();
+         if (typeof updateEquipUI === 'function') updateEquipUI();
+         updateInvBody();
+         return;
+      }
+
+      // FIX: Implement clean transaction routines directly from the grid overlay when Sell Mode is enabled
+      if (state.ui?.sellMode) {
+         const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10 };
+         let baseP = W_PRICES[item.name] || 15;
+         if (item.name.includes('Shield')) baseP = 12;
+         if (item.isTrinket) baseP = 40;
+         const price = state.skills?.dungeoneering?.perks?.['dun_c3'] ? Math.ceil(baseP * 1.50) : baseP;
+         
+         state.inventory.gold = (state.inventory.gold || 0) + price;
+         
+         if (item.isTrinket) {
+            state.inventory.trinkets[item.name]--;
+            if (state.inventory.trinkets[item.name] <= 0) delete state.inventory.trinkets[item.name];
+         } else {
+            state.inventory.weapons[item.name]--;
+            if (state.inventory.weapons[item.name] <= 0) delete state.inventory.weapons[item.name];
+            if (state.inventory.stashed?.[item.name]) state.inventory.stashed[item.name].pop();
+         }
+         
+         // FIX: Award skill experience points on weapon sale, excluding armor pieces and routing staves to magic
+         const wType = window.getWeaponType ? window.getWeaponType(item.name) : 'hand';
+         const isArmorSlot = ['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'ring'].includes(wType);
+         if (!isArmorSlot || item.isTrinket) {
+            const xpVal = 10 + (state.floor * 2);
+            const targetSkill = item.isTrinket ? 'magic' : ((wType === 'staff') ? 'magic' : wType);
+            if (typeof awardSkillXP === 'function') {
+               awardSkillXP(targetSkill, xpVal);
+            } else {
+               ensureSkill(targetSkill);
+               const s = state.skills[targetSkill];
+               s.shown = true; s.xp += xpVal;
+               const growth = (typeof SKILL_XP_GROWTH !== 'undefined') ? SKILL_XP_GROWTH : 1.5;
+               while(s.xp >= s.next){ 
+                   s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * growth);
+               }
+            }
+            if (typeof spawnFloatText === 'function') spawnFloatText(`+${xpVal} Skill XP`, state.player.x, state.player.y, '#a78bfa');
+         }
+         
+         log(`Sold ${item.name} for ${price}g.`);
+         window.clearItemTooltip();
+         if (typeof renderSkills === 'function') renderSkills();
+         if (typeof updateBars === 'function') updateBars();
+         if (typeof updateEquipUI === 'function') updateEquipUI();
+         
+         const mGold = document.getElementById('goldNow');
+         if (mGold) mGold.textContent = state.inventory.gold;
+         
+         updateInvBody();
+         return;
+      }
+      
+      // CHANGE: Intercept clicks on stashed trinket elements and redirect them into the specialized equipGearItem routine
   const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
   if (item.isTrinket || trinketPool.includes(item.name)) {
     window.equipGearItem(item.name);
@@ -1138,13 +1245,16 @@ function updateInvBody(){
     </div>`;
   };
 
-  const allStashedItems = [];
+const allStashedItems = [];
   // CHANGE: Inject collected trinkets from state.inventory.trinkets directly into allStashedItems so they populate rows inside the user grid storage layout
   if (state.inventory.trinkets) {
     for (const [name, qty] of Object.entries(state.inventory.trinkets)) {
       if (qty > 0) {
         for (let i = 0; i < qty; i++) {
-          allStashedItems.push({ name: name, type: 'ring', isTrinket: true, stats: { maxStamina: name === 'Ring of Haste' ? 2 : 0, hpRegen: name === 'Amulet of Life' ? 1 : 0, attack: name === "Warrior's Ring" ? 1 : 0 } });
+          // FIX: Map the relative index of stashed item counts against state lock arrays to accurately carry lock settings over redraw steps
+          const lockedCount = state.inventory.lockedTrinkets?.[name] || 0;
+          const isThisLocked = i < lockedCount;
+          allStashedItems.push({ name: name, type: 'ring', isTrinket: true, locked: isThisLocked, stats: { maxStamina: name === 'Ring of Haste' ? 2 : 0, hpRegen: name === 'Amulet of Life' ? 1 : 0, attack: name === "Warrior's Ring" ? 1 : 0 } });
         }
       }
     }
@@ -1168,10 +1278,13 @@ function updateInvBody(){
 
   let gridCellsHtml = '';
   allStashedItems.forEach((item, idx) => {
+    // FIX: Style item cells with gold highlighting and custom background templates if their lock state flag is true
+    const borderStyle = item.locked ? 'border:1px solid #d4af37; box-shadow: 0 0 5px #d4af37;' : 'border:1px solid #2d3748;';
+    const bgStyle = item.locked ? 'background:#241d02;' : 'background:#111622;';
     gridCellsHtml += `<div onclick="window.handleGridItemClick(${idx})"
                            onmouseenter="window.handleStashMouseEnter(${idx})" 
                            onmouseleave="window.clearItemTooltip()"
-                           style="border:1px solid #2d3748; background:#111622; padding:4px; border-radius:6px; text-align:center; cursor:pointer; min-height:54px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                           style="${borderStyle} ${bgStyle} padding:4px; border-radius:6px; text-align:center; cursor:pointer; min-height:54px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
        <canvas id="canvas_stash_${idx}" width="24" height="24" style="width:24px; height:24px; display:block;"></canvas>
        <span style="font-size:8.5px; color:#dfe7f2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70px; margin-top:1px;">${item.name}</span>
     </div>`;
@@ -1190,12 +1303,24 @@ function updateInvBody(){
       const isEquipped = state.equippedSpell && state.equippedSpell.name === s.name;
       const highlightColor = isEquipped ? (typeof projectileColorForMagic === 'function' ? projectileColorForMagic(s.name) : '#60a5fa') : 'rgba(255,255,255,0.1)';
       const borderStyle = isEquipped ? `1px solid ${highlightColor}` : '1px dashed rgba(255,255,255,0.1)';
+      
+      // FIX: Query tiered calculations to accurately output potential element damage or healing values on the sidebar row
+      let potentialText = '';
+      if (typeof getSpellStats === 'function') {
+         const st = getSpellStats(s.name);
+         if (s.name === 'Heal') {
+            potentialText = ` (${Math.round((st.pct || 0) * 100)}% HP)`;
+         } else {
+            potentialText = ` (${st.min}-${st.max} DMG)`;
+         }
+      }
+
       // FIX: Added cursor pointer style and inline onclick handler to dynamically assign the selected spell and refresh inventory + combat HUD UIs
       spellsHtml += `
         <div onclick="state.equippedSpell = state.spells[${sIdx}]; updateInvBody(); typeof updateEquipUI === 'function' && updateEquipUI();" style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 6px; border: ${borderStyle}; background-color: ${isEquipped ? 'rgba(255,255,255,0.04)' : 'transparent'}; cursor: pointer;" title="Click to equip ${s.name}">
           <canvas id="inv_spell_canv_${sIdx}" width="24" height="24" style="width:24px; height:24px; display:block; flex-shrink:0;"></canvas>
           <div style="display: flex; flex-direction: column; overflow: hidden; pointer-events: none;">
-            <span style="font-weight: bold; color: ${isEquipped ? highlightColor : '#dfe7f2'}; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${s.name}</span>
+            <span style="font-weight: bold; color: ${isEquipped ? highlightColor : '#dfe7f2'}; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${s.name}${potentialText}</span>
             <span style="font-size: 9px; opacity: 0.6; color: #dfe7f2;">Lv ${s.tier || 1}</span>
           </div>
         </div>
@@ -1231,7 +1356,22 @@ function updateInvBody(){
         </div>
 
         <div style="background: rgba(0,0,0,0.4); border: 1px solid #243241; border-radius: 10px; padding: 6px; flex: 1; display: flex; flex-direction: column;">
-          <div style="font-weight: bold; color: #f9d65c; margin-bottom: 4px; font-size: 11px; text-transform: uppercase; text-align: center;">Inventory Grid Storage</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; padding: 0 4px;">
+            <div style="font-weight: bold; color: #f9d65c; font-size: 11px; text-transform: uppercase;">Inventory Grid Storage</div>
+            <div style="display: flex; gap: 6px;">
+              ${state.ui?.sellMode ? `
+              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: #22c55e; color: #fff; border: 1px solid #22c55e; cursor: pointer;" onclick="event.stopPropagation(); state.ui.sellMode = false; const mModal = document.getElementById('merchantModal'); if(mModal) mModal.style.display='none'; state._inputLocked = false; if(!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true); const iModal = document.getElementById('invModal'); if(iModal) iModal.style.display='none';">
+                SELL MODE ACTIVE
+              </button>
+              ` : ''}
+              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: ${state.ui?.scrapMode ? '#ef4444' : 'rgba(255,255,255,0.1)'}; color: #fff; border: 1px solid ${state.ui?.scrapMode ? '#ef4444' : '#243241'}; cursor: pointer;" onclick="event.stopPropagation(); state.ui = state.ui || {}; state.ui.scrapMode = !state.ui.scrapMode; if(state.ui.scrapMode) { state.ui.lockMode = false; state.ui.sellMode = false; } updateInvBody();">
+                ${state.ui?.scrapMode ? 'SCRAP MODE ACTIVE' : 'TOGGLE SCRAP MODE'}
+              </button>
+              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: ${state.ui?.lockMode ? '#d4af37' : 'rgba(255,255,255,0.1)'}; color: #fff; border: 1px solid ${state.ui?.lockMode ? '#d4af37' : '#243241'}; cursor: pointer;" onclick="event.stopPropagation(); state.ui = state.ui || {}; state.ui.lockMode = !state.ui.lockMode; if(state.ui.lockMode) { state.ui.scrapMode = false; state.ui.sellMode = false; } updateInvBody();">
+                ${state.ui?.lockMode ? 'LOCK MODE ACTIVE' : 'TOGGLE LOCK MODE'}
+              </button>
+            </div>
+          </div>
           <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; background: #0b141d; padding: 4px; border-radius: 6px; border:1px solid #1a202c; max-height:340px; overflow-y:auto;">
             ${gridCellsHtml}
           </div>
@@ -4132,6 +4272,11 @@ function doRestart(className){
   state.player.poisonTicks = 0;
   state.gameMode = state.gameMode || 'classic';
 
+  // FIX: Force clear structural Scrap Mode and Lock Mode parameter switches when spawning a new game loop run
+  state.ui = state.ui || {};
+  state.ui.scrapMode = false;
+  state.ui.lockMode = false;
+
   // 1. ADDED: Clear run flags (cutscenes, boss states)
   state.flags = {}; 
 
@@ -4679,7 +4824,7 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
       <div class="sheet" style="width:min(600px, 94vw)">
         <div class="title" style="margin-bottom:10px; text-align:center; color:#f9d65c">Inventory Full</div>
         <div id="swapMsg" style="text-align:center; margin-bottom:15px; opacity:0.9">
-           Your item grid storage space is completely full.
+           Your inventory is completely full.
         </div>
         
         <div style="display:grid; grid-template-columns:1fr 1px 1fr; gap:10px; align-items:start;">
@@ -4705,7 +4850,7 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
   const msg = document.getElementById('swapMsg');
   
   // CHANGE: Enforce generalized grid capacity reporting messages
-  msg.textContent = `Your inventory grid storage is full (30/30). Scrap an old item to take the new one?`;
+  msg.textContent = `Your inventory is full (30/30). Scrap an old item to take the new one?`;
   list.innerHTML = '';
 
   // 1. Helper to format stats (Shield/Armor aware)
@@ -4793,8 +4938,10 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
        s.shown = true; s.xp += xpVal;
        
        let leveled = false;
+       // FIX: Force dungeoneering skill tree calculations to use identical multiplier constants to achieve uniform level advancement behavior
+       const growth = (typeof SKILL_XP_GROWTH !== 'undefined') ? SKILL_XP_GROWTH : 1.5;
        while(s.xp >= s.next){ 
-           s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * SKILL_XP_GROWTH); leveled = true;
+           s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * growth); leveled = true;
        }
        if(leveled) {
            log(`${item.isTrinket ? "Magic" : (wType === 'shield' ? "Survivability" : typeNice(wType))} advanced to ${s.lvl}!`);

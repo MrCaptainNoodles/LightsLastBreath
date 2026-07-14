@@ -19,7 +19,14 @@ function collectIfPickup(){
     if(it.kind==='weapon'){
         // CHANGE: Replaced the old 5-item type cap check with a check against the maximum grid layout capacity (30 slots)
         if (isInventoryFull()) {
-            openWeaponSwapModal(it.payload, kxy, state.player.x, state.player.y);
+            // FIX: Drop the replacement sub-menu layout. Instantly engage full Inventory menu and banner to give a direct overview of existing items.
+            if (typeof showBanner === 'function') showBanner("Inventory Full! Open inventory storage to scrap items.", 3000, '#ef4444');
+            log("Inventory capacity full! Clear old items to collect floor stashes.");
+            if (typeof updateInvBody === 'function') {
+               updateInvBody();
+               const m = document.getElementById('invModal');
+               if (m) m.style.display = 'flex';
+            }
             return; 
         }
         // ---------------------------------
@@ -1548,19 +1555,26 @@ function openChest(x,y){
     const w = randomWeapon(isStarterChest);
     
     // CHANGE: Updated chest opening drops to spawn the swap modal only when the absolute inventory storage capacity limits are exceeded
-    if (isInventoryFull()) {
-       // Bag Full: Drop weapon on floor & trigger Swap
-       const k = key(x,y);
-       state.pickups[k] = { kind:'weapon', payload:w };
-       state.tiles[y][x] = 5; // Change tile from Floor(1) to Pickup(5)
-       
-       lootMsg.push(`${w.name} (Dropped - Bag Full)`);
-       
-       // Trigger the UI after a brief delay so the chest log usually finishes processing
-       setTimeout(() => {
-          if(typeof openWeaponSwapModal === 'function') openWeaponSwapModal(w, k, x, y);
-       }, 50);
-    } else {
+   if (isInventoryFull()) {
+      // Bag Full: Drop weapon on floor & trigger Swap
+      const k = key(x,y);
+      state.pickups[k] = { kind:'weapon', payload:w };
+      state.tiles[y][x] = 5; // Change tile from Floor(1) to Pickup(5)
+      
+      lootMsg.push(`${w.name} (Dropped - Bag Full)`);
+      
+      // Trigger the UI after a brief delay so the chest log usually finishes processing
+      setTimeout(() => {
+         // FIX: Bypass text selection cards and engage core inventory sheets instantly on full capacity chest drops
+         if (typeof showBanner === 'function') showBanner("Inventory Full! Open inventory storage to scrap items.", 3000, '#ef4444');
+         log("Inventory capacity full! Clear old items to collect floor stashes.");
+         if (typeof updateInvBody === 'function') {
+            updateInvBody();
+            const m = document.getElementById('invModal');
+            if (m) m.style.display = 'flex';
+         }
+      }, 50);
+   } else {
        // Normal Add
        state.inventory.weapons[w.name] = (state.inventory.weapons[w.name] || 0) + 1;
        
@@ -3868,56 +3882,92 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
 
     // 2. Sell Weapons (All of them)
-    // Price = 50% of Buy Price (approx)
-    const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10 };
-    
-    for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
-      if (count > 0) {
-        hasItems = true;
-        // Estimate price: Default 10g if unknown
-        let baseP = W_PRICES[wName] || 15;
-        if (wName.includes('Shield')) baseP = 12; // Shield fallback
-        
-        // FIX: Extract stashed modifiers and append them directly to the merchant sell-item label strings
-        let bonusText = '';
-        if (state.inventory.stashed?.[wName]?.length > 0) {
-           const itemObj = state.inventory.stashed[wName][state.inventory.stashed[wName].length - 1];
-           let bonusLines = [];
-           if (itemObj.stats) {
-              if (itemObj.stats.attack) bonusLines.push(`+${itemObj.stats.attack} Atk`);
-              if (itemObj.stats.defense) bonusLines.push(`+${itemObj.stats.defense} Def`);
-              if (itemObj.stats.maxHp) bonusLines.push(`+${itemObj.stats.maxHp} HP`);
-              if (itemObj.stats.maxMp) bonusLines.push(`+${itemObj.stats.maxMp} MP`);
-              if (itemObj.stats.maxStamina) bonusLines.push(`+${itemObj.stats.maxStamina} Stam`);
-           }
-           if (bonusLines.length) bonusText = ` [${bonusLines.join(', ')}]`;
-        }
+            // Price = 50% of Buy Price (approx)
+            const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10 };
+            
+            for (const [wName, count] of Object.entries(state.inventory.weapons || {})) {
+              if (count > 0) {
+                hasItems = true;
+                // Estimate price: Default 10g if unknown
+                let baseP = W_PRICES[wName] || 15;
+                if (wName.includes('Shield')) baseP = 12; // Shield fallback
+                
+                // FIX: Check individual item instance lock flags from the stash cache array to safeguard them from accidental trading
+                let isLocked = false;
+                if (state.inventory.stashed?.[wName]?.length > 0) {
+                   const topItem = state.inventory.stashed[wName][state.inventory.stashed[wName].length - 1];
+                   if (topItem && topItem.locked) isLocked = true;
+                }
 
-        addSellItem(`${wName}${bonusText} x${count}`, baseP, () => {
-           // Logic to handle selling equipped items safely
-           const equipped = state.player.weapon?.name === wName;
-           const stashedCnt = (state.inventory.stashed?.[wName]?.length) || 0;
+                addSellItem(`${wName}${isLocked ? ' [LOCKED]' : ''} x${count}`, isLocked ? 0 : baseP, () => {
+                   // FIX: Block transaction logic entirely if the target item instance is locked
+                   if (isLocked) {
+                      if (msg) msg.textContent = "This item copy is locked! Unlock it from inventory grid before selling.";
+                      return;
+                   }
 
-           if (equipped && count <= 1 && stashedCnt === 0) {
-              // --- FIX: Route through equipWeaponByName to properly trigger old stat teardown handlers ---
-              equipWeaponByName('Fists');
-              log(`Sold your last ${wName}. Equipped Fists.`);
-           }
-           
-           state.inventory.weapons[wName]--;
-           if (state.inventory.weapons[wName] <= 0) delete state.inventory.weapons[wName];
-        });
-      }
-    }
+                   // Logic to handle selling equipped items safely
+                   const equipped = state.player.weapon?.name === wName;
+                   const stashedCnt = (state.inventory.stashed?.[wName]?.length) || 0;
+
+                   if (equipped && count <= 1 && stashedCnt === 0) {
+                      // --- FIX: Route through equipWeaponByName to properly trigger old stat teardown handlers ---
+                      equipWeaponByName('Fists');
+                      log(`Sold your last ${wName}. Equipped Fists.`);
+                   }
+                   
+                   state.inventory.weapons[wName]--;
+                   if (state.inventory.weapons[wName] <= 0) delete state.inventory.weapons[wName];
+
+                   // FIX: Award skill XP upon weapon sale (Staves go to Magic, weapons to their weapon skill, armor goes nowhere)
+                   const wType = window.getWeaponType ? window.getWeaponType(wName) : 'hand';
+                   const isArmorSlot = ['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'ring'].includes(wType);
+                   if (!isArmorSlot) {
+                      const xpVal = 10 + (state.floor * 2);
+                      const targetSkill = (wType === 'staff') ? 'magic' : wType;
+                      ensureSkill(targetSkill);
+                      const s = state.skills[targetSkill];
+                      s.shown = true; s.xp += xpVal;
+                      const growth = (typeof SKILL_XP_GROWTH !== 'undefined') ? SKILL_XP_GROWTH : 1.5;
+                      while(s.xp >= s.next){ 
+                          s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * growth);
+                      }
+                      if (typeof spawnFloatText === 'function') spawnFloatText(`+${xpVal} Skill XP`, state.player.x, state.player.y, '#a78bfa');
+                   }
+                });
+              }
+            }
 
     // --- 3. Sell Trinkets ---
     for (const [tName, count] of Object.entries(state.inventory.trinkets || {})) {
       if (count > 0) {
         hasItems = true;
+        // FIX: Verify if active trinket clusters have safety locks active to halt automated sales
+        const isLocked = !!(state.inventory.lockedTrinkets?.[tName] && state.inventory.lockedTrinkets[tName] >= count);
         // Trinkets sell for 40g (flat rate)
-        addSellItem(`${tName} x${count}`, 40, () => {
+        addSellItem(`${tName}${isLocked ? ' [LOCKED]' : ''} x${count}`, isLocked ? 0 : 40, () => {
+          if (isLocked) {
+             if (msg) msg.textContent = "Unlock this trinket copy from your inventory grid before selling!";
+             return;
+          }
           state.inventory.trinkets[tName]--;
           if (state.inventory.trinkets[tName] <= 0) delete state.inventory.trinkets[tName];
+
+          // FIX: Symmetrically reward Magic tree XP when completing valid jewelry item sales
+          const xpVal = 10 + (state.floor * 2);
+          if (typeof awardSkillXP === 'function') {
+             awardSkillXP('magic', xpVal);
+          } else {
+             ensureSkill('magic');
+             const s = state.skills['magic'];
+             s.shown = true; s.xp += xpVal;
+             const growth = (typeof SKILL_XP_GROWTH !== 'undefined') ? SKILL_XP_GROWTH : 1.5;
+             while(s.xp >= s.next){ 
+                 s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * growth);
+                 log(`Magic advanced to ${s.lvl}!`);
+             }
+          }
+          if (typeof spawnFloatText === 'function') spawnFloatText(`+${xpVal} XP`, state.player.x, state.player.y, '#a78bfa');
         });
       }
     }
@@ -3952,6 +4002,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // Ensure button row is visible, list is hidden
     btnRow.style.display = 'flex';
     listDiv.style.display = 'none';
+
+    // FIX: Cleanly hide the inventory screen anytime the player clicks 'Back' to return to the greeting menu
+    const mainInv = document.getElementById('invModal');
+    if (mainInv) mainInv.style.display = 'none';
     
     msg.textContent = 'Hello adventurer, are you looking to buy or sell?';
     
@@ -3962,7 +4016,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
     btnA.onclick = () => { playNpcDialogue(NPC_DIALOGUE_URLS.merchant.buy); renderBuy(); };
 
     btnB.textContent = 'Sell';
-    btnB.onclick = () => { playNpcDialogue(NPC_DIALOGUE_URLS.merchant.sell); renderSell(); };
+    btnB.onclick = () => { 
+      playNpcDialogue(NPC_DIALOGUE_URLS.merchant.sell); 
+      // FIX: Activate sellMode flag and bypass old separate text sell menu layout completely
+      state.ui = state.ui || {};
+      state.ui.sellMode = true;
+      state.ui.scrapMode = false;
+      state.ui.lockMode = false;
+      msg.textContent = "Select items from your inventory grid storage to sell them.";
+      btnRow.style.display = 'none'; // Hide greeting menu options during selling transactions
+      if (typeof updateInvBody === 'function') {
+         updateInvBody();
+         if (mainInv) {
+            mainInv.style.display = 'flex';
+            mainInv.style.zIndex = '999';
+         }
+      }
+    };
 
     btnC.textContent = 'Leave';
     btnC.onclick = () => {
@@ -3970,10 +4040,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
       modal.style.display='none';
       state._inputLocked = false;
       if (!state._pauseOpen) setMobileControlsVisible?.(true);
+      // FIX: Ensure inventory overlay shuts down smoothly when abandoning merchant interaction context
+      if (mainInv) mainInv.style.display = 'none';
     };
   }
 
-  // Public opener
+// Public opener
   window.openMerchant = function openMerchant(){
     if (!modal) return;
     unlockCodex('Merchant');
@@ -3983,6 +4055,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     modal.style.display = 'flex';
     state._inputLocked = true;
     setMobileControlsVisible?.(false);
+    // REMOVED: Initial instant inventory popup on interact step to allow typical buy/sell dialog pacing
   };
 });
 
@@ -4066,8 +4139,8 @@ window.equipGearItem = function(name) {
     }
     // --- FIX: Symmetrically add flat attack modifications to balance out unequip subtraction ---
     if (item.stats.attack) {
-      // CHANGE: Removed manual state.globalWeaponFlatBonus addition because window.getEquipmentBonus('attack') 
-      // already queries item slots dynamically. This prevents the +2 bonus from compounding into a +4 increase.
+      // FIX: Safely add to flat bonus tracking variable to ensure value is added but not permanently stacked during multiple re-equips
+      state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack;
       if (typeof recomputeWeapon === 'function') recomputeWeapon();
     }
     // -----------------------------------------------------------------------------------------
@@ -4104,8 +4177,8 @@ window.unequipSlot = function(slot) {
     }
     // Safely deduct flat attack modifications to prevent unequip compounding loops
     if (item.stats.attack) {
-      // CHANGE: Removed manual state.globalWeaponFlatBonus deduction since equipment values are handled dynamically,
-      // keeping subtraction calculations balanced with Change 1.
+      // FIX: Symmetrically subtract the flat modifier attribute from our flat bonus parameter tracking variable to completely solve the bonus stacking loop exploit
+      state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - item.stats.attack);
       if (typeof recomputeWeapon === 'function') recomputeWeapon();
     }
   }
