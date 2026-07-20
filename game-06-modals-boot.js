@@ -847,6 +847,11 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
     if (trinketPool.includes(name) || nLow.includes('ring') || nLow.includes('band') || nLow.includes('loop')) {
       typeLabel = "Ring Armor";
+      // FIX: Standardize attribute labels for unique trinkets and clear inferred slots to prevent broken baseline comparisons
+      if (trinketPool.includes(name)) {
+         baseAttrLabel = "Trinket Accessory";
+         inferredArmorSlot = null;
+      }
     }
 
     // Inherent baseline blueprints registry for progressive tier items to mask built-in values from random rolling evaluations
@@ -975,6 +980,19 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     if (bonusHpRegen > 0) bonusLines.push(`<div style="color:#f472b6;">+${bonusHpRegen} HP Regeneration (Every 20 Turns)</div>`);
     if (bonusVampiric > 0) bonusLines.push(`<div style="color:#f87171;">+${bonusVampiric}% Vampiric Life Steal Factor</div>`);
     
+    // FIX: Standardized key-value pairs with clean uniform double quotes to satisfy strict editor linters
+    const trinketDescriptions = {
+      "Ring of Haste": "Increases Max Stamina by 2.",
+      "Amulet of Life": "Slowly regenerates HP over time.",
+      "Thief's Band": "Increases Gold found by 30%.",
+      "Warrior's Ring": "Adds +1 Flat Damage to all attacks.",
+      "Stone Charm": "Increases Damage Reduction by 10%.",
+      "Scholar's Lens": "Increases XP gain by 15%"
+    };
+    if (trinketDescriptions[name]) {
+       bonusLines.push(`<div style="color:#a78bfa; font-weight:bold; margin-top:4px;">Effect: ${trinketDescriptions[name]}</div>`);
+    }
+    
     const bonusContent = bonusLines.length ? bonusLines.join('') : '<div style="opacity:0.4; font-style:italic;">No magical bonuses</div>';
     const headerTitle = name === 'Empty' ? `Empty ${typeLabel}` : name;
 
@@ -983,27 +1001,44 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     if (name !== 'Empty') {
       let eqItem = null;
       let eqLabel = '';
-      const targetType = itemCoreType || 'weapon';
+      // FIX: Force targetType to 'ring' if the item name matches trinket keywords to prevent misrouting to weapons
+      const targetType = (trinketPool.includes(name) || nLow.includes('ring') || nLow.includes('band') || nLow.includes('loop')) ? 'ring' : (itemCoreType || 'weapon');
 
-      if (targetType === 'shield' || name.includes('Shield')) {
-        eqItem = state.player.shield;
-        eqLabel = 'Equipped Shield';
-      } else if (['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace'].includes(targetType)) {
-        eqItem = state.player.equipment[targetType];
-        const friendlyLabels = { helmet: "Head Armor", chest: "Chest Armor", gauntlets: "Hand Armor", pants: "Pants Armor", boots: "Feet Armor", necklace: "Accessory" };
-        eqLabel = `Equipped ${friendlyLabels[targetType] || targetType.toUpperCase()}`;
-      } else if (targetType.startsWith('ring') || targetType === 'ring') {
-        eqItem = state.player.equipment.ring1 || state.player.equipment.ring2;
-        eqLabel = 'Equipped Ring Armor';
-      } else if (targetType === 'staff') {
-        eqItem = state.player.weapon;
-        eqLabel = 'Equipped Staff (Equipped)';
-      } else {
-        eqItem = state.player.weapon;
-        eqLabel = 'Equipped Weapon (Equipped)';
-      }
+          if (targetType === 'ring') {
+            // FIX: Suppress card rendering on equipped slot hovers, but display both active rings when unequipped
+            if (!slotContext) {
+              const r1 = state.player.equipment.ring1;
+              const r2 = state.player.equipment.ring2;
+              equippedCompareHtml = `
+                <div style="margin-top:10px; padding-top:8px; border-top:2px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.2); padding:6px; border-radius:4px;">
+                  <div style="color:#a3b8cc; font-size:10px; font-weight:bold; opacity:0.7; text-transform:uppercase;">Ring 1:</div>
+                  <div style="color:#f9d65c; font-size:12px; font-weight:bold;">${r1 ? r1.name : 'Empty'}</div>
+                </div>
+                <div style="margin-top:10px; padding-top:8px; border-top:2px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.2); padding:6px; border-radius:4px;">
+                  <div style="color:#a3b8cc; font-size:10px; font-weight:bold; opacity:0.7; text-transform:uppercase;">Ring 2:</div>
+                  <div style="color:#f9d65c; font-size:12px; font-weight:bold;">${r2 ? r2.name : 'Empty'}</div>
+                </div>
+              `;
+            }
+          } else if (targetType === 'shield' || name.includes('Shield')) {
+            eqItem = state.player.shield;
+            eqLabel = 'Equipped Shield';
+          } else if (['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace'].includes(targetType)) {
+            eqItem = state.player.equipment[targetType];
+            const friendlyLabels = { helmet: "Head Armor", chest: "Chest Armor", gauntlets: "Hand Armor", pants: "Pants Armor", boots: "Feet Armor", necklace: "Accessory" };
+            eqLabel = `Equipped ${friendlyLabels[targetType] || targetType.toUpperCase()}`;
+          } else if (targetType.startsWith('ring') || targetType === 'ring') {
+            eqItem = state.player.equipment.ring1 || state.player.equipment.ring2;
+            eqLabel = 'Equipped Ring Armor';
+          } else if (targetType === 'staff') {
+            eqItem = state.player.weapon;
+            eqLabel = 'Equipped Staff (Equipped)';
+          } else {
+            eqItem = state.player.weapon;
+            eqLabel = 'Equipped Weapon (Equipped)';
+          }
 
-      if (eqItem && eqItem.name !== 'Fists' && eqItem.name !== name) {
+          if (targetType !== 'ring' && eqItem && eqItem.name !== 'Fists' && eqItem.name !== name) {
         let eqDetails = '';
         if (eqItem.min !== undefined) eqDetails = `Base Damage: ${eqItem.min}-${eqItem.max}`;
         if (eqItem.stats?.defense) eqDetails = `Base Defense: ${eqItem.stats.defense}`;
@@ -4440,6 +4475,16 @@ function doRestart(className){
       b.style.padding = '10px';
       
       // 1. Show Unlocked Classes
+      const classBonusMap = {
+        Squire: "+2 HP, +2 STM", Apprentice: "+5 MP", Thief: "+2 STM",
+        Barbarian: "+10 HP, +5 STM, -5 MP", Mercenary: "+5 HP, +5 STM, -5 MP",
+        Ranger: "+5 STM, +5 MP", Acolyte: "+5 HP, +10 MP, -2 STM",
+        Paladin: "+20 HP, -5 MP", Spellblade: "+15 MP, +5 STM, -2 HP",
+        Assassin: "+10 STM, +5 MP, -5 HP", Dragoon: "+10 STM, +5 HP, -5 MP",
+        Warlord: "+30 HP, +20 STM, -10 MP", Archmage: "+30 MP, +5 STM, -10 HP",
+        Phantom: "+20 STM, +10 MP, -5 HP", Vampire: "+15 HP, +15 MP, +15 STM"
+      };
+
       unlocked.forEach(k => {
         const c = CLASSES[k];
         const btn = document.createElement('button');
@@ -4456,12 +4501,15 @@ function doRestart(className){
         btn.style.minHeight = '0'; // Reset min-height so aspect-ratio rules
         
         const badge = c.endless ? '<div style="color:#a78bfa; font-size:9px; margin-bottom:2px;">(Endless)</div>' : '';
+        // FIX: Inject visual indicator row detailing specific baseline class resource pools adjustments
+        const bonusLine = classBonusMap[c.name] ? `<div style="font-size:9.5px; color:#4ade80; font-weight:bold; margin-top:4px; line-height:1;">${classBonusMap[c.name]}</div>` : '';
         
         // Name is bold, Description is small (visible inside the square)
         btn.innerHTML = `
             ${badge}
             <div style="font-weight:800; font-size:13px; color:#f9d65c; line-height:1.1; margin-bottom:4px;">${c.name}</div>
             <div style="font-size:10px; opacity:0.8; line-height:1.1; overflow:hidden;">${c.desc}</div>
+            ${bonusLine}
         `;
         
         // Also add full description as tooltip just in case it cuts off
@@ -4474,15 +4522,24 @@ function doRestart(className){
         b.appendChild(btn);
       });
       
-      // 2. Show Locked Classes (grayed out)
+    // 2. Show Locked Classes (grayed out)
       available.forEach(k => {
         if (unlocked.includes(k)) return;
         const c = CLASSES[k];
         const d = document.createElement('div');
         d.className = 'chip';
         d.style.opacity = '0.5';
-        d.style.textAlign = 'left';
-        d.innerHTML = `🔒 <b>${c.name}</b><br><span style="font-size:12px">${c.msg || 'Locked'}</span>`;
+        // FIX: Enforce flexbox layout alignments to center all card content horizontally and vertically
+        d.style.display = 'flex';
+        d.style.flexDirection = 'column';
+        d.style.justifyContent = 'center';
+        d.style.alignItems = 'center';
+        d.style.textAlign = 'center';
+        d.style.aspectRatio = '1 / 1'; 
+        const currentCount = meta[c.req] || 0;
+        // FIX: Add intentional line breaks to isolate the numerical progress line below the requirement description text block
+        const progressRatio = c.req ? `<br><br><span style="font-size:12px;">( ${currentCount} / ${c.val} )</span>` : '';
+        d.innerHTML = `<b>${c.name}</b><br><span style="font-size:12px">${c.msg || 'Locked'}${progressRatio}</span>`;
         b.appendChild(d);
       });
 
@@ -4636,38 +4693,38 @@ function doRestart(className){
     state.inventory.weapons['Buckler'] = 1; equipShield('Buckler');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
     state.player.equipment.chest = { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4 } };
-    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
-    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
     state.inventory.potions = 1;
   } else if (className === 'Apprentice') {
     state.inventory.weapons['Earth Staff'] = 1; equipWeaponByName('Earth Staff');
     state.spells.push({name:'Pebble', cost:1, tier:1}); state.equippedSpell = state.spells[0];  
     state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
-    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
     state.inventory.tonics = 1;
   } else if (className === 'Thief') {
     state.inventory.weapons['Knuckle Duster'] = 1; equipWeaponByName('Knuckle Duster');
     state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
-    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
-    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2 } };
     state.inventory.lockpicks = 5; state.inventory.bombs = 1;
   // TIER 2
   } else if (className === 'Barbarian') {
     state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
-    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
-    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2, maxStamina: 3 } };
-    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1 } };
+    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
     state.inventory.potions = 1;
   } else if (className === 'Mercenary') {
     state.inventory.weapons['Claymore'] = 1; equipWeaponByName('Claymore');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
     state.player.equipment.chest = { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4 } };
-    state.player.equipment.gauntlets = { name: 'Reinforced Mitts', type: 'gauntlets', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.gauntlets = { name: 'Reinforced Mitts', type: 'gauntlets', stats: { defense: 2 } };
     state.player.equipment.pants = { name: 'Chainmail Chausses', type: 'pants', stats: { defense: 4 } };
     state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.gold = 50; 
@@ -4676,16 +4733,16 @@ function doRestart(className){
     state.inventory.arrows = 20; state.player.bow.loaded = 1;
     state.spells.push({name:'Gust', cost:2, tier:1}); state.equippedSpell = state.spells[0];
     state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
-    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
-    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2, maxStamina: 3 } };
-    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1 } };
+    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
   } else if (className === 'Acolyte') {
     state.inventory.weapons['Spear'] = 1; equipWeaponByName('Spear');
     state.spells.push({name:'Heal', cost:4, tier:1}); state.equippedSpell = state.spells[0];
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
-    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2 } };
     state.player.equipment.necklace = { name: 'Bone Amulet', type: 'necklace', stats: { hpRegen: 1 } };
     state.inventory.potions = 1; state.inventory.tonics = 1;
   // TIER 3
@@ -4693,7 +4750,7 @@ function doRestart(className){
     state.inventory.weapons['Warhammer'] = 1; equipWeaponByName('Warhammer');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
     state.player.equipment.chest = { name: 'Platemail Heavy', type: 'chest', stats: { defense: 9 } };
-    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3, attack: 1 } };
+    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3 } };
     state.player.equipment.pants = { name: 'Plate Greaves', type: 'pants', stats: { defense: 6 } };
     state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.potions = 2; state.inventory.gold = 50;
@@ -4703,24 +4760,24 @@ function doRestart(className){
     state.spells.push({name:'Frost', cost:3, tier:1}); state.equippedSpell = state.spells[0];
     state.player.equipment.helmet = { name: 'Steel Visor', type: 'helmet', stats: { defense: 5 } };
     state.player.equipment.chest = { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4 } };
-    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3, attack: 1 } };
+    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3 } };
     state.player.equipment.pants = { name: 'Chainmail Chausses', type: 'pants', stats: { defense: 4 } };
-    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2 } };
     state.inventory.potions = 1; state.inventory.tonics = 1;
   } else if (className === 'Assassin') {
     state.inventory.weapons['Claws'] = 1; equipWeaponByName('Claws');
     state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
-    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
-    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2, maxStamina: 3 } };
-    state.player.equipment.boots = { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5, maxStamina: 8 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1 } };
+    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2 } };
+    state.player.equipment.boots = { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5 } };
     state.player.equipment.ring1 = { name: 'Ring of Haste', type: 'ring', stats: { maxStamina: 2 } };
     state.inventory.bombs = 2; state.inventory.lockpicks = 10;
   } else if (className === 'Dragoon') {
     state.inventory.weapons['Halberd'] = 1; equipWeaponByName('Halberd');
     state.player.equipment.helmet = { name: 'Steel Visor', type: 'helmet', stats: { defense: 5 } };
     state.player.equipment.chest = { name: 'Scale Mail', type: 'chest', stats: { defense: 6 } };
-    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3, attack: 1 } };
+    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3 } };
     state.player.equipment.pants = { name: 'Plate Greaves', type: 'pants', stats: { defense: 6 } };
     state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.warpStones = 2; 
@@ -4729,7 +4786,7 @@ function doRestart(className){
     state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
     state.player.equipment.chest = { name: 'Platemail Heavy', type: 'chest', stats: { defense: 9 } };
-    state.player.equipment.gauntlets = { name: 'Dread Bracers', type: 'gauntlets', stats: { defense: 5, attack: 3 } };
+    state.player.equipment.gauntlets = { name: 'Dread Bracers', type: 'gauntlets', stats: { defense: 5 } };
     state.player.equipment.pants = { name: 'Plate Greaves', type: 'pants', stats: { defense: 6 } };
     state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.potions = 2; 
@@ -4739,24 +4796,24 @@ function doRestart(className){
     state.spells.push({name:'Spark', cost:1, tier:1}); 
     state.spells.push({name:'Pebble', cost:1, tier:1}); 
     state.equippedSpell = state.spells[0];  
-    state.player.equipment.helmet = { name: 'Mythril Crown', type: 'helmet', stats: { defense: 7, maxMp: 15 } };
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.helmet = { name: 'Mythril Crown', type: 'helmet', stats: { defense: 7 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
-    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2 } };
     state.player.equipment.necklace = { name: 'Silver Chain', type: 'necklace', stats: { maxMp: 8 } };
     state.inventory.tonics = 3;
   } else if (className === 'Phantom') {
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
-    state.player.equipment.boots = { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5, maxStamina: 8 } };
+    state.player.equipment.boots = { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5 } };
     state.player.equipment.ring1 = { name: "Thief's Band", type: 'ring', stats: { maxStamina: 0 } };
     state.inventory.lockpicks = 50;
     state.inventory.bombs = 3; state.inventory.warpStones = 3;
   } else if (className === 'Vampire') {
     state.inventory.weapons['Vampiric Shortsword'] = 1; equipWeaponByName('Vampiric Shortsword');
-    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
-    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
     state.player.equipment.necklace = { name: 'Ruby Torc', type: 'necklace', stats: { attack: 3, maxHp: 15 } };
     state.player.equipment.ring1 = { name: 'Amulet of Life', type: 'ring', stats: { hpRegen: 1 } };
     state.inventory.gold = 100;

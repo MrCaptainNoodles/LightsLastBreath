@@ -1460,7 +1460,8 @@ state.respawnEvery = 50 + Math.floor(state.floor/2); // tweak pacing here
 
 
 // --- pickups ---
-  let pickupCount = rand(4,8);
+  // FIX: Increased baseline random pickup count to provide a more generous distribution of gear/supplies
+  let pickupCount = rand(6,10);
   if (state.cursedFloor) pickupCount *= 2; // Cursed Descent: 2x Drops
 
   let tries=0;
@@ -1672,9 +1673,10 @@ state.enemyCap = state.enemies.length;
 
 
 // === PICKUP TOP-UP: guarantee a higher amount per floor ===
-// target = base (2) + 60% of rooms + small depth bonus (max +4)
+// target = base (4) + 60% of rooms + small depth bonus (max +4)
 {
-  const base = 2;
+  // FIX: Raised base fallback constant from 2 to 4 to scale guaranteed floor item yields
+  const base = 4;
   const roomBonus = Math.round(state.rooms.length * 0.6);
   const depthBonus = Math.min(4, Math.floor((state.floor|0) / 3));
   const want = base + roomBonus + depthBonus;
