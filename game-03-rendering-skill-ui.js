@@ -3178,11 +3178,11 @@ if (es){
   // Fix: Use the shield's own name property, defaulting to constant if missing
   const sName = sh ? (sh.name || SHIELD_NAME) : 'No Shield';
   
-  // Calculate correct max durability for display
+  // Task 1 & 5: Synchronize maximum durability limits to cleanly match the balanced shield rules
   let sMax = 20;
-  if (sName.includes('Buckler')) sMax = 15;
-  else if (sName.includes('Tower')) sMax = 35;
-  else if (sName.includes('Ancient')) sMax = 25;
+  if (sName.includes('Tower')) sMax = 10;
+  else if (sName.includes('Ancient')) sMax = 15;
+  else if (sName.includes('Buckler')) sMax = 30;
 
   const shText = sh
     ? `${sName} (Dur ${sh.dur}/${sMax})`

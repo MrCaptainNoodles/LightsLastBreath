@@ -1796,20 +1796,24 @@ function equipWeaponByName(name, item = null){
   // --- FIX: Symmetrically remove old weapon stats before applying new ones to prevent tracking leaks ---
   const cur = state.player.weapon;
   if (cur && cur.stats) {
-    // CHANGE: Removed manual state.globalWeaponFlatBonus deduction here to prevent double-processing weapon attack stats
-    if (cur.stats.maxHp) {
-      state.player.hpMax = Math.max(5, state.player.hpMax - cur.stats.maxHp);
-      state.player.hp = Math.max(1, state.player.hp - cur.stats.maxHp);
+    // Task 1: Removed manual flat bonus deduction since getEquipmentBonus dynamically reflects item removal
+    // FIX: Restrict stat subtraction to explicit positive numeric validations to stop leakage
+    const hpBonus = Number(cur.stats.maxHp);
+    if (!isNaN(hpBonus) && hpBonus > 0) {
+      state.player.hpMax = Math.max(5, state.player.hpMax - hpBonus);
+      state.player.hp = Math.max(1, state.player.hp - hpBonus);
       state.player.hp = Math.min(state.player.hp, state.player.hpMax);
     }
-    if (cur.stats.maxMp) {
-      state.player.mpMax = Math.max(0, state.player.mpMax - cur.stats.maxMp);
-      state.player.mp = Math.max(0, state.player.mp - cur.stats.maxMp);
+    const mpBonus = Number(cur.stats.maxMp);
+    if (!isNaN(mpBonus) && mpBonus > 0) {
+      state.player.mpMax = Math.max(0, state.player.mpMax - mpBonus);
+      state.player.mp = Math.max(0, state.player.mp - mpBonus);
       state.player.mp = Math.min(state.player.mp, state.player.mpMax);
     }
-    if (cur.stats.maxStamina) {
-      state.player.staminaMax = Math.max(5, state.player.staminaMax - cur.stats.maxStamina);
-      state.player.stamina = Math.max(0, state.player.stamina - cur.stats.maxStamina);
+    const staminaBonus = Number(cur.stats.maxStamina);
+    if (!isNaN(staminaBonus) && staminaBonus > 0) {
+      state.player.staminaMax = Math.max(5, state.player.staminaMax - staminaBonus);
+      state.player.stamina = Math.max(0, state.player.stamina - staminaBonus);
       state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
     }
   }
@@ -1855,10 +1859,14 @@ function equipWeaponByName(name, item = null){
   // --- FIX: Symmetrically re-apply ALL stashed weapon stat modifications (ATK, HP, MP, STM) to prevent stat loss ---
   if (state.player.weapon.stats) {
     const s = state.player.weapon.stats;
-    // CHANGE: Removed tracking additions to global flat modifiers to completely resolve weapon over-scaling issues
-    if (s.maxHp) { state.player.hpMax += s.maxHp; state.player.hp += s.maxHp; }
-    if (s.maxMp) { state.player.mpMax += s.maxMp; state.player.mp += s.maxMp; }
-    if (s.maxStamina) { state.player.staminaMax += s.maxStamina; state.player.stamina += s.maxStamina; }
+    // Task 1: Decoupled flat attack tracking to prevent duplicate item modifications
+    // FIX: Rigidly typecast stashed weapon properties to numbers during re-equips
+    const hpBonus = Number(s.maxHp);
+    if (!isNaN(hpBonus) && hpBonus > 0) { state.player.hpMax += hpBonus; state.player.hp += hpBonus; }
+    const mpBonus = Number(s.maxMp);
+    if (!isNaN(mpBonus) && mpBonus > 0) { state.player.mpMax += mpBonus; state.player.mp += mpBonus; }
+    const staminaBonus = Number(s.maxStamina);
+    if (!isNaN(staminaBonus) && staminaBonus > 0) { state.player.staminaMax += staminaBonus; state.player.stamina += staminaBonus; }
   }
   ensureSkill(state.player.weapon.type);
   recomputeWeapon();
@@ -1926,10 +1934,14 @@ if (state.player.shield && !isShieldAllowedFor(stats[2])){
   // --- FIX: Apply secondary stat bonuses from the newly created weapon copy ---
   if (state.player.weapon.stats) {
     const s = state.player.weapon.stats;
-    if (s.attack) state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + s.attack;
-    if (s.maxHp) { state.player.hpMax += s.maxHp; state.player.hp += s.maxHp; }
-    if (s.maxMp) { state.player.mpMax += s.maxMp; state.player.mp += s.maxMp; }
-    if (s.maxStamina) { state.player.staminaMax += s.maxStamina; state.player.stamina += s.maxStamina; }
+    // Task 1: Decoupled item stats from flat global tracker parameters
+    // FIX: Enforce precise numeric verification on freshly instantiated weapons
+    const hpBonus = Number(s.maxHp);
+    if (!isNaN(hpBonus) && hpBonus > 0) { state.player.hpMax += hpBonus; state.player.hp += hpBonus; }
+    const mpBonus = Number(s.maxMp);
+    if (!isNaN(mpBonus) && mpBonus > 0) { state.player.mpMax += mpBonus; state.player.mp += mpBonus; }
+    const staminaBonus = Number(s.maxStamina);
+    if (!isNaN(staminaBonus) && staminaBonus > 0) { state.player.staminaMax += staminaBonus; state.player.stamina += staminaBonus; }
   }
 
   ensureSkill(stats[2]);
@@ -2024,20 +2036,24 @@ function breakEquippedWeaponIfNeeded(){
   log(`${w.name} breaks!`);
   // --- FIX: Symmetrically remove the flat attack, HP, MP, and Stamina bonuses of the broken item before reverting to Fists ---
   if (w && w.stats) {
-    if (w.stats.attack) state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - w.stats.attack);
-    if (w.stats.maxHp) {
-      state.player.hpMax = Math.max(5, state.player.hpMax - w.stats.maxHp);
-      state.player.hp = Math.max(1, state.player.hp - w.stats.maxHp);
+    // Task 1: Removed globalWeaponFlatBonus modification to prevent underflow now that items are decoupled from it
+    // FIX: Apply strict validation casting routines during active weapon shattering cleanups
+    const hpBonus = Number(w.stats.maxHp);
+    if (!isNaN(hpBonus) && hpBonus > 0) {
+      state.player.hpMax = Math.max(5, state.player.hpMax - hpBonus);
+      state.player.hp = Math.max(1, state.player.hp - hpBonus);
       state.player.hp = Math.min(state.player.hp, state.player.hpMax);
     }
-    if (w.stats.maxMp) {
-      state.player.mpMax = Math.max(0, state.player.mpMax - w.stats.maxMp);
-      state.player.mp = Math.max(0, state.player.mp - w.stats.maxMp);
+    const mpBonus = Number(w.stats.maxMp);
+    if (!isNaN(mpBonus) && mpBonus > 0) {
+      state.player.mpMax = Math.max(0, state.player.mpMax - mpBonus);
+      state.player.mp = Math.max(0, state.player.mp - mpBonus);
       state.player.mp = Math.min(state.player.mp, state.player.mpMax);
     }
-    if (w.stats.maxStamina) {
-      state.player.staminaMax = Math.max(5, state.player.staminaMax - w.stats.maxStamina);
-      state.player.stamina = Math.max(0, state.player.stamina - w.stats.maxStamina);
+    const staminaBonus = Number(w.stats.maxStamina);
+    if (!isNaN(staminaBonus) && staminaBonus > 0) {
+      state.player.staminaMax = Math.max(5, state.player.staminaMax - staminaBonus);
+      state.player.stamina = Math.max(0, state.player.stamina - staminaBonus);
       state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
     }
   }
@@ -3924,7 +3940,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
                    const isArmorSlot = ['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'ring'].includes(wType);
                    if (!isArmorSlot) {
                       const xpVal = 10 + (state.floor * 2);
-                      const targetSkill = (wType === 'staff') ? 'magic' : wType;
+                      // FIX: Explicitly route shield category sales into the survivability container
+                      const targetSkill = (wType === 'staff') ? 'magic' : (wType === 'shield' ? 'survivability' : wType);
                       ensureSkill(targetSkill);
                       const s = state.skills[targetSkill];
                       s.shown = true; s.xp += xpVal;
@@ -4082,10 +4099,15 @@ window.equipGearItem = function(name) {
     state.player.equipment[slot] = trinketItem;
     
     // Dynamically expand character sheet totals if the active trinket grants stat increases
-    if (trinketItem.stats.maxStamina) {
-      state.player.staminaMax += trinketItem.stats.maxStamina;
-      state.player.stamina += trinketItem.stats.maxStamina;
+    // FIX: Apply robust numeric casting on trinket max stamina bonuses
+    const staminaBonus = Number(trinketItem.stats.maxStamina);
+    if (!isNaN(staminaBonus) && staminaBonus > 0) {
+      state.player.staminaMax += staminaBonus;
+      state.player.stamina += staminaBonus;
     }
+
+    // FIX: Trigger weapon recomputation dynamically from active equipment slots to prevent accumulator pollution
+    if (typeof recomputeWeapon === 'function') recomputeWeapon();
     
     state.inventory.trinkets[name]--;
     if (state.inventory.trinkets[name] <= 0) delete state.inventory.trinkets[name];
@@ -4125,24 +4147,24 @@ window.equipGearItem = function(name) {
 
   // CHANGE: Fix character sheet parameters so that item.stats attributes for MP and Stamina update dynamically during item swap
   if (item.stats) {
-    if (item.stats.maxHp) {
-      state.player.hpMax += item.stats.maxHp;
-      state.player.hp += item.stats.maxHp;
+    // FIX: Enforce rigid positive numeric conditions using Number() casting to block cross-slot attribute mixing
+    const hpBonus = Number(item.stats.maxHp);
+    if (!isNaN(hpBonus) && hpBonus > 0) {
+      state.player.hpMax += hpBonus;
+      state.player.hp += hpBonus;
     }
-    if (item.stats.maxMp) {
-      state.player.mpMax += item.stats.maxMp;
-      state.player.mp += item.stats.maxMp;
+    const mpBonus = Number(item.stats.maxMp);
+    if (!isNaN(mpBonus) && mpBonus > 0) {
+      state.player.mpMax += mpBonus;
+      state.player.mp += mpBonus;
     }
-    if (item.stats.maxStamina) {
-      state.player.staminaMax += item.stats.maxStamina;
-      state.player.stamina += item.stats.maxStamina;
+    const staminaBonus = Number(item.stats.maxStamina);
+    if (!isNaN(staminaBonus) && staminaBonus > 0) {
+      state.player.staminaMax += staminaBonus;
+      state.player.stamina += staminaBonus;
     }
-    // --- FIX: Symmetrically add flat attack modifications to balance out unequip subtraction ---
-    if (item.stats.attack) {
-      // FIX: Safely add to flat bonus tracking variable to ensure value is added but not permanently stacked during multiple re-equips
-      state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack;
-      if (typeof recomputeWeapon === 'function') recomputeWeapon();
-    }
+    // --- FIX: Removed redundant flat accumulator block to stop double-counting bugs since getEquipmentBonus dynamic routines process this via recomputeWeapon ---
+    if (typeof recomputeWeapon === 'function') recomputeWeapon();
     // -----------------------------------------------------------------------------------------
   }
 
@@ -4157,33 +4179,36 @@ window.unequipSlot = function(slot) {
   
   // CHANGE: Revert all secondary attributes safely when unequipping an item to prevent stat leakage
   if (item.stats) {
-    if (item.stats.maxHp) {
-      state.player.hpMax = Math.max(5, state.player.hpMax - item.stats.maxHp);
+    // FIX: Secure slot extraction via explicit value matching to resolve stacking compounding exploits
+    const hpBonus = Number(item.stats.maxHp);
+    if (!isNaN(hpBonus) && hpBonus > 0) {
+      state.player.hpMax = Math.max(5, state.player.hpMax - hpBonus);
       // --- FIX: Symmetrically deduct current HP before clamping to prevent healing leaks on re-equip ---
-      state.player.hp = Math.max(1, state.player.hp - item.stats.maxHp);
+      state.player.hp = Math.max(1, state.player.hp - hpBonus);
       state.player.hp = Math.min(state.player.hp, state.player.hpMax);
     }
-    if (item.stats.maxMp) {
-      state.player.mpMax = Math.max(0, state.player.mpMax - item.stats.maxMp);
+    const mpBonus = Number(item.stats.maxMp);
+    if (!isNaN(mpBonus) && mpBonus > 0) {
+      state.player.mpMax = Math.max(0, state.player.mpMax - mpBonus);
       // --- FIX: Symmetrically deduct current MP before clamping to prevent mana generation leaks on re-equip ---
-      state.player.mp = Math.max(0, state.player.mp - item.stats.maxMp);
+      state.player.mp = Math.max(0, state.player.mp - mpBonus);
       state.player.mp = Math.min(state.player.mp, state.player.mpMax);
     }
-    if (item.stats.maxStamina) {
-      state.player.staminaMax = Math.max(5, state.player.staminaMax - item.stats.maxStamina);
+    const staminaBonus = Number(item.stats.maxStamina);
+    if (!isNaN(staminaBonus) && staminaBonus > 0) {
+      state.player.staminaMax = Math.max(5, state.player.staminaMax - staminaBonus);
       // --- FIX: Symmetrically deduct current Stamina before clamping to prevent stamina regeneration leaks on re-equip ---
-      state.player.stamina = Math.max(0, state.player.stamina - item.stats.maxStamina);
+      state.player.stamina = Math.max(0, state.player.stamina - staminaBonus);
       state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
     }
-    // Safely deduct flat attack modifications to prevent unequip compounding loops
-    if (item.stats.attack) {
-      // FIX: Symmetrically subtract the flat modifier attribute from our flat bonus parameter tracking variable to completely solve the bonus stacking loop exploit
-      state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - item.stats.attack);
-      if (typeof recomputeWeapon === 'function') recomputeWeapon();
-    }
+    // --- FIX: Redundant flat tracker modification removed to prevent unequip formula math breaks ---
   }
 
+  // FIX: Clear the item from the active equipment slot BEFORE recomputing weapon values
   state.player.equipment[slot] = null;
+
+  // FIX: Call recomputeWeapon after the slot is null so getEquipmentBonus accurately reflects the item's removal
+  if (typeof recomputeWeapon === 'function') recomputeWeapon();
   
   const name = item.name;
   // CHANGE: Intercept unequipping rings. If the unequipped name matches a members of the established trinket roster, redirect it to increment the trinket count instead of polluting the weapon stash list.

@@ -1975,43 +1975,44 @@ const pool=[
 
   choice.stats = { attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0 };
   
-  // CHANGE: Setup explicit inherent base statistics for all 24 new items grouped by slot types with deep dungeon scaling
-  if (choice.type === 'helmet') {
-    if (choice.name === 'Leather Cap') choice.stats.defense = 1 + depthBonus;
-    else if (choice.name === 'Iron Helm') { choice.stats.defense = 3 + depthBonus; choice.stats.maxHp = 5; }
-    else if (choice.name === 'Steel Visor') { choice.stats.defense = 5 + depthBonus; choice.stats.maxHp = 10; }
-    else if (choice.name === 'Mythril Crown') { choice.stats.defense = 7 + depthBonus; choice.stats.maxMp = 15; choice.stats.maxHp = 10; }
-  }
-  else if (choice.type === 'chest') {
-    if (choice.name === 'Cloth Tunic') { choice.stats.defense = 1 + depthBonus; choice.stats.maxMp = 5; }
-    else if (choice.name === 'Chainmail Jacket') choice.stats.defense = 4 + depthBonus;
-    else if (choice.name === 'Scale Mail') { choice.stats.defense = 6 + depthBonus; choice.stats.maxHp = 10; }
-    else if (choice.name === 'Platemail Heavy') { choice.stats.defense = 9 + depthBonus; choice.stats.maxHp = 20; }
-  }
-  else if (choice.type === 'gauntlets') {
-    if (choice.name === 'Leather Gloves') { choice.stats.defense = 1 + depthBonus; choice.stats.maxStamina = 2; }
-    else if (choice.name === 'Reinforced Mitts') { choice.stats.defense = 2 + depthBonus; choice.stats.maxStamina = 4; }
-    else if (choice.name === 'Plate Gauntlets') { choice.stats.defense = 3 + depthBonus; choice.stats.attack = 1; }
-    else if (choice.name === 'Dread Bracers') { choice.stats.defense = 5 + depthBonus; choice.stats.attack = 3; }
-  }
-  else if (choice.type === 'pants') {
-    if (choice.name === 'Cloth Trousers') { choice.stats.defense = 1 + depthBonus; choice.stats.maxMp = 3; }
-    else if (choice.name === 'Leather Chaps') { choice.stats.defense = 2 + depthBonus; choice.stats.maxStamina = 3; }
-    else if (choice.name === 'Chainmail Chausses') { choice.stats.defense = 4 + depthBonus; choice.stats.maxHp = 5; }
-    else if (choice.name === 'Plate Greaves') { choice.stats.defense = 6 + depthBonus; choice.stats.maxHp = 15; }
-  }
-  else if (choice.type === 'boots') {
-    if (choice.name === 'Leather Boots') { choice.stats.defense = 1 + depthBonus; choice.stats.maxStamina = 2; }
-    else if (choice.name === 'Reinforced Soles') { choice.stats.defense = 2 + depthBonus; choice.stats.maxStamina = 4; }
-    else if (choice.name === 'Iron Sabatons') { choice.stats.defense = 4 + depthBonus; choice.stats.maxHp = 5; }
-    else if (choice.name === 'Greaves of Haste') { choice.stats.defense = 5 + depthBonus; choice.stats.maxStamina = 8; }
-  }
-  else if (choice.type === 'necklace') {
-    if (choice.name === 'Bone Amulet') choice.stats.hpRegen = 1 + Math.floor(depthBonus / 2);
-    else if (choice.name === 'Silver Chain') choice.stats.maxMp = 8 + (depthBonus * 2);
-    else if (choice.name === 'Gold Medallion') choice.stats.critChance = 5 + Math.floor(depthBonus / 2);
-    else if (choice.name === 'Ruby Torc') { choice.stats.attack = 3 + Math.floor(depthBonus / 2); choice.stats.maxHp = 15; }
-  }
+   // CHANGE: Setup explicit inherent base statistics for all 24 new items grouped by slot types with deep dungeon scaling
+ // FIX: Stripped out hidden, unadvertised baseline attributes (maxHp, maxMp, maxStamina) from templates to prevent cross-contamination
+ if (choice.type === 'helmet') {
+     if (choice.name === 'Leather Cap') choice.stats.defense = 1 + depthBonus;
+     else if (choice.name === 'Iron Helm') { choice.stats.defense = 3 + depthBonus; }
+     else if (choice.name === 'Steel Visor') { choice.stats.defense = 5 + depthBonus; }
+     else if (choice.name === 'Mythril Crown') { choice.stats.defense = 7 + depthBonus; }
+ }
+ else if (choice.type === 'chest') {
+     if (choice.name === 'Cloth Tunic') { choice.stats.defense = 1 + depthBonus; }
+     else if (choice.name === 'Chainmail Jacket') choice.stats.defense = 4 + depthBonus;
+     else if (choice.name === 'Scale Mail') { choice.stats.defense = 6 + depthBonus; }
+     else if (choice.name === 'Platemail Heavy') { choice.stats.defense = 9 + depthBonus; }
+ }
+ else if (choice.type === 'gauntlets') {
+     if (choice.name === 'Leather Gloves') { choice.stats.defense = 1 + depthBonus; }
+     else if (choice.name === 'Reinforced Mitts') { choice.stats.defense = 2 + depthBonus; }
+     else if (choice.name === 'Plate Gauntlets') { choice.stats.defense = 3 + depthBonus; }
+     else if (choice.name === 'Dread Bracers') { choice.stats.defense = 5 + depthBonus; }
+ }
+ else if (choice.type === 'pants') {
+     if (choice.name === 'Cloth Trousers') { choice.stats.defense = 1 + depthBonus; }
+     else if (choice.name === 'Leather Chaps') { choice.stats.defense = 2 + depthBonus; }
+     else if (choice.name === 'Chainmail Chausses') { choice.stats.defense = 4 + depthBonus; }
+     else if (choice.name === 'Plate Greaves') { choice.stats.defense = 6 + depthBonus; }
+ }
+ else if (choice.type === 'boots') {
+     if (choice.name === 'Leather Boots') { choice.stats.defense = 1 + depthBonus; }
+     else if (choice.name === 'Reinforced Soles') { choice.stats.defense = 2 + depthBonus; }
+     else if (choice.name === 'Iron Sabatons') { choice.stats.defense = 4 + depthBonus; }
+     else if (choice.name === 'Greaves of Haste') { choice.stats.defense = 5 + depthBonus; }
+ }
+ else if (choice.type === 'necklace') {
+     if (choice.name === 'Bone Amulet') choice.stats.hpRegen = 1 + Math.floor(depthBonus / 2);
+     else if (choice.name === 'Silver Chain') choice.stats.critChance = 2 + Math.floor(depthBonus / 2); // Replaced hidden Mp with clean visible Crit
+     else if (choice.name === 'Gold Medallion') choice.stats.critChance = 5 + Math.floor(depthBonus / 2);
+     else if (choice.name === 'Ruby Torc') { choice.stats.attack = 3 + Math.floor(depthBonus / 2); }
+ }
   
   // Determine number of stat bonus lines dynamically based on floor depth scaling loops
   let linesCount = 1;
@@ -2427,7 +2428,15 @@ function damageAfterDR(raw){
     if (state._shieldParity % 2 === 0){ 
       sh.dur = Math.max(0, (sh.dur|0) - 1);
       if (sh.dur <= 0){
+        // Task 1: Symmetrically strip random bonus stat pools from player properties when a shield shatters
+        if (sh.stats) {
+          if (sh.stats.maxHp) { state.player.hpMax = Math.max(5, state.player.hpMax - sh.stats.maxHp); state.player.hp = Math.max(1, state.player.hp - sh.stats.maxHp); state.player.hp = Math.min(state.player.hp, state.player.hpMax); }
+          if (sh.stats.maxMp) { state.player.mpMax = Math.max(0, state.player.mpMax - sh.stats.maxMp); state.player.mp = Math.min(state.player.mp, state.player.mpMax); }
+          if (sh.stats.maxStamina) { state.player.staminaMax = Math.max(5, state.player.staminaMax - sh.stats.maxStamina); state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax); }
+        }
         state.player.shield = null;
+        state.player.shieldName = '';
+        state.player.blockChance = 0;
         log('Your shield shatters!');
       }
       if (typeof updateEquipUI === 'function') updateEquipUI();

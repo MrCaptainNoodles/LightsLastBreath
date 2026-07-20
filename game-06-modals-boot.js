@@ -240,13 +240,20 @@ if (tgtS) tgtS.onclick = ()=>{ bsTarget='shield'; refreshBsUI(); };
     playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.interact);
   }
 
-  refreshBsUI();
-  modal.style.display = 'flex';
+  // Task 12: Overhaul Blacksmith panel context to redirect directly onto Inventory Grid view
+  state.ui = state.ui || {};
+  state.ui.repairMode = true;
+  state.ui.scrapMode = false;
+  state.ui.sellMode = false;
+  state.ui.lockMode = false;
+
+  if (typeof updateInvBody === 'function') updateInvBody();
+  const invM = document.getElementById('invModal');
+  if (invM) invM.style.display = 'flex';
 
   // Lock player input while at the blacksmith
   state._inputLocked = true;
-
-  setMobileControlsVisible(false);
+  if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
 };
 
 });
@@ -696,6 +703,12 @@ document.addEventListener('click', (ev)=>{
         state._inputLocked = false;
         if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
       }
+      // Task 8: Safely clear out active blacksmith variables when closing inventory via close buttons
+      if (state.ui?.repairMode) {
+        state.ui.repairMode = false;
+        state._inputLocked = false;
+        if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+      }
     }
 
     // 4. Tutorial specific logic (keeps your existing tutorial flow working)
@@ -796,34 +809,45 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     let typeLabel = "Armor Piece";
     let baseAttrLabel = "Base Defense: Roll Attribute";
     
-    if (slotContext) {
+    // Task 2 & 5: Determine the precise core item category slot uniformly
+    let inferredArmorSlot = null;
+    const nLow = name.toLowerCase();
+    if (nLow.includes('helm') || nLow.includes('cap') || nLow.includes('visor') || nLow.includes('crown')) inferredArmorSlot = 'helmet';
+    else if (nLow.includes('gloves') || nLow.includes('mitts') || nLow.includes('gauntlets') || nLow.includes('bracers')) inferredArmorSlot = 'gauntlets';
+    else if (nLow.includes('boots') || nLow.includes('soles') || nLow.includes('sabatons') || nLow.includes('haste')) inferredArmorSlot = 'boots'; 
+    else if (nLow.includes('pants') || nLow.includes('trousers') || nLow.includes('greaves') || nLow.includes('chaps') || nLow.includes('chausses')) inferredArmorSlot = 'pants';
+    else if (nLow.includes('tunic') || nLow.includes('jacket') || nLow.includes('mail') || nLow.includes('plate')) inferredArmorSlot = 'chest';
+    else if (nLow.includes('amulet') || nLow.includes('chain') || nLow.includes('medallion') || nLow.includes('torc') || nLow.includes('necklace')) inferredArmorSlot = 'necklace';
+    
+    const wsLookup = typeof weaponStatsFor === 'function' ? weaponStatsFor(name) : null;
+    const itemCoreType = wsLookup ? wsLookup.type : inferredArmorSlot;
+
+    if (itemCoreType === 'helmet') typeLabel = "Head Armor";
+    else if (itemCoreType === 'chest') typeLabel = "Chest Armor";
+    else if (itemCoreType === 'gauntlets') typeLabel = "Hand Armor";
+    else if (itemCoreType === 'pants') typeLabel = "Pants Armor";
+    else if (itemCoreType === 'boots') typeLabel = "Feet Armor";
+    else if (itemCoreType === 'necklace') typeLabel = "Accessory";
+    else if (itemCoreType === 'shield' || nLow.includes('shield') || nLow.includes('buckler')) typeLabel = "Shield (Off-Hand)";
+    else if (itemCoreType === 'staff') typeLabel = slotContext ? "Staff" : "Staffs"; // Task 1: Differentiate Staff types
+    else {
+      // Task 1: Map clean explicit engine type definitions instead of a generic "Weapon" label
+      const rawWepType = wsLookup ? wsLookup.type : 'hand';
       typeLabel = {
-        helmet: "Head Armor",
-        necklace: "Accessory",
-        chest: "Chest Armor",
-        pants: "Pants Armor",
-        gauntlets: "Hand Armor",
-        boots: "Feet Armor",
-        ring1: "Ring Armor",
-        ring2: "Ring Armor",
-        weapon: "Weapon",
-        shield: "Shield (Off-Hand)"
-      }[slotContext] || "Armor Piece";
-    } else {
-      const n = name.toLowerCase();
-      if (n.includes('helm') || n.includes('cap')) typeLabel = "Head Armor";
-      else if (n.includes('plate') || n.includes('tunic') || n.includes('chain') || n.includes('jacket')) typeLabel = "Chest Armor";
-      else if (n.includes('gloves') || n.includes('gauntlets')) typeLabel = "Hand Armor";
-      else if (n.includes('pants') || n.includes('trousers') || n.includes('greaves')) typeLabel = "Pants Armor";
-      else if (n.includes('boots') || n.includes('sabatons')) typeLabel = "Feet Armor";
-      else if (n.includes('ring') || n.includes('band') || n.includes('loop')) typeLabel = "Ring Armor";
-      else if (n.includes('amulet') || n.includes('medallion') || n.includes('necklace')) typeLabel = "Accessory";
-      else if (n.includes('shield') || n.includes('buckler')) typeLabel = "Shield (Off-Hand)";
+        hand: 'Hand to Hand',
+        one: 'One-Handed',
+        two: 'Two-Handed',
+        spear: 'Polearm',
+        axe: 'Hafted',
+        bow: 'Archery'
+      }[rawWepType] || "Weapon";
     }
 
-    // FIX: Explicitly intercept and reclassify items inside the trinket roster as a clean "Ring" instead of generic armor
+    // FIX: Explicitly intercept and reclassify items inside the trinket roster as a clean "Ring Armor" to preserve layout rules
     const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
-    if (trinketPool.includes(name)) typeLabel = "Ring";
+    if (trinketPool.includes(name) || nLow.includes('ring') || nLow.includes('band') || nLow.includes('loop')) {
+      typeLabel = "Ring Armor";
+    }
 
     // Inherent baseline blueprints registry for progressive tier items to mask built-in values from random rolling evaluations
     const inherentRegistry = {
@@ -858,38 +882,71 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     let labelBg = 'rgba(255,255,255,0.05)';
     let labelColor = '#ecf0f1';
 
-    const ws = typeof weaponStatsFor === 'function' ? weaponStatsFor(name) : null;
+    const ws = wsLookup;
     if (ws) {
-      if (!slotContext) typeLabel = trinketPool.includes(name) ? "Ring" : (typeNice ? typeNice(ws.type) : ws.type.toUpperCase());
-      
       // Separate armor layouts from accessory items to eliminate zero-defense print headers
       if (['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(ws.type)) {
          baseAttrLabel = `Base Defense: ${stats.defense || 0}`;
       } else if (ws.type === 'necklace') {
          baseAttrLabel = `Accessory Item`;
+      } else if (ws.type === 'shield') {
+         baseAttrLabel = "Block Modifier: 20%";
       } else {
          baseAttrLabel = `Base Damage: ${ws.min} -${ws.max}`;
       }
 
       // FIX: Perform automatic structural gear comparisons if the active tooltip triggers on an unequipped inventory stash cell
       if (!slotContext) {
-        if (!['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace'].includes(ws.type)) {
+        // Task 6: Explicitly add 'shield' and 'staff' exclusions here to isolate physical weapon damage lines
+        if (!['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'shield', 'staff'].includes(ws.type)) {
           const eqWep = state.player.weapon;
-          if (eqWep) {
+          if (eqWep && eqWep.type !== 'staff') {
             const curMax = eqWep.base?.max || eqWep.max || 0;
             if (ws.max > curMax) { labelBg = 'rgba(34,197,94,0.2)'; labelColor = '#4ade80'; baseAttrLabel += ' (Higher Damage)'; }
             else if (ws.max < curMax) { labelBg = 'rgba(239,68,68,0.2)'; labelColor = '#f87171'; baseAttrLabel += ' (Lower Damage)'; }
           }
-        } else if (['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(ws.type)) {
-          const eqArmor = state.player.equipment[ws.type];
-          const curDef = eqArmor ? (eqArmor.stats?.defense || 0) : 0;
-          const hoverDef = stats.defense || 0;
-          if (hoverDef > curDef) { labelBg = 'rgba(34,197,94,0.2)'; labelColor = '#4ade80'; baseAttrLabel += ' (Higher Defense)'; }
-          else if (hoverDef < curDef) { labelBg = 'rgba(239,68,68,0.2)'; labelColor = '#f87171'; baseAttrLabel += ' (Lower Defense)'; }
         }
       }
-    } else if (name.includes("Shield") || name.includes("Buckler") || slotContext === 'shield') {
-      baseAttrLabel = "Block Modifier: 20%";
+    } else if (name.includes("Shield") || name.includes("Buckler") || slotContext === 'shield' || itemCoreType === 'shield') {
+      // Task 5: Balance shields so that better block modifiers receive lower maximum durability metrics
+      let bMod = 20;
+      if (name.includes('Tower')) bMod = 35;
+      else if (name.includes('Ancient')) bMod = 25;
+      else if (name.includes('Buckler')) bMod = 15;
+      baseAttrLabel = `Block Modifier: ${bMod}%`;
+
+      // Task 6: Implement shield comparative data overlays with "Higher/Lower Defense" text tags
+      if (!slotContext) {
+        const eqShield = state.player.shield;
+        if (eqShield) {
+          const getShieldVal = (n) => {
+            if (n.includes('Tower')) return 35;
+            if (n.includes('Ancient')) return 25;
+            if (n.includes('Buckler')) return 15;
+            return 20;
+          };
+          const hoverVal = getShieldVal(name);
+          const curVal = getShieldVal(eqShield.name || '');
+          if (hoverVal > curVal) { labelBg = 'rgba(34,197,94,0.2)'; labelColor = '#4ade80'; baseAttrLabel += ' (Higher Defense)'; }
+          else if (hoverVal < curVal) { labelBg = 'rgba(239,68,68,0.2)'; labelColor = '#f87171'; baseAttrLabel += ' (Lower Defense)'; }
+        }
+      }
+    }
+
+    // Task 2 & 5: Fixed missing defense comparisons by resolving the base data properties from native item definitions
+    if (!slotContext && inferredArmorSlot) {
+      const isArmor = ['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(inferredArmorSlot);
+      if (isArmor) {
+         // Task 5: Use OR logic operators to accurately catch base stats when default values are initialized as 0
+         const finalHoverDef = stats.defense || baseConfig.defense || 0;
+         baseAttrLabel = `Base Defense: ${finalHoverDef}`;
+         
+         const eqArmor = state.player.equipment[inferredArmorSlot];
+         const finalCurDef = eqArmor ? (eqArmor.stats?.defense || inherentRegistry[eqArmor.name]?.defense || 0) : 0;
+         
+         if (finalHoverDef > finalCurDef) { labelBg = 'rgba(34,197,94,0.2)'; labelColor = '#4ade80'; baseAttrLabel += ' (Higher Defense)'; }
+         else if (finalHoverDef < finalCurDef) { labelBg = 'rgba(239,68,68,0.2)'; labelColor = '#f87171'; baseAttrLabel += ' (Lower Defense)'; }
+      }
     }
     
     // Evaluate pure random magical modifiers by filtering out baseline structural configs
@@ -905,7 +962,7 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
 
     if (bonusAttack > 0) bonusLines.push(`<div style="color:#f6ad55;">+${bonusAttack} Attack Power</div>`);
     
-    const isArmorPiece = ['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(slotContext || (ws ? ws.type : ''));
+    const isArmorPiece = ['helmet', 'chest', 'gauntlets', 'pants', 'boots'].includes(slotContext || itemCoreType || '');
     const bonusDefense = stats.defense - (baseConfig.defense || 0);
     if (bonusDefense > 0 && !isArmorPiece) bonusLines.push(`<div style="color:#63b3ed;">+${bonusDefense} Flat Defense</div>`);
     
@@ -914,17 +971,60 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     if (bonusMaxStamina > 0) bonusLines.push(`<div style="color:#4ade80;">+${bonusMaxStamina} Max Stamina</div>`);
     if (bonusCritChance > 0) bonusLines.push(`<div style="color:#f9d65c;">+${bonusCritChance}% Critical Strike Chance</div>`);
     if (bonusBlockChance > 0) bonusLines.push(`<div style="color:#38bdf8;">+${bonusBlockChance}% Deflection Block Chance</div>`);
-    if (bonusHpRegen > 0) bonusLines.push(`<div style="color:#f472b6;">+${bonusHpRegen} HP Regeneration / Turn</div>`);
+    // Task 4: Reword regeneration bonus string to precisely convey tick timing
+    if (bonusHpRegen > 0) bonusLines.push(`<div style="color:#f472b6;">+${bonusHpRegen} HP Regeneration (Every 20 Turns)</div>`);
     if (bonusVampiric > 0) bonusLines.push(`<div style="color:#f87171;">+${bonusVampiric}% Vampiric Life Steal Factor</div>`);
     
     const bonusContent = bonusLines.length ? bonusLines.join('') : '<div style="opacity:0.4; font-style:italic;">No magical bonuses</div>';
     const headerTitle = name === 'Empty' ? `Empty ${typeLabel}` : name;
 
+    // Task 8: Build equipped comparative sub-panel data block
+    let equippedCompareHtml = '';
+    if (name !== 'Empty') {
+      let eqItem = null;
+      let eqLabel = '';
+      const targetType = itemCoreType || 'weapon';
+
+      if (targetType === 'shield' || name.includes('Shield')) {
+        eqItem = state.player.shield;
+        eqLabel = 'Equipped Shield';
+      } else if (['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace'].includes(targetType)) {
+        eqItem = state.player.equipment[targetType];
+        const friendlyLabels = { helmet: "Head Armor", chest: "Chest Armor", gauntlets: "Hand Armor", pants: "Pants Armor", boots: "Feet Armor", necklace: "Accessory" };
+        eqLabel = `Equipped ${friendlyLabels[targetType] || targetType.toUpperCase()}`;
+      } else if (targetType.startsWith('ring') || targetType === 'ring') {
+        eqItem = state.player.equipment.ring1 || state.player.equipment.ring2;
+        eqLabel = 'Equipped Ring Armor';
+      } else if (targetType === 'staff') {
+        eqItem = state.player.weapon;
+        eqLabel = 'Equipped Staff (Equipped)';
+      } else {
+        eqItem = state.player.weapon;
+        eqLabel = 'Equipped Weapon (Equipped)';
+      }
+
+      if (eqItem && eqItem.name !== 'Fists' && eqItem.name !== name) {
+        let eqDetails = '';
+        if (eqItem.min !== undefined) eqDetails = `Base Damage: ${eqItem.min}-${eqItem.max}`;
+        if (eqItem.stats?.defense) eqDetails = `Base Defense: ${eqItem.stats.defense}`;
+        let eqDur = (eqItem.dur !== undefined) ? ` | Durability: ${eqItem.dur}/${eqItem.durMax || 20}` : '';
+        
+        equippedCompareHtml = `
+          <div style="margin-top:10px; padding-top:8px; border-top:2px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.2); padding:6px; border-radius:4px;">
+            <div style="color:#a3b8cc; font-size:10px; font-weight:bold; opacity:0.7; text-transform:uppercase;">${eqLabel}:</div>
+            <div style="color:#f9d65c; font-size:12px; font-weight:bold;">${eqItem.name}</div>
+            <div style="color:#ecf0f1; font-size:11px; margin-top:2px;">${eqDetails}${eqDur}</div>
+          </div>
+        `;
+      }
+    }
+
     tooltip.innerHTML = `
       <div style="color:#f9d65c; font-size:14px; font-weight:bold; border-bottom:1px solid #2c3e50; padding-bottom:4px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">${headerTitle}</div>
-      <div style="color:#95a5a6; font-size:11px; margin-bottom:4px;"><span style="color:#7f8c8d;">Type:</span> ${typeLabel}${details ? `| ${details}` : ''}</div>
+      <div style="color:#95a5a6; font-size:11px; margin-bottom:4px;"><span style="color:#7f8c8d;">Type:</span> ${typeLabel}${details ? ` | ${details}` : ''}</div>
       <div style="color:${labelColor}; font-size:11px; font-weight:bold; margin-bottom:6px; background:${labelBg}; padding:2px 6px; border-radius:4px; display:inline-block;">${baseAttrLabel}</div>
       <div style="font-size:11px; display:flex; flex-direction:column; gap:2px; border-top:1px dashed #2c3e50; padding-top:4px;">${bonusContent}</div>
+      ${equippedCompareHtml}
     `;
     tooltip.style.opacity = '1';
     tooltip.style.visibility = 'visible';
@@ -944,7 +1044,13 @@ window.clearItemTooltip = function() {
 window.handleStashMouseEnter = function(idx) {
   if (!window._stashedCache || !window._stashedCache[idx]) return;
   const item = window._stashedCache[idx];
-  window.showItemTooltip(item.name, JSON.stringify(item.stats || {}), '', null);
+  // Task 3: Restrict durability tags exclusively to weapon/shield categories
+  let details = '';
+  const isArmorClass = ['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'ring'].includes(item.type);
+  if (item.dur !== undefined && item.durMax !== undefined && !isArmorClass) {
+    details = `Durability: ${item.dur}/${item.durMax}`;
+  }
+  window.showItemTooltip(item.name, JSON.stringify(item.stats || {}), details, null);
 };
 
 window.handleSlotMouseEnter = function(slot, slotLabel) {
@@ -960,9 +1066,10 @@ window.handleSlotMouseEnter = function(slot, slotLabel) {
     name = state.player.equipment[slot] ? state.player.equipment[slot].name : 'Empty';
     itemObj = state.player.equipment[slot];
   }
+  // Task 3: Strip durability parameters from primary armor slot headers entirely
   let details = '';
-  if (slot === 'weapon' && itemObj) details = `ATK: ${itemObj.min}-${itemObj.max}`;
-  if (slot === 'shield' && itemObj) details = `Durability: ${itemObj.dur}`;
+  if (slot === 'weapon' && itemObj) details = `ATK: ${itemObj.min}-${itemObj.max} | Durability: ${itemObj.dur}/${itemObj.durMax}`;
+  if (slot === 'shield' && itemObj) details = `Durability: ${itemObj.dur}/${itemObj.durMax || 20}`;
   
   window.showItemTooltip(name, JSON.stringify(itemObj ? (itemObj.stats || {}) : {}), details, slot);
 };
@@ -970,6 +1077,37 @@ window.handleSlotMouseEnter = function(slot, slotLabel) {
 window.handleGridItemClick = function(idx) {
   if (!window._stashedCache || !window._stashedCache[idx]) return;
   const item = window._stashedCache[idx];
+
+  // Task 12: Intercept clicked tiles when Blacksmith Repair Mode is active
+  if (state.ui?.repairMode) {
+     if (item.durMax === undefined || item.dur === null || item.durMax === null) {
+        if (typeof log === 'function') log("This item cannot be repaired.");
+        return;
+     }
+     if (item.dur >= item.durMax) {
+        if (typeof log === 'function') log(`${item.name} is already at full durability.`);
+        return;
+     }
+     const costPerPoint = Math.ceil(2 + (state.floor * 0.5));
+     if ((state.inventory.gold || 0) < costPerPoint) {
+        if (typeof log === 'function') log("Not enough gold to repair this point!");
+        return;
+     }
+     state.inventory.gold -= costPerPoint;
+     item.dur++;
+     
+     // Find corresponding object inside storage list array and mirror values
+     if (state.inventory.stashed?.[item.name]) {
+        const match = state.inventory.stashed[item.name].find(x => JSON.stringify(x.stats) === JSON.stringify(item.stats) && x.dur === item.dur - 1);
+        if (match) match.dur = item.dur;
+     }
+     if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
+     log(`Repaired 1pt of ${item.name} durability for ${costPerPoint}g.`);
+     window.clearItemTooltip();
+     if (typeof updateEquipUI === 'function') updateEquipUI();
+     updateInvBody();
+     return;
+  }
 
   // FIX: Process active grid selection while Lock Mode is enabled to toggle item safety flags
   if (state.ui?.lockMode) {
@@ -984,6 +1122,12 @@ window.handleGridItemClick = function(idx) {
      }
      window.clearItemTooltip();
      updateInvBody();
+     return;
+  }
+
+  // Task 7: Bounded cursed item protection layer
+  if (item.cursed) {
+     if (typeof log === 'function') log("Cursed artifacts cannot be modified from storage cell slots!");
      return;
   }
 
@@ -1038,7 +1182,8 @@ window.handleGridItemClick = function(idx) {
          const isArmorSlot = ['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'ring'].includes(wType);
          if (!isArmorSlot || item.isTrinket) {
             const xpVal = 10 + (state.floor * 2);
-            const targetSkill = item.isTrinket ? 'magic' : ((wType === 'staff') ? 'magic' : wType);
+            // FIX: Explicitly route shield grid selection sales into the survivability skill tree
+            const targetSkill = item.isTrinket ? 'magic' : ((wType === 'staff') ? 'magic' : (wType === 'shield' ? 'survivability' : wType));
             if (typeof awardSkillXP === 'function') {
                awardSkillXP(targetSkill, xpVal);
             } else {
@@ -1072,6 +1217,15 @@ window.handleGridItemClick = function(idx) {
     window.equipGearItem(item.name);
     return;
   }
+
+  const wType = window.getWeaponType ? window.getWeaponType(item.name) : 'hand';
+  // Task 2: Block shields from equipping unless using valid 1H / Hand weapons
+  if (wType === 'shield' || item.name.includes('Shield')) {
+    if (state.player.weapon && state.player.weapon.type !== 'one' && state.player.weapon.type !== 'hand') {
+       if (typeof log === 'function') log("Shields can only be equipped with One-Handed or Hand-to-Hand weapons!");
+       return;
+    }
+  }
   
   if (state.inventory.stashed && state.inventory.stashed[item.name]) {
     const arr = state.inventory.stashed[item.name];
@@ -1084,9 +1238,13 @@ window.handleGridItemClick = function(idx) {
     if (state.inventory.weapons[item.name] <= 0) delete state.inventory.weapons[item.name];
   }
 
-  const wType = window.getWeaponType ? window.getWeaponType(item.name) : 'hand';
   if (wType === 'shield' || item.name.includes('Shield')) {
     if (state.player.shield) {
+      // Task 7: Stop player from swapping shield slot if current shield contains active curse flag
+      if (state.player.shield.cursed) {
+         if (typeof log === 'function') log("This cursed shield cannot be unequipped!");
+         return;
+      }
       const oldShield = state.player.shield;
       state.inventory.weapons[oldShield.name] = (state.inventory.weapons[oldShield.name] || 0) + 1;
       (state.inventory.stashed[oldShield.name] ||= []).push(oldShield);
@@ -1095,6 +1253,18 @@ window.handleGridItemClick = function(idx) {
     state.player.shieldName = item.name;
     state.player.blockChance = item.name.includes('Buckler') ? 0.15 : item.name.includes('Tower') ? 0.35 : item.name.includes('Ancient') ? 0.25 : 0.20;
   } else if (['one','two','spear','axe','hand','staff'].includes(wType)) {
+    // Task 2: Auto-unequip off-hand shields if equipping an incompatible weapon directly from grid selection
+    if (state.player.shield && !isShieldAllowedFor(wType)) {
+       if (state.player.shield.cursed) {
+          if (typeof log === 'function') log("Your cursed shield prevents wielding an incompatible weapon!");
+          return;
+       }
+       const oldShield = state.player.shield;
+       state.inventory.weapons[oldShield.name] = (state.inventory.weapons[oldShield.name] || 0) + 1;
+       (state.inventory.stashed[oldShield.name] ||= []).push(oldShield);
+       state.player.shield = null; state.player.shieldName = ''; state.player.blockChance = 0;
+       log(`Returned ${oldShield.name} to inventory to wield two-handed weapon.`);
+    }
     if (state.player.weapon && state.player.weapon.name !== 'Fists') {
       const oldWep = state.player.weapon;
       // Subtract all weapon stat allocations cleanly during unequip swaps to prevent resource pool leakage
@@ -1102,7 +1272,7 @@ window.handleGridItemClick = function(idx) {
         if (oldWep.stats.maxHp) { state.player.hpMax = Math.max(5, state.player.hpMax - oldWep.stats.maxHp); state.player.hp = Math.min(state.player.hp, state.player.hpMax); }
         if (oldWep.stats.maxMp) { state.player.mpMax = Math.max(0, state.player.mpMax - oldWep.stats.maxMp); state.player.mp = Math.min(state.player.mp, state.player.mpMax); }
         if (oldWep.stats.maxStamina) { state.player.staminaMax = Math.max(5, state.player.staminaMax - oldWep.stats.maxStamina); state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax); }
-        if (oldWep.stats.attack) { state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - oldWep.stats.attack); }
+        // FIX: Removed manual tracker subtraction to keep getEquipmentBonus sync formulas balanced
       }
       state.inventory.weapons[oldWep.name] = (state.inventory.weapons[oldWep.name] || 0) + 1;
       (state.inventory.stashed[oldWep.name] ||= []).push(oldWep);
@@ -1127,10 +1297,11 @@ window.handleGridItemClick = function(idx) {
     }
     // Map weapon attribute lines into core status metrics
     if (item.stats) {
+      // Tasks 1, 2, 3 & 4: Explicitly isolate stat properties to prevent cross-wiring resource pools
+      // FIX: Strung out direct assignment to state.globalWeaponFlatBonus to avoid double-counting alongside window.getEquipmentBonus
       if (item.stats.maxHp) { state.player.hpMax += item.stats.maxHp; state.player.hp += item.stats.maxHp; }
       if (item.stats.maxMp) { state.player.mpMax += item.stats.maxMp; state.player.mp += item.stats.maxMp; }
       if (item.stats.maxStamina) { state.player.staminaMax += item.stats.maxStamina; state.player.stamina += item.stats.maxStamina; }
-      if (item.stats.attack) { state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack; }
     }
     if (typeof recomputeWeapon === 'function') recomputeWeapon();
   } else {
@@ -1153,12 +1324,13 @@ window.handleGridItemClick = function(idx) {
     
     // FIX: Apply all random statutory pools (HP, MP, and Stamina) to match the unequip de-allocation behavior
     // CHANGE: Force uniform stat application across all equipment types
-  if (item.stats) {
+ if (item.stats) {
+      // Tasks 1, 2, 3 & 4: Cleanly separate asset properties to ensure true stat pool updates with zero bleeding
+      // FIX: Strung out direct assignment to state.globalWeaponFlatBonus to prevent flat tracker duplication issues
       if (item.stats.maxHp) { state.player.hpMax += item.stats.maxHp; state.player.hp += item.stats.maxHp; }
       if (item.stats.maxMp) { state.player.mpMax += item.stats.maxMp; state.player.mp += item.stats.maxMp; }
       if (item.stats.maxStamina) { state.player.staminaMax += item.stats.maxStamina; state.player.stamina += item.stats.maxStamina; }
-      // Apply Combat modifiers
-      if (item.stats.attack) { state.globalWeaponFlatBonus = (state.globalWeaponFlatBonus || 0) + item.stats.attack; recomputeWeapon(); }
+      if (item.stats.attack || item.stats.maxHp || item.stats.maxMp || item.stats.maxStamina) { recomputeWeapon(); }
   }
   }
   window.clearItemTooltip();
@@ -1168,12 +1340,49 @@ window.handleGridItemClick = function(idx) {
 };
 
 window.handleSlotGridClick = function(slot) {
+  // Task 12: Intercept slot clicks during active Repair Mode to execute blacksmith tuning directly
+  if (state.ui?.repairMode) {
+     let tgtItem = (slot === 'weapon') ? state.player.weapon : ((slot === 'shield') ? state.player.shield : state.player.equipment[slot]);
+     if (!tgtItem || tgtItem.name === 'Fists' || tgtItem.durMax === undefined || tgtItem.dur === null || tgtItem.durMax === null) {
+        if (typeof log === 'function') log("This equipped slot cannot be repaired.");
+        return;
+     }
+     if (tgtItem.dur >= tgtItem.durMax) {
+        if (typeof log === 'function') log("Equipped item is already at full durability.");
+        return;
+     }
+     const costPerPoint = Math.ceil(2 + (state.floor * 0.5));
+     if ((state.inventory.gold || 0) < costPerPoint) {
+        if (typeof log === 'function') log("Not enough gold!");
+        return;
+     }
+     state.inventory.gold -= costPerPoint;
+     tgtItem.dur++;
+     if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
+     log(`Repaired 1pt of equipped ${tgtItem.name} durability for ${costPerPoint}g.`);
+     window.clearItemTooltip();
+     updateEquipUI();
+     updateInvBody();
+     return;
+  }
+
+  // Task 7: Block un-equipping slot elements if item contains active curse properties
+  if (slot === 'weapon' && state.player.weapon?.cursed) {
+     if (typeof log === 'function') log("The cursed weapon binds to your skin! It cannot be unequipped.");
+     return;
+  }
+  if (slot === 'shield' && state.player.shield?.cursed) {
+     if (typeof log === 'function') log("The cursed shield binds to your arm! It cannot be unequipped.");
+     return;
+  }
+
   if (slot === 'weapon') {
     if (state.player.weapon && state.player.weapon.name !== 'Fists') {
       const oldWep = state.player.weapon;
       // --- FIX: Symmetrically remove ALL weapon stat allocations (ATK, HP, MP, STM) during manual slot unequips to prevent residual trailing stats from stacking on Fists ---
       if (oldWep.stats) {
-        if (oldWep.stats.attack) state.globalWeaponFlatBonus = Math.max(0, (state.globalWeaponFlatBonus || 0) - oldWep.stats.attack);
+        // Task 1: Symmetrically deduct attack power from global flat modifier to prevent retention on Fists
+        // FIX: Stripped out legacy flat accumulator subtraction to prevent weapon formula mathematical underflow loops
         if (oldWep.stats.maxHp) {
           state.player.hpMax = Math.max(5, state.player.hpMax - oldWep.stats.maxHp);
           state.player.hp = Math.max(1, state.player.hp - oldWep.stats.maxHp);
@@ -1271,7 +1480,26 @@ const allStashedItems = [];
     const managedCount = state.inventory.stashed?.[name]?.length || 0;
     const leftover = qty - managedCount;
     for (let i = 0; i < leftover; i++) {
-      allStashedItems.push({ name: name, type: type, stats: { attack:0, defense:0, maxHp:0 } });
+      // Task 4 & 5: Sync shield durability and balance values so stronger block modifiers receive lower maximum durabilities
+      let dMax = undefined;
+      if (type === 'shield' || name.includes('Shield') || name.includes('Buckler')) {
+         if (name.includes('Tower')) dMax = 10;      // 35% Block -> 10 Durability
+         else if (name.includes('Ancient')) dMax = 15; // 25% Block -> 15 Durability
+         else if (name.includes('Buckler')) dMax = 30; // 15% Block -> 30 Durability
+         else dMax = 20;                               // 20% Block -> 20 Durability
+      } else if (name !== 'Fists' && !['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'ring'].includes(type)) {
+         // Task 4: Allow Hand-to-Hand weapons (Claws, Knuckles) to receive fallback durability calculations
+         dMax = typeof defaultDurabilityFor === 'function' ? defaultDurabilityFor(name) : 20;
+      }
+      
+      // Task 4: Symmetrically query active item stats if checking the currently equipped shield to ensure matches stay updated
+      let currentDur = dMax;
+      if ((type === 'shield' || name.includes('Shield')) && state.player.shield && state.player.shield.name === name) {
+         currentDur = state.player.shield.dur;
+         dMax = state.player.shield.durMax || dMax;
+      }
+      
+      allStashedItems.push({ name: name, type: type, dur: currentDur, durMax: dMax, stats: { attack:0, defense:0, maxHp:0 } });
     }
   }
   window._stashedCache = allStashedItems;
@@ -1291,7 +1519,10 @@ const allStashedItems = [];
   });
 
   // Changed baseline floor from 12 slots (2 rows of 6) to 30 slots (5 rows of 6)
-  const totalSlots = Math.max(30, Math.ceil(allStashedItems.length / 6) * 6);
+  const mMeta = typeof loadMeta === 'function' ? loadMeta() : {};
+  const pref = (state.gameMode === 'endless') ? 'endless_upg_' : 'upg_';
+  const baseMaxSlots = 30 + ((mMeta[pref + 'backpack'] || 0) * 2);
+  const totalSlots = Math.max(baseMaxSlots, Math.ceil(allStashedItems.length / 6) * 6);
   for (let i = 0; i < Math.max(0, totalSlots - allStashedItems.length); i++) {
     gridCellsHtml += `<div style="border:1px dashed #243241; background:rgba(0,0,0,0.1); border-radius:6px; min-height:54px;"></div>`;
   }
@@ -1306,8 +1537,10 @@ const allStashedItems = [];
       
       // FIX: Query tiered calculations to accurately output potential element damage or healing values on the sidebar row
       let potentialText = '';
+      let costText = '';
       if (typeof getSpellStats === 'function') {
          const st = getSpellStats(s.name);
+         costText = ` | ${st.cost || 0} MP`; // Task 4: Extract MP cost parameters
          if (s.name === 'Heal') {
             potentialText = ` (${Math.round((st.pct || 0) * 100)}% HP)`;
          } else {
@@ -1321,7 +1554,7 @@ const allStashedItems = [];
           <canvas id="inv_spell_canv_${sIdx}" width="24" height="24" style="width:24px; height:24px; display:block; flex-shrink:0;"></canvas>
           <div style="display: flex; flex-direction: column; overflow: hidden; pointer-events: none;">
             <span style="font-weight: bold; color: ${isEquipped ? highlightColor : '#dfe7f2'}; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${s.name}${potentialText}</span>
-            <span style="font-size: 9px; opacity: 0.6; color: #dfe7f2;">Lv ${s.tier || 1}</span>
+            <span style="font-size: 9px; opacity: 0.6; color: #dfe7f2;">Lv ${s.tier || 1}${costText}</span>
           </div>
         </div>
       `;
@@ -1357,17 +1590,25 @@ const allStashedItems = [];
 
         <div style="background: rgba(0,0,0,0.4); border: 1px solid #243241; border-radius: 10px; padding: 6px; flex: 1; display: flex; flex-direction: column;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; padding: 0 4px;">
-            <div style="font-weight: bold; color: #f9d65c; font-size: 11px; text-transform: uppercase;">Inventory Grid Storage</div>
+            <div style="font-weight: bold; color: #f9d65c; font-size: 11px; text-transform: uppercase;">Inventory ${state.ui?.repairMode ? `<span style="color:#ff781f; margin-left:8px;">[Cost: ${Math.ceil(2 + (state.floor * 0.5))}g / click]</span>` : ''}</div>
             <div style="display: flex; gap: 6px;">
+              ${state.ui?.repairMode ? `
+              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: #ff781f; color: #fff; border: 1px solid #ff781f; cursor: pointer;" onclick="event.stopPropagation(); state.ui.repairMode = false; state._inputLocked = false; const iModal = document.getElementById('invModal'); if(iModal) iModal.style.display='none';">
+                REPAIR MODE ACTIVE
+              </button>
+              ` : ''}
               ${state.ui?.sellMode ? `
               <button class="btn" style="padding: 2px 6px; font-size: 9px; background: #22c55e; color: #fff; border: 1px solid #22c55e; cursor: pointer;" onclick="event.stopPropagation(); state.ui.sellMode = false; const mModal = document.getElementById('merchantModal'); if(mModal) mModal.style.display='none'; state._inputLocked = false; if(!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true); const iModal = document.getElementById('invModal'); if(iModal) iModal.style.display='none';">
                 SELL MODE ACTIVE
               </button>
               ` : ''}
-              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: ${state.ui?.scrapMode ? '#ef4444' : 'rgba(255,255,255,0.1)'}; color: #fff; border: 1px solid ${state.ui?.scrapMode ? '#ef4444' : '#243241'}; cursor: pointer;" onclick="event.stopPropagation(); state.ui = state.ui || {}; state.ui.scrapMode = !state.ui.scrapMode; if(state.ui.scrapMode) { state.ui.lockMode = false; state.ui.sellMode = false; } updateInvBody();">
+              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid #243241; cursor: pointer;" onclick="event.stopPropagation(); window.sortInventoryByType();">
+                SORT GEAR
+              </button>
+              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: ${state.ui?.scrapMode ? '#ef4444' : 'rgba(255,255,255,0.1)'}; color: #fff; border: 1px solid ${state.ui?.scrapMode ? '#ef4444' : '#243241'}; cursor: pointer;" onclick="event.stopPropagation(); state.ui = state.ui || {}; state.ui.scrapMode = !state.ui.scrapMode; if(state.ui.scrapMode) { state.ui.lockMode = false; state.ui.sellMode = false; state.ui.repairMode = false; } updateInvBody();">
                 ${state.ui?.scrapMode ? 'SCRAP MODE ACTIVE' : 'TOGGLE SCRAP MODE'}
               </button>
-              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: ${state.ui?.lockMode ? '#d4af37' : 'rgba(255,255,255,0.1)'}; color: #fff; border: 1px solid ${state.ui?.lockMode ? '#d4af37' : '#243241'}; cursor: pointer;" onclick="event.stopPropagation(); state.ui = state.ui || {}; state.ui.lockMode = !state.ui.lockMode; if(state.ui.lockMode) { state.ui.scrapMode = false; state.ui.sellMode = false; } updateInvBody();">
+              <button class="btn" style="padding: 2px 6px; font-size: 9px; background: ${state.ui?.lockMode ? '#d4af37' : 'rgba(255,255,255,0.1)'}; color: #fff; border: 1px solid ${state.ui?.lockMode ? '#d4af37' : '#243241'}; cursor: pointer;" onclick="event.stopPropagation(); state.ui = state.ui || {}; state.ui.lockMode = !state.ui.lockMode; if(state.ui.lockMode) { state.ui.scrapMode = false; state.ui.sellMode = false; state.ui.repairMode = false; } updateInvBody();">
                 ${state.ui?.lockMode ? 'LOCK MODE ACTIVE' : 'TOGGLE LOCK MODE'}
               </button>
             </div>
@@ -1412,7 +1653,8 @@ const allStashedItems = [];
         // CHANGE: Support rendering for equipped rings and amulets inside the inventory cells layout
         const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
         let kind = type === 'shield' ? 'shield' : 'weapon';
-        if (trinketPool.includes(name)) { kind = 'ring'; type = 'ring'; }
+        // FIX: Assign kind to 'trinket' to align with drawPickupPixel's defined graphic hooks
+        if (trinketPool.includes(name)) { kind = 'trinket'; type = 'ring'; }
         drawPickupPixel(cctx, { kind: kind, payload: { name: name, type: type } }, 0, 0, 24);
       }
     };
@@ -1433,7 +1675,8 @@ const allStashedItems = [];
         // CHANGE: Dynamic type check mapping so rings use 'ring' kind for drawPickupPixel rendering
         const trinketPool = ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"];
         let kind = type === 'shield' ? 'shield' : 'weapon';
-        if (trinketPool.includes(item.name) || item.type === 'ring') kind = 'ring';
+        // FIX: Route stashed grid items through 'trinket' kind to utilize specific item graphic specs
+        if (trinketPool.includes(item.name) || item.type === 'ring') kind = 'trinket';
         drawPickupPixel(cctx, { kind: kind, payload: { name: item.name, type: item.type || type } }, 0, 0, 24);
       }
     });
@@ -1539,53 +1782,20 @@ function useBomb(){
         // Damage Enemy
         const e = enemyAt(tx, ty);
         if (e) {
-           const dmg = 10 + Math.floor(state.floor * 1.5);
+           let dmg = 10 + Math.floor(state.floor * 1.5);
+           // Task 9: Apply 95% bomb damage reduction to bosses and trigger message once per target
+           if (e.boss || e.miniBoss) {
+              dmg = Math.max(1, Math.floor(dmg * 0.05));
+              if (!e._saidNoCheese) {
+                 e._saidNoCheese = true;
+                 showBanner("Nice try, no cheesing the bosses!", 3000, '#ef4444');
+              }
+           }
            e.hp -= dmg;
            spawnFloatText(dmg, e.x, e.y, '#ff0000');
            if (e.hp <= 0) {
-             
-             // --- FIX: Depth 50 Boss Cutscene Checks ---
-             if (state.floor === 50 && e.boss) {
-                // Phase 1 -> Phase 2
-                if (e.type === 'Clone' && !state.flags.depth50Phase2) {
-                   runDepth50Phase2(e); 
-                   return; // Stop here, let the cutscene handle the rest
-                }
-                // Phase 2 -> Outro
-                if (e.type === 'Mad King' && !state.flags.depth50Done) {
-                   runDepth50Outro(e); 
-                   return; // Stop here, let the cutscene handle the rest
-                }
-             }
-             // ------------------------------------------
-
-             state.enemies = state.enemies.filter(en => en !== e);
-             state.run.kills++;
-             
-             // --- FIX: Trigger Stairs if Boss ---
-             if (e.boss) {
-                spawnBossStairs(e.x, e.y);
-                log("The explosion clears the path!");
-             }
-             // ----------------------------------
-             
-             // --- FIX: Award Player XP Only (No Skill XP) ---
-             state.player.xp += (e.xp || 1);
-             
-             // Check for Level Up
-             while(state.player.xp >= state.player.next){
-               state.player.xp -= state.player.next;
-               state.player.level++;
-               state.player.next = Math.floor(state.player.next * 1.30); 
-               
-               // Trigger Level Up UI
-               state._inputLocked = true;
-               if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
-               const m = document.getElementById('lvlupModal');
-               if(m) m.style.display = 'flex';
-               SFX.levelUp();
-             }
-             // -----------------------------------------------
+              // Task 1: Route through centralized death handler to prevent challenge room softlocks
+              handleEnemyDeath(e, 'bomb');
            }
            hitCount++;
         }
@@ -1925,9 +2135,28 @@ function openLevelUpModal(){
 }
 window.openLevelUpModal = openLevelUpModal;
 
-if (btnHP){
-  btnHP.onclick = ()=>{
-    const inc = (typeof levelHpGain === 'function') ? levelHpGain() : 5;
+// Task 10: Sort stashed container items alphabetically by type classifications
+  window.sortInventoryByType = function() {
+    if (!state.inventory.stashed) return;
+    const entries = Object.entries(state.inventory.stashed);
+    entries.sort((a, b) => {
+       const typeA = window.getWeaponType ? window.getWeaponType(a[0]) : '';
+       const typeB = window.getWeaponType ? window.getWeaponType(b[0]) : '';
+       // Task 3: Sort within categories alphabetically if item types are identical
+       if (typeA !== typeB) return typeA.localeCompare(typeB);
+       return a[0].localeCompare(b[0]);
+    });
+    state.inventory.stashed = {};
+    entries.forEach(([key, val]) => {
+       state.inventory.stashed[key] = val;
+    });
+    if (typeof log === 'function') log("Inventory storage grid sorted by item category.");
+    updateInvBody();
+  };
+
+  if (btnHP){
+    btnHP.onclick = ()=>{
+      const inc = (typeof levelHpGain === 'function') ? levelHpGain() : 5;
     state.player.hpMax += inc;
 
     const before = state.player.hp|0;
@@ -3836,27 +4065,27 @@ const META_KEY = 'dc_meta_v1';
 const CLASSES = {
   // === TIER 1: BEGINNER (Intro to mechanics) ===
   Adventurer: { name:'Adventurer', desc:'A completely blank slate. Starts with Fists and no items.', unlock:true },
-  Squire:     { name:'Squire',     desc:'Shortsword, Buckler. +2 HP, +2 Stamina.', req:'kills_one', val:10, msg:'Unlock: 10 One-Handed kills.' }, 
-  Apprentice: { name:'Apprentice', desc:'Earth Staff, Pebble Spell. +5 MP.', req:'kills_magic', val:10, msg:'Unlock: 10 Magic kills.' }, 
-  Thief:      { name:'Thief',      desc:'Fists, 5 Lockpicks. +2 Stamina.', req:'locks', val:5, msg:'Unlock: Pick 5 locks.' }, 
+  Squire:     { name:'Squire',     desc:'Shortsword, Buckler, and starter Iron Gear set.', req:'kills_one', val:25, msg:'Unlock: 25 One-Handed kills.' }, 
+  Apprentice: { name:'Apprentice', desc:'Earth Staff and Pebble scroll with starter robes.', req:'kills_magic', val:25, msg:'Unlock: 25 Magic kills.' }, 
+  Thief:      { name:'Thief',      desc:'Knuckle Duster, lockpicks, and a bomb.', req:'locks', val:15, msg:'Unlock: Pick 15 locks.' }, 
 
   // === TIER 2: INTERMEDIATE (Focused playstyles) ===
-  Barbarian:  { name:'Barbarian',  desc:'Battleaxe, Potion. +10 HP, +5 Stamina, -5 MP.', req:'kills_axe', val:50, msg:'Unlock: 50 Hafted kills.' }, 
-  Mercenary:  { name:'Mercenary',  desc:'Claymore, 50g. +5 HP, +5 Stamina, -5 MP.', req:'kills_two', val:50, msg:'Unlock: 50 Two-Handed kills.' }, 
-  Ranger:     { name:'Ranger',     desc:'Shortsword, 20 Arrows, Gust. +5 Stamina, +5 MP.', req:'kills_bow', val:50, msg:'Unlock: 50 Bow kills.' }, 
-  Acolyte:    { name:'Acolyte',    desc:'Spear, Heal Spell. +5 HP, +10 MP, -2 Stamina.', req:'depth', val:15, msg:'Unlock: Reach Depth 15.' }, 
+  Barbarian:  { name:'Barbarian',  desc:'Battleaxe, healing potion, and light survival gear.', req:'kills_axe', val:100, msg:'Unlock: 100 Hafted kills.' }, 
+  Mercenary:  { name:'Mercenary',  desc:'Claymore, coin purse, and heavy chainmail set.', req:'kills_two', val:100, msg:'Unlock: 100 Two-Handed kills.' }, 
+  Ranger:     { name:'Ranger',     desc:'Shortsword, Bow, 20 Arrows, and Gust scroll.', req:'kills_bow', val:100, msg:'Unlock: 100 Bow kills.' }, 
+  Acolyte:    { name:'Acolyte',    desc:'Spear, Heal scroll, and a defensive Bone Amulet.', req:'depth', val:18, msg:'Unlock: Reach Depth 18.' }, 
 
   // === TIER 3: STRONG (Endless Mode ONLY) ===
-  Paladin:    { name:'Paladin',    desc:'Warhammer, 2 Potions. +20 HP, -5 MP.', req:'depth_endless', val:30, msg:'Unlock: Reach Depth 30 in Endless.', endless:true }, 
-  Spellblade: { name:'Spellblade', desc:'Shortsword, Ice Staff, Frost. +15 MP, +5 Stamina, -2 HP.', req:'kills_magic_endless', val:150, msg:'Unlock: 150 Magic kills in Endless.', endless:true }, 
-  Assassin:   { name:'Assassin',   desc:'Claws, 2 Bombs, 10 Picks. +10 Stam, +5 MP, -5 HP.', req:'kills_hand_endless', val:150, msg:'Unlock: 150 Hand-to-Hand kills in Endless.', endless:true }, 
-  Dragoon:    { name:'Dragoon',    desc:'Halberd, 2 Warp Stones. +10 Stamina, +5 HP, -5 MP.', req:'kills_spear_endless', val:150, msg:'Unlock: 150 Polearm kills in Endless.', endless:true }, 
+  Paladin:    { name:'Paladin',    desc:'Warhammer, supplies, and heavy Platemail armor set.', req:'depth_endless', val:40, msg:'Unlock: Reach Depth 40 in Endless.', endless:true }, 
+  Spellblade: { name:'Spellblade', desc:'Shortsword, Ice Staff, Frost scroll, and hybrid plate.', req:'kills_magic_endless', val:200, msg:'Unlock: 200 Magic kills in Endless.', endless:true }, 
+  Assassin:   { name:'Assassin',   desc:'Claws, bombs, picks, and a Ring of Haste.', req:'kills_hand_endless', val:200, msg:'Unlock: 200 Hand-to-Hand kills in Endless.', endless:true }, 
+  Dragoon:    { name:'Dragoon',    desc:'Halberd, Warp Stones, and reinforced Scale Mail.', req:'kills_spear_endless', val:200, msg:'Unlock: 200 Polearm kills in Endless.', endless:true }, 
 
   // === TIER 4: NEXT TO GOD-LIKE (Endless Mode ONLY) ===
-  Warlord:    { name:'Warlord',    desc:'Battleaxe, 2 Potions. +30 HP, +20 Stamina, -10 MP.', req:'kills_two_endless', val:250, msg:'Unlock: 250 Two-Handed kills in Endless.', endless:true }, 
-  Archmage:   { name:'Archmage',   desc:'Fire Staff, Spark, Ember, Pebble. +30 MP, +5 Stam, -10 HP.', req:'kills_magic_endless', val:250, msg:'Unlock: 250 Magic kills in Endless.', endless:true }, 
-  Phantom:    { name:'Phantom',    desc:'Fists, 50 Picks, 3 Bombs, 3 Warps. +20 Stam, +10 MP, -5 HP.', req:'locks_endless', val:150, msg:'Unlock: Pick 150 locks in Endless.', endless:true }, 
-  Vampire:    { name:'Vampire',    desc:'Vampiric Shortsword, Amulet of Life. +15 to all Stats.', req:'depth_endless', val:50, msg:'Unlock: Reach Depth 50 in Endless.', endless:true }
+  Warlord:    { name:'Warlord',    desc:'Battleaxe, potions, and elite Dread/Plate protection armor.', req:'kills_two_endless', val:400, msg:'Unlock: 400 Two-Handed kills in Endless.', endless:true }, 
+  Archmage:   { name:'Archmage',   desc:'Fire Staff, 3 element spells, robes, and a Silver Chain.', req:'kills_magic_endless', val:400, msg:'Unlock: 400 Magic kills in Endless.', endless:true }, 
+  Phantom:    { name:'Phantom',    desc:'Fists, massive supply stash, and a Thief\'s Band ring.', req:'locks_endless', val:200, msg:'Unlock: Pick 200 locks in Endless.', endless:true }, 
+  Vampire:    { name:'Vampire',    desc:'Vampiric blade, Amulet of Life ring, and a Ruby Torc.', req:'depth_endless', val:75, msg:'Unlock: Reach Depth 75 in Endless.', endless:true }
 };
 
 const SOUL_UPGRADES = {
@@ -3865,7 +4094,8 @@ const SOUL_UPGRADES = {
   endurance: { name: 'Endurance', desc: '+10 Max Stamina per level.', max: 10, cost: 25 },
   vision:    { name: 'Night Owl', desc: '+1 Vision Range per level.', max: 3, cost: 75 },
   pockets:   { name: 'Prepared',  desc: 'Start with +1 Potion per level.', max: 3, cost: 150 },
-  greed:     { name: 'Greed',     desc: 'Start with +25 Gold per level.', max: 4, cost: 50 }
+  greed:     { name: 'Greed',     desc: 'Start with +25 Gold per level.', max: 4, cost: 50 },
+  backpack:  { name: 'Deep Pockets', desc: '+2 Inventory Grid Spaces per level.', max: 6, cost: 50 }
 };
 
 // Safely wire the button directly and update the label!
@@ -4353,6 +4583,9 @@ function doRestart(className){
   } else if (className === 'Vampire') {
     state.player.hpMax += 15; state.player.mpMax += 15; state.player.staminaMax += 15;
   }
+  
+  // FIX: Force structural initialization container instances for equipment slots
+  state.player.equipment = { helmet: null, chest: null, gauntlets: null, pants: null, boots: null, ring1: null, ring2: null, necklace: null };
 
   // --- Apply Soul Shop Upgrades (IF NOT TUTORIAL) ---
   const meta = loadMeta();
@@ -4401,42 +4634,104 @@ function doRestart(className){
   if (className === 'Squire') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.weapons['Buckler'] = 1; equipShield('Buckler');
+    state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
+    state.player.equipment.chest = { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.inventory.potions = 1;
   } else if (className === 'Apprentice') {
     state.inventory.weapons['Earth Staff'] = 1; equipWeaponByName('Earth Staff');
     state.spells.push({name:'Pebble', cost:1, tier:1}); state.equippedSpell = state.spells[0];  
+    state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.inventory.tonics = 1;
   } else if (className === 'Thief') {
-    state.inventory.lockpicks = 5;
+    state.inventory.weapons['Knuckle Duster'] = 1; equipWeaponByName('Knuckle Duster');
+    state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.inventory.lockpicks = 5; state.inventory.bombs = 1;
   // TIER 2
   } else if (className === 'Barbarian') {
     state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2, maxStamina: 3 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
     state.inventory.potions = 1;
   } else if (className === 'Mercenary') {
     state.inventory.weapons['Claymore'] = 1; equipWeaponByName('Claymore');
+    state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
+    state.player.equipment.chest = { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4 } };
+    state.player.equipment.gauntlets = { name: 'Reinforced Mitts', type: 'gauntlets', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.pants = { name: 'Chainmail Chausses', type: 'pants', stats: { defense: 4 } };
+    state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.gold = 50; 
   } else if (className === 'Ranger') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.arrows = 20; state.player.bow.loaded = 1;
     state.spells.push({name:'Gust', cost:2, tier:1}); state.equippedSpell = state.spells[0];
+    state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2, maxStamina: 3 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
   } else if (className === 'Acolyte') {
     state.inventory.weapons['Spear'] = 1; equipWeaponByName('Spear');
     state.spells.push({name:'Heal', cost:4, tier:1}); state.equippedSpell = state.spells[0];
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.necklace = { name: 'Bone Amulet', type: 'necklace', stats: { hpRegen: 1 } };
+    state.inventory.potions = 1; state.inventory.tonics = 1;
   // TIER 3
   } else if (className === 'Paladin') {
     state.inventory.weapons['Warhammer'] = 1; equipWeaponByName('Warhammer');
-    state.inventory.potions = 2; 
+    state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
+    state.player.equipment.chest = { name: 'Platemail Heavy', type: 'chest', stats: { defense: 9 } };
+    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3, attack: 1 } };
+    state.player.equipment.pants = { name: 'Plate Greaves', type: 'pants', stats: { defense: 6 } };
+    state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
+    state.inventory.potions = 2; state.inventory.gold = 50;
   } else if (className === 'Spellblade') {
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.weapons['Ice Staff'] = 1; 
     state.spells.push({name:'Frost', cost:3, tier:1}); state.equippedSpell = state.spells[0];
+    state.player.equipment.helmet = { name: 'Steel Visor', type: 'helmet', stats: { defense: 5 } };
+    state.player.equipment.chest = { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4 } };
+    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3, attack: 1 } };
+    state.player.equipment.pants = { name: 'Chainmail Chausses', type: 'pants', stats: { defense: 4 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.inventory.potions = 1; state.inventory.tonics = 1;
   } else if (className === 'Assassin') {
     state.inventory.weapons['Claws'] = 1; equipWeaponByName('Claws');
+    state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2, maxStamina: 3 } };
+    state.player.equipment.boots = { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5, maxStamina: 8 } };
+    state.player.equipment.ring1 = { name: 'Ring of Haste', type: 'ring', stats: { maxStamina: 2 } };
     state.inventory.bombs = 2; state.inventory.lockpicks = 10;
   } else if (className === 'Dragoon') {
     state.inventory.weapons['Halberd'] = 1; equipWeaponByName('Halberd');
+    state.player.equipment.helmet = { name: 'Steel Visor', type: 'helmet', stats: { defense: 5 } };
+    state.player.equipment.chest = { name: 'Scale Mail', type: 'chest', stats: { defense: 6 } };
+    state.player.equipment.gauntlets = { name: 'Plate Gauntlets', type: 'gauntlets', stats: { defense: 3, attack: 1 } };
+    state.player.equipment.pants = { name: 'Plate Greaves', type: 'pants', stats: { defense: 6 } };
+    state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.warpStones = 2; 
   // TIER 4
   } else if (className === 'Warlord') {
     state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
+    state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
+    state.player.equipment.chest = { name: 'Platemail Heavy', type: 'chest', stats: { defense: 9 } };
+    state.player.equipment.gauntlets = { name: 'Dread Bracers', type: 'gauntlets', stats: { defense: 5, attack: 3 } };
+    state.player.equipment.pants = { name: 'Plate Greaves', type: 'pants', stats: { defense: 6 } };
+    state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.potions = 2; 
   } else if (className === 'Archmage') {
     state.inventory.weapons['Fire Staff'] = 1; equipWeaponByName('Fire Staff');
@@ -4444,12 +4739,27 @@ function doRestart(className){
     state.spells.push({name:'Spark', cost:1, tier:1}); 
     state.spells.push({name:'Pebble', cost:1, tier:1}); 
     state.equippedSpell = state.spells[0];  
+    state.player.equipment.helmet = { name: 'Mythril Crown', type: 'helmet', stats: { defense: 7, maxMp: 15 } };
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
+    state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2, maxStamina: 4 } };
+    state.player.equipment.necklace = { name: 'Silver Chain', type: 'necklace', stats: { maxMp: 8 } };
+    state.inventory.tonics = 3;
   } else if (className === 'Phantom') {
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
+    state.player.equipment.boots = { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5, maxStamina: 8 } };
+    state.player.equipment.ring1 = { name: "Thief's Band", type: 'ring', stats: { maxStamina: 0 } };
     state.inventory.lockpicks = 50;
     state.inventory.bombs = 3; state.inventory.warpStones = 3;
   } else if (className === 'Vampire') {
     state.inventory.weapons['Vampiric Shortsword'] = 1; equipWeaponByName('Vampiric Shortsword');
-    state.inventory.trinkets = {'Amulet of Life': 1}; // Note: Will require player to equip via inventory, but puts it in their bag!
+    state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1, maxMp: 5 } };
+    state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
+    state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1, maxStamina: 2 } };
+    state.player.equipment.necklace = { name: 'Ruby Torc', type: 'necklace', stats: { attack: 3, maxHp: 15 } };
+    state.player.equipment.ring1 = { name: 'Amulet of Life', type: 'ring', stats: { hpRegen: 1 } };
+    state.inventory.gold = 100;
   }
 
 // CHANGE: Calculate and preserve baseline class stat deltas to protect negative modifications from reset loops
@@ -4812,7 +5122,10 @@ function isInventoryFull() {
     const managedCount = state.inventory.stashed?.[name]?.length || 0;
     if (qty > managedCount) total += (qty - managedCount);
   }
-  return total >= 30; // 30 is the max size cap of the inventory grid storage layout
+  const m = typeof loadMeta === 'function' ? loadMeta() : {};
+  const prefix = (state.gameMode === 'endless') ? 'endless_upg_' : 'upg_';
+  const maxSlots = 30 + ((m[prefix + 'backpack'] || 0) * 2);
+  return total >= maxSlots; // 30 is the max size cap of the inventory grid storage layout
 }
 
 window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
@@ -4850,7 +5163,10 @@ window.openWeaponSwapModal = function(newItemPayload, pickupKey, x, y) {
   const msg = document.getElementById('swapMsg');
   
   // CHANGE: Enforce generalized grid capacity reporting messages
-  msg.textContent = `Your inventory is full (30/30). Scrap an old item to take the new one?`;
+  const mMetaSwap = typeof loadMeta === 'function' ? loadMeta() : {};
+  const prefSwap = (state.gameMode === 'endless') ? 'endless_upg_' : 'upg_';
+  const currentMaxSlots = 30 + ((mMetaSwap[prefSwap + 'backpack'] || 0) * 2);
+  msg.textContent = `Your inventory is full (${currentMaxSlots}/${currentMaxSlots}). Scrap an old item to take the new one?`;
   list.innerHTML = '';
 
   // 1. Helper to format stats (Shield/Armor aware)
@@ -5458,16 +5774,17 @@ function equipShield(variant = 'Standard'){
       if (state.inventory.weapons[variant] <= 0) delete state.inventory.weapons[variant];
   }
 
-  // 3. Set Stats
+// 3. Set Stats
   let maxDur = 20; 
   let chance = 0.20;
 
-  if (variant.includes('Buckler'))      { maxDur = 15; chance = 0.15; }
-  else if (variant.includes('Tower'))   { maxDur = 35; chance = 0.35; }
-  else if (variant.includes('Ancient')) { maxDur = 25; chance = 0.25; }
-  else if (variant.includes('Kite'))    { maxDur = 20; chance = 0.20; }
+  // Task 5: Balance maximum shield durabilities inversely against their protective block modifiers
+  if (variant.includes('Tower'))        { maxDur = 10; chance = 0.35; }
+  else if (variant.includes('Ancient')) { maxDur = 15; chance = 0.25; }
+  else if (variant.includes('Buckler')) { maxDur = 30; chance = 0.15; }
+  else                                  { maxDur = 20; chance = 0.20; }
 
-  state.player.shield = { name: variant, dur: maxDur };
+  state.player.shield = { name: variant, dur: maxDur, durMax: maxDur };
   state.player.shieldName = variant;
   state.player.blockChance = chance;
   
