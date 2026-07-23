@@ -2177,45 +2177,41 @@ function getSpellStats(name){
   const t    = currentSpellTier(name);
   const base = baseForTier(name, t);
 
-// New: Heal uses percentage instead of flat values
-    if (name === 'Heal'){
-      // Scale with Magic Skill: +2% Heal per magic bonus point (approx +1% per level)
-      const mag = (typeof magicPowerBonus === 'function' ? magicPowerBonus() : 0) * 0.02;
-      const pct = Math.max(0, HEAL_PCT_BASE + (t - 1) * HEAL_PCT_PER_TIER + mag);
-      return {
-        cost:  base.cost,   // still scales +1 MP per tier via baseForTier
-        pct,                 // e.g., 0.20, 0.26, 0.32...
-        range: 0
-      };
-    }
+  if (name === 'Heal'){
+    const mag = (typeof magicPowerBonus === 'function' ? magicPowerBonus() : 0) * 0.02;
+    const pct = Math.max(0, HEAL_PCT_BASE + (t - 1) * HEAL_PCT_PER_TIER + mag);
+    return { cost: base.cost, pct, range: 0 };
+  }
 
-// Offensive spells: add Empower perk damage
-        // Note: Scroll Upgrades and Magic Level bonuses are already calculated inside baseForTier!
-        let perkDmg = 0;
-        if (state.skills?.magic?.perks && state.skills.magic.perks['mag_a1']) {
-          perkDmg = state.skills.magic.perks['mag_a1'];
-        }
+  let perkDmg = 0;
+  if (state.skills?.magic?.perks && state.skills.magic.perks['mag_a1']) {
+    perkDmg = state.skills.magic.perks['mag_a1'];
+  }
 
-        // --- NEW: Staff Elemental Synergy ---
-        let synergyDmg = 0;
-        const w = state.player.weapon;
-        // Don't apply synergy damage to basic staff attacks
-        if (w && w.type === 'staff' && (!state.equippedSpell || !state.equippedSpell.isBasic)) {
-            const spellMap = { 'Ember': 'Fire', 'Frost': 'Ice', 'Spark': 'Lightning', 'Gust': 'Wind', 'Pebble': 'Earth', 'Acid': 'Acid', 'Water': 'Water' }; // NEW: Added Acid/Water mappings
-            const elem = spellMap[name];
-            if (elem) {
-                if (w.name.includes(elem)) {
-                    synergyDmg = 2; // Matching Element Buff
-                }
-            }
-        }
+  // --- STAFF ELEMENTAL SYNERGY ---
+      let synergyDmg = 0;
+      const w = state.player.weapon;
+      if (w && w.type === 'staff') {
+          const spellMap = { 'Ember': 'Fire', 'Frost': 'Ice', 'Spark': 'Lightning', 'Gust': 'Wind', 'Pebble': 'Earth', 'Acid': 'Acid', 'Water': 'Water' };
+          const elem = spellMap[name];
+          if (elem && w.name.includes(elem)) {
+              if (state.equippedSpell && state.equippedSpell.isBasic) {
+                  if (state._actualEquippedSpell && state._actualEquippedSpell.name === name) {
+                      synergyDmg = 3;
+                  }
+              } else {
+                  // Full Spell Cast with matching staff: +3 damage boost (matches staff attack damage)
+                  synergyDmg = 3;
+              }
+          }
+      }
 
-        return {
-          cost:  base.cost,
-          min:   Math.max(1, base.baseMin + perkDmg + synergyDmg),
-          max:   Math.max(2, base.baseMax + perkDmg + synergyDmg),
-          range: base.baseRange
-        };
+  return {
+    cost:  base.cost,
+    min:   Math.max(1, base.baseMin + perkDmg + synergyDmg),
+    max:   Math.max(2, base.baseMax + perkDmg + synergyDmg),
+    range: base.baseRange
+  };
 }
 
 
@@ -2635,6 +2631,25 @@ function recomputeWeapon(){
   let flat = state.globalWeaponFlatBonus || 0;
   if (w.type === 'staff') flat = 0; 
   // ----------------------------------------------------------------
+
+  // Staff and Spell Synergy Boost
+  if (w.type === 'staff') {
+    const staffSpellMap = {
+      'Fire': 'Ember', 'Ice': 'Frost', 'Lightning': 'Spark',
+      'Wind': 'Gust', 'Earth': 'Pebble', 'Acid': 'Acid', 'Water': 'Water'
+    };
+    const eqSpell = state.equippedSpell;
+    if (eqSpell) {
+      for (const [elem, spName] of Object.entries(staffSpellMap)) {
+        if (w.name.includes(elem) && eqSpell.name === spName) {
+          const st = getSpellStats(spName);
+          w.min = st.min;
+          w.max = st.max;
+          return;
+        }
+      }
+    }
+  }
 
   const bonus = skillDamageBonus(w.type) + flat;
 

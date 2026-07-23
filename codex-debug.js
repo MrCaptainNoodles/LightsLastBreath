@@ -755,6 +755,13 @@ Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Ma
   Art_Flurry:   { name:'Art: Flurry',   desc:'(Fists) Unleashes three rapid strikes.', seen:false, activated:0 },
   Art_Overload: { name:'Art: Overload', desc:'(Staff) Unleashes a massive wave of raw magic.', seen:false, activated:0 },
 
+  // --- SPELL COMBOS ---
+  Combo_Electrocute: { name:'Combo: Electrocute', desc:'Spark or Lightning on a Slippery target deals double damage.', seen:false, activated:0 },
+  Combo_FlashFreeze: { name:'Combo: Flash Freeze', desc:'Frost or Ice on a Slippery target stuns for 3 turns.', seen:false, activated:0 },
+  Combo_Detonation:  { name:'Combo: Toxic Detonation', desc:'Ember or Fire on a Poisoned target detonates remaining poison for burst damage.', seen:false, activated:0 },
+  Combo_Wildfire:    { name:'Combo: Wildfire', desc:'Gust or Wind on a Burning target spreads flames to nearby foes.', seen:false, activated:0 },
+  Combo_Shatter:     { name:'Combo: Shatter', desc:'Pebble or Earth on a Slowed target deals double damage.', seen:false, activated:0 },
+
   // --- NEW: Trinkets ---
   'Ring of Haste':  { name:'Ring of Haste',  desc:'Increases Max Stamina by 2.', picked:0, seen:false },
   'Amulet of Life': { name:'Amulet of Life', desc:'Slowly regenerates HP over time.', picked:0, seen:false },
@@ -911,6 +918,7 @@ function renderCodexUI(){
       title: 'Collection',
       groups: [
         { subtitle: 'Weapon Arts', keys: ['Art_Cleave', 'Art_Hurl','Art_Pierce', 'Art_Backstab', 'Art_Flurry', 'Art_Overload'] },
+        { subtitle: 'Spell Combos', keys: ['Combo_Electrocute', 'Combo_FlashFreeze', 'Combo_Detonation', 'Combo_Wildfire', 'Combo_Shatter'] },
         { subtitle: 'Weapon Traits', keys: ['Sharp', 'Heavy', 'Vampiric', 'Ancient'] },
         { subtitle: 'Trinkets', keys: ['Ring of Haste', 'Amulet of Life', "Thief's Band", "Warrior's Ring", "Stone Charm", "Scholar's Lens"] },
         { subtitle: 'Cursed Idols', keys: ['Idol of War', 'Idol of Stone', 'Idol of Greed', 'Idol of Rot'] }

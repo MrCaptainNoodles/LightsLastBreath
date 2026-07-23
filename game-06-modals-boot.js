@@ -1585,7 +1585,7 @@ const allStashedItems = [];
 
       // FIX: Added cursor pointer style and inline onclick handler to dynamically assign the selected spell and refresh inventory + combat HUD UIs
       spellsHtml += `
-        <div onclick="state.equippedSpell = state.spells[${sIdx}]; updateInvBody(); typeof updateEquipUI === 'function' && updateEquipUI();" style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 6px; border: ${borderStyle}; background-color: ${isEquipped ? 'rgba(255,255,255,0.04)' : 'transparent'}; cursor: pointer;" title="Click to equip ${s.name}">
+        <div onclick="state.equippedSpell = state.spells[${sIdx}]; if (typeof recomputeWeapon === 'function') recomputeWeapon(); updateInvBody(); typeof updateEquipUI === 'function' && updateEquipUI();" style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 6px; border: ${borderStyle}; background-color: ${isEquipped ? 'rgba(255,255,255,0.04)' : 'transparent'}; cursor: pointer;" title="Click to equip ${s.name}">
           <canvas id="inv_spell_canv_${sIdx}" width="24" height="24" style="width:24px; height:24px; display:block; flex-shrink:0;"></canvas>
           <div style="display: flex; flex-direction: column; overflow: hidden; pointer-events: none;">
             <span style="font-weight: bold; color: ${isEquipped ? highlightColor : '#dfe7f2'}; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;">${s.name}${potentialText}</span>
@@ -2104,6 +2104,7 @@ function updateSpellBody(){
         state.equippedSpell = s;
         log(`Equipped ${s.name}.`);
       }
+      if (typeof recomputeWeapon === 'function') recomputeWeapon();
       updateEquipUI();
       updateSpellBody();
     };
@@ -3889,6 +3890,7 @@ if (state.gameMode === 'tutorial' && (state._tutGotArrows || state._tutArrowsPic
        const next = state.spells[(idx + 1) % state.spells.length];
        state.equippedSpell = next;
        
+       if (typeof recomputeWeapon === 'function') recomputeWeapon();
        updateEquipUI();
        spawnFloatText(next.name, state.player.x, state.player.y, '#60a5fa'); // Blue text
        SFX.pickup(); // Click sound
@@ -4836,6 +4838,7 @@ function doRestart(className){
   enemyStep();
   draw?.();
   updateBars();
+  if (typeof recomputeWeapon === 'function') recomputeWeapon();
   updateEquipUI();
   renderSkills && renderSkills();
   startRunTimer();
@@ -5684,20 +5687,24 @@ function useStaff(w) {
                     t.slipperyTicks = 0;
                     spawnFloatText("ELECTROCUTE!", t.x, t.y - 0.5, '#fde047');
                     log(`Lightning strikes the water! Electrocute!`);
+                    if (typeof unlockCodex === 'function') unlockCodex('Combo_Electrocute', true);
                 } else if (w.name.includes('Ice') && t.slipperyTicks > 0) {
                     if (typeof applyStun === 'function') applyStun(t, 3);
                     t.slipperyTicks = 0;
                     spawnFloatText("FLASH FREEZE!", t.x, t.y - 0.5, '#38bdf8');
                     log(`The water instantly freezes solid!`);
+                    if (typeof unlockCodex === 'function') unlockCodex('Combo_FlashFreeze', true);
                 } else if (w.name.includes('Fire') && t.poisonTicks > 0) {
                     dmg += t.poisonTicks * 3;
                     t.poisonTicks = 0;
                     t.poisoned = false;
                     spawnFloatText("DETONATION!", t.x, t.y - 0.5, '#a3e635');
                     log(`The poison gas ignites! Toxic Detonation!`);
+                    if (typeof unlockCodex === 'function') unlockCodex('Combo_Detonation', true);
                 } else if (w.name.includes('Wind') && t.burnTicks > 0) {
                     spawnFloatText("WILDFIRE!", t.x, t.y - 0.5, '#f97316');
                     log(`The wind fans the flames into a Wildfire!`);
+                    if (typeof unlockCodex === 'function') unlockCodex('Combo_Wildfire', true);
                     state.enemies.forEach(en => {
                         if (en !== t && Math.abs(en.x - t.x) <= 1 && Math.abs(en.y - t.y) <= 1) {
                             en.burning = true;
@@ -5710,6 +5717,7 @@ function useStaff(w) {
                     t.slowTicks = 0;
                     spawnFloatText("SHATTER!", t.x, t.y - 0.5, '#facc15');
                     log(`The frozen enemy shatters!`);
+                    if (typeof unlockCodex === 'function') unlockCodex('Combo_Shatter', true);
                 }
                 // --------------------------------
 

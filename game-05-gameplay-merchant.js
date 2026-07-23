@@ -2344,9 +2344,11 @@ function attack(){
         if (staffSpell) {
             // Temporarily stash equipped spell, route staff shot through cast engine to hook statuses & combos seamlessly
             const oldSpell = state.equippedSpell;
+            state._actualEquippedSpell = oldSpell; // Preserve active spell reference for synergy check
             state.equippedSpell = staffSpell;
             cast();
             state.equippedSpell = oldSpell;
+            state._actualEquippedSpell = null; // Reset temporary reference
             
             // --- FIX: Ensure the UI updates to reflect the restored equipped spell ---
             if (typeof updateEquipUI === 'function') updateEquipUI();
@@ -3352,13 +3354,14 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
   // Staff Elemental Boost
   const wName = state.player.weapon ? state.player.weapon.name : '';
   if (!spell.isBasic) {
-      if (wName.includes('Fire') && spell.name === 'Ember') { dmg+=3; log('Fire Staff boost!'); }
-      else if (wName.includes('Light') && spell.name === 'Spark') { dmg+=3; log('Lightning Staff boost!'); }
-      else if (wName.includes('Ice') && spell.name === 'Frost') { dmg+=3; log('Ice Staff boost!'); }
-      else if (wName.includes('Wind') && spell.name === 'Gust') { dmg+=3; log('Wind Staff boost!'); }
-      else if (wName.includes('Earth') && spell.name === 'Pebble') { dmg+=3; log('Earth Staff boost!'); }
-      else if (wName.includes('Acid') && spell.name === 'Acid') { dmg+=3; log('Acid Staff boost!'); }
-      else if (wName.includes('Water') && spell.name === 'Water') { dmg+=3; log('Water Staff boost!'); }
+      // FIX: Removed runtime dmg+=3 to prevent double-counting now that +5 is included in getSpellStats()
+      if (wName.includes('Fire') && spell.name === 'Ember') { log('Fire Staff boost!'); }
+      else if (wName.includes('Light') && spell.name === 'Spark') { log('Lightning Staff boost!'); }
+      else if (wName.includes('Ice') && spell.name === 'Frost') { log('Ice Staff boost!'); }
+      else if (wName.includes('Wind') && spell.name === 'Gust') { log('Wind Staff boost!'); }
+      else if (wName.includes('Earth') && spell.name === 'Pebble') { log('Earth Staff boost!'); }
+      else if (wName.includes('Acid') && spell.name === 'Acid') { log('Acid Staff boost!'); }
+      else if (wName.includes('Water') && spell.name === 'Water') { log('Water Staff boost!'); }
   }
   
   if (isEffectActive('ArcaneFlux')) dmg = Math.ceil(dmg * 1.5);
@@ -3399,11 +3402,26 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
   }
   // --------------------------------
 
+// Dynamic element color for particles and damage numbers
+  const elemColor = (typeof projectileColorForMagic === 'function') ? projectileColorForMagic(spell.name) : '#60a5fa';
+
   target.hp -= dmg;
   if (typeof flashEnemy === 'function') flashEnemy(target, 'red'); 
-  spawnParticles(target.x, target.y, '#60a5fa', 6);
+  spawnParticles(target.x, target.y, elemColor, 6);
   
-  spawnFloatText(dmg, target.x, target.y, '#60a5fa');
+  spawnFloatText(dmg, target.x, target.y, elemColor);
+
+  // --- NEW: Staff & Spell Synergy Floating Text ---
+  const spellElemMap = { 'Ember': 'Fire', 'Frost': 'Ice', 'Spark': 'Lightning', 'Gust': 'Wind', 'Pebble': 'Earth', 'Acid': 'Acid', 'Water': 'Water' };
+  const reqElem = spellElemMap[spell.name];
+  const activeWep = state.player.weapon;
+  const isStaffSynergy = activeWep && activeWep.type === 'staff' && reqElem && activeWep.name.includes(reqElem) &&
+      (!spell.isBasic || (state._actualEquippedSpell && state._actualEquippedSpell.name === spell.name));
+
+  if (isStaffSynergy) {
+      spawnFloatText("SYNERGY!", target.x, target.y - 0.5, '#f9d65c');
+  }
+  // ------------------------------------------------
 
   
   // --- NEW: Elemental Spell Effects (25% Proc Chance) ---
@@ -3535,7 +3553,7 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
           spawnFloatText("ECHO!", target.x, target.y, '#a78bfa');
           const echoDmg = Math.ceil(dmg / 2);
           target.hp -= echoDmg;
-          spawnFloatText(echoDmg, target.x, target.y, '#60a5fa');
+          spawnFloatText(echoDmg, target.x, target.y, elemColor);
           if (target.hp <= 0) handleEnemyDeath(target, 'magic');
           
           spawnProjectileEffect({
@@ -3547,7 +3565,7 @@ if (state.skills?.magic?.perks?.['mag_c7']) state.player._weaverSpell = spell.na
                        spawnFloatText("RESONANCE!", target.x, target.y, '#c084fc');
                        const resDmg = Math.ceil(echoDmg / 2);
                        target.hp -= resDmg;
-                       spawnFloatText(resDmg, target.x, target.y, '#60a5fa');
+                       spawnFloatText(resDmg, target.x, target.y, elemColor);
                        if (target.hp <= 0) handleEnemyDeath(target, 'magic');
                        spawnProjectileEffect({
                           kind: 'magic', element: spell.name, fromX: state.player.x, fromY: state.player.y, toX: target.x, toY: target.y,
