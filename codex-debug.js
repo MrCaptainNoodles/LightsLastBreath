@@ -475,6 +475,23 @@ document.getElementById('dbgSpawnCleric')?.addEventListener('click', ()=>{
    hideDebug?.();
 });
 
+// --- NEW: Secret Fishing Oasis Debug Teleport ---
+let fishPondBtn = document.getElementById('dbgFishingPond');
+if (!fishPondBtn) {
+   fishPondBtn = document.createElement('button');
+   fishPondBtn.id = 'dbgFishingPond';
+   fishPondBtn.className = 'btn';
+   fishPondBtn.textContent = 'Teleport to Secret Fishing Oasis';
+   fishPondBtn.style.borderColor = '#0284c7';
+   document.getElementById('dbgSpawnCleric')?.parentNode?.appendChild(fishPondBtn);
+}
+fishPondBtn?.addEventListener('click', () => {
+   if (typeof window.genFishingPond === 'function') {
+      window.genFishingPond();
+      hideDebug?.();
+   }
+});
+
 
 
 const stairsBtn = document.getElementById('dbgSpawnStairs');
@@ -793,6 +810,17 @@ Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Ma
   Note_14: { name:'Torn Page 14', desc:'" "', seen:false },
   Note_15: { name:'Torn Page15', desc:'" "', seen:false },
   
+  // --- FISHING OASIS & FISH ---
+  FishingOasis: { name:'Secret Fishing Oasis', desc:'A serene sanctuary filled with rare aquatic life hidden deep within the dungeon.', seen:false },
+  Fish_Dungeonsnout: { name:'Dungeonsnout', desc:'Common cave fish with a prominent long snout.', seen:false, caught:0 },
+  Fish_Slimefin: { name:'Slimefin', desc:'Common dripping gelatinous green fish.', seen:false, caught:0 },
+  Fish_GlowingTetra: { name:'Glowing Tetra', desc:'Uncommon cyan fish that illuminates dark waters.', seen:false, caught:0 },
+  Fish_IronscaleBream: { name:'Ironscale Bream', desc:'Uncommon armored fish with metallic scales.', seen:false, caught:0 },
+  Fish_AetherEel: { name:'Aether Eel', desc:'Rare undulating electric purple eel.', seen:false, caught:0 },
+  Fish_ShadowBass: { name:'Shadow Bass', desc:'Rare deep dark bass with bioluminescent markings.', seen:false, caught:0 },
+  Fish_VoidLeviathan: { name:'Void Leviathan', desc:'Legendary cosmic dragon-fish of the abyss.', seen:false, caught:0 },
+  Fish_GoldenCarp: { name:'Golden Carp', desc:'Legendary radiant carp shimmering with pure gold.', seen:false, caught:0 },
+
   // --- BASE EQUIPMENT ---
   Wep_Shortsword: { name:'Shortsword', desc:'', seen:false },
   Wep_Claymore: { name:'Claymore', desc:'', seen:false },
@@ -873,10 +901,13 @@ function unlockCodex(key, increment=false){
        else if (entry.reaps !== undefined) {
          entry.reaps = (entry.reaps || 0) + 1;
        }
+       else if (entry.caught !== undefined) {
+         entry.caught = (entry.caught || 0) + 1;
+       }
     }
     saveCodex(c);
   }
-}s
+}
 
 function renderCodexUI(){
   const list = document.getElementById('codexContent');
@@ -887,6 +918,7 @@ function renderCodexUI(){
   list.style.flexDirection = 'column';
   
   const c = loadCodex();
+  const hasFoundOasis = !!(c['FishingOasis'] && c['FishingOasis'].seen) || localStorage.getItem('foundFishingOasis') === '1';
 
   // 1. Define Categories (Clustered with Sub-groups)
   const cats = [
@@ -940,6 +972,16 @@ function renderCodexUI(){
      cats[2].groups.push({ subtitle: 'Omens', keys: omenKeys });
   }
 
+  // Conditionally unlock the Fish category tab if the player has discovered the Fishing Oasis
+  if (hasFoundOasis) {
+     cats.push({
+       title: 'Fish',
+       groups: [
+         { subtitle: 'Oasis Species', keys: ['Fish_Dungeonsnout', 'Fish_Slimefin', 'Fish_GlowingTetra', 'Fish_IronscaleBream', 'Fish_AetherEel', 'Fish_ShadowBass', 'Fish_VoidLeviathan', 'Fish_GoldenCarp'] }
+       ]
+     });
+  }
+
   // 2. Create Scrollable Tab Row
   const tabRow = document.createElement('div');
   tabRow.style.cssText = "display:flex; gap:8px; overflow-x:auto; padding:4px 4px 12px 4px; border-bottom:1px solid rgba(255,255,255,0.1); margin-bottom:10px; flex-shrink:0;";
@@ -990,6 +1032,7 @@ function renderCodexUI(){
              if (data && data.seen) {
                  let statHtml = '';
                  if (data.kills !== undefined) statHtml = `<div style="font-size:12px; color:#ef4444; font-weight:700;">Kills: ${data.kills}</div>`;
+                 else if (data.caught !== undefined) statHtml = `<div style="font-size:12px; color:#38bdf8; font-weight:700;">Caught: ${data.caught}</div>`;
                  else if (data.picked !== undefined) statHtml = `<div style="font-size:12px; color:#60a5fa; font-weight:700;">Picked: ${data.picked}</div>`;
                  else if (data.activated !== undefined) {
                      const label = (k === 'Gold_Well') ? 'Donated' : 'Activated';

@@ -1,5 +1,6 @@
 // ====== Gameplay ======
 window.awardSkillXP = function(type, amount) {
+  if (state._inFishingPond) return;
     if (typeof ensureSkill !== 'function') return;
     ensureSkill(type);
     const s = state.skills[type];
@@ -212,6 +213,179 @@ function collectIfPickup(){
   }
 }
 
+// ====== Fishing Mini-Game Physics & UI Engine ======
+const FISH_SPECIES = [
+  { name: 'Dungeonsnout', rarity: 'Common', minSpeed: 0.5, maxSpeed: 1.2, weight: 40 },
+  { name: 'Slimefin', rarity: 'Common', minSpeed: 0.8, maxSpeed: 1.5, weight: 30 },
+  { name: 'Glowing Tetra', rarity: 'Uncommon', minSpeed: 1.2, maxSpeed: 2.0, weight: 15 },
+  { name: 'Ironscale Bream', rarity: 'Uncommon', minSpeed: 1.5, maxSpeed: 2.5, weight: 10 },
+  { name: 'Aether Eel', rarity: 'Rare', minSpeed: 2.0, maxSpeed: 3.5, weight: 3 },
+  { name: 'Shadow Bass', rarity: 'Rare', minSpeed: 2.5, maxSpeed: 4.0, weight: 1.5 },
+  { name: 'Void Leviathan', rarity: 'Legendary', minSpeed: 3.5, maxSpeed: 5.5, weight: 0.4 },
+  { name: 'Golden Carp', rarity: 'Legendary', minSpeed: 4.0, maxSpeed: 6.0, weight: 0.1 }
+];
+
+// Global pointer listeners for touch & mouse reeling responsiveness
+if (!window._fishingInputWired) {
+  window._fishingInputWired = true;
+  window.addEventListener('pointerdown', () => {
+    if (state.fishing && state.fishing.active) state._fishingThrust = true;
+  });
+  window.addEventListener('pointerup', () => {
+    if (state.fishing && state.fishing.active) state._fishingThrust = false;
+  });
+}
+
+window.startFishing = function() {
+  if (!state.fishing) return;
+  if (state.fishing.active) return; // Prevent re-triggering while already fishing
+  state.fishing.active = true;
+  state.fishing.phase = 'waiting';
+  state.fishing.progress = 30;
+  state.fishing.tension = 0;
+  state.fishing.barPos = 50;
+  state.fishing.fishPos = 50;
+  state.fishing.fishTarget = 50;
+  state._inputLocked = true;
+
+  const rod = state.rodLevel || 1;
+  state.fishing.barSize = 34 + (rod * 8); // Reduced catch bar size for a tighter catch window
+  
+  const waitTime = Math.max(1000, (3500 - rod * 500) + Math.random() * 2000);
+  log("Casting line into the water...");
+
+  setTimeout(() => {
+    if (!state.fishing.active) return;
+    state.fishing.phase = 'hooked';
+    spawnFloatText("BITE!", state.player.x, state.player.y, '#facc15');
+    if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
+
+    let totalW = FISH_SPECIES.reduce((acc, f) => acc + f.weight, 0);
+    let roll = Math.random() * totalW;
+    let chosen = FISH_SPECIES[0];
+    for (const f of FISH_SPECIES) {
+      roll -= f.weight;
+      if (roll <= 0) { chosen = f; break; }
+    }
+    state.fishing.currentFish = chosen;
+
+    setTimeout(() => {
+      if (state.fishing.phase === 'hooked') {
+        state.fishing.phase = 'reeling';
+        window.updateFishingLoop();
+      }
+    }, 800);
+  }, waitTime);
+};
+
+window.updateFishingLoop = function() {
+  if (!state.fishing || !state.fishing.active || state.fishing.phase !== 'reeling') return;
+
+  const f = state.fishing;
+  const rod = state.rodLevel || 1;
+  const fish = f.currentFish;
+
+  // 1. Player Catch Bar Thrust
+  const isHolding = state.keys?.['e'] || state.keys?.[' '] || state._fishingThrust;
+  if (isHolding) {
+    f.barPos = Math.max(0, f.barPos - 2.2);
+  } else {
+    f.barPos = Math.min(100, f.barPos + 1.8);
+  }
+
+  // 2. Fish AI Movement
+  if (Math.random() < 0.06) { // Increased re-targeting frequency for more unpredictable fish AI
+    f.fishTarget = Math.random() * 90;
+  }
+  const speed = (fish.minSpeed + Math.random() * (fish.maxSpeed - fish.minSpeed)) * 0.85 * (rod === 4 ? 0.8 : 1.0); // Increased fish movement velocity
+  if (f.fishPos < f.fishTarget) f.fishPos = Math.min(100, f.fishPos + speed);
+  else if (f.fishPos > f.fishTarget) f.fishPos = Math.max(0, f.fishPos - speed);
+
+  // 3. Catch Evaluation
+  const barTop = f.barPos;
+  const barBottom = f.barPos + (f.barSize / 1.8);
+  const inside = (f.fishPos >= barTop && f.fishPos <= barBottom);
+
+  const progRate = rod >= 3 ? 0.95 : 0.70; // Reduced progress fill rate
+  if (inside) {
+    f.progress = Math.min(100, f.progress + progRate);
+    f.tension = Math.max(0, f.tension - 0.6); // Slower tension relief
+  } else {
+    f.progress = Math.max(0, f.progress - 0.25); // Faster progress decay when outside the bar
+    f.tension = Math.min(100, f.tension + (rod >= 2 ? 0.35 : 0.5)); // Faster line tension accumulation
+  }
+
+  // 4. Win / Loss Resolution
+  if (f.progress >= 100) {
+    f.active = false;
+    f.phase = 'result';
+    state._inputLocked = false;
+    state.inventory.fish = state.inventory.fish || {};
+    state.inventory.fish[fish.name] = (state.inventory.fish[fish.name] || 0) + 1;
+    if (typeof unlockCodex === 'function') unlockCodex('Fish_' + fish.name.replace(/ /g, ''), true);
+    log(`CAUGHT! You reeled in a ${fish.name} (${fish.rarity})!`);
+    spawnFloatText("CAUGHT!", state.player.x, state.player.y, '#38bdf8');
+    if (typeof SFX !== 'undefined' && SFX.levelUp) SFX.levelUp();
+    if (typeof draw === 'function') draw();
+    return;
+  }
+  if (f.tension >= 100) {
+    f.active = false;
+    f.phase = 'result';
+    state._inputLocked = false;
+    log("SNAP! The line broke and the fish escaped!");
+    spawnFloatText("ESCAPED!", state.player.x, state.player.y, '#ef4444');
+    if (typeof SFX !== 'undefined' && SFX.weaponBreak) SFX.weaponBreak();
+    if (typeof draw === 'function') draw();
+    return;
+  }
+
+  if (typeof draw === 'function') draw();
+  requestAnimationFrame(window.updateFishingLoop);
+};
+
+window.drawFishingMinigameUI = function(ctx) {
+  if (!state.fishing || !state.fishing.active || state.fishing.phase !== 'reeling') return;
+
+  const f = state.fishing;
+  const x = (canvas.width / (window.devicePixelRatio||1)) - 100;
+  const y = 80;
+  const h = 200, w = 30;
+
+  // Track Container
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+
+  // Catch Zone (Player Bar)
+  const barY = y + (f.barPos / 100) * (h - f.barSize);
+  ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+  ctx.fillRect(x + 2, barY, w - 4, f.barSize);
+  ctx.strokeStyle = '#7dd3fc';
+  ctx.strokeRect(x + 2, barY, w - 4, f.barSize);
+
+  // Fish Icon
+  const fishY = y + (f.fishPos / 100) * (h - 12);
+  ctx.fillStyle = '#facc15';
+  ctx.fillRect(x + 8, fishY, 14, 10);
+
+  // Progress Bar (Green, Left Side)
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(x - 14, y, 8, h);
+  ctx.fillStyle = '#22c55e';
+  const progH = (f.progress / 100) * h;
+  ctx.fillRect(x - 14, y + (h - progH), 8, progH);
+
+  // Tension Bar (Red, Right Side)
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(x + w + 6, y, 8, h);
+  ctx.fillStyle = '#ef4444';
+  const tensH = (f.tension / 100) * h;
+  ctx.fillRect(x + w + 6, y + (h - tensH), 8, tensH);
+};
+
 function tryMove(dx,dy){
   if (state.gameOver) return;
   if (state._inputLocked || state._descending) return;
@@ -243,6 +417,7 @@ function tryMove(dx,dy){
     draw(); // FIX: Call draw() to reflect facing change
     return; 
   }
+  if(t===19) { log('Water blocks the way.'); draw(); return; }
   if(enemyAt(nx,ny)) { log('An enemy blocks the way.'); draw(); return; }
   if(t===2) { log(`A door blocks the way. Press ${getInputName('interact')} to open/unlock.`); draw(); return; }
   if(t===13 || t===14) { 
@@ -1255,6 +1430,19 @@ if(inBounds(nb.x,nb.y) && state.tiles[nb.y][nb.x]===6){
     return;
   }
 
+  // --- NEW: Secret Water Fishing Interaction ---
+  const px = state.player.x, py = state.player.y;
+  const dirs = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
+  const [fdx, fdy] = dirs[state.player.facing || 'right'] || [1,0];
+  const targetTile = state.tiles[py + fdy]?.[px + fdx];
+
+  if (targetTile === 19) {
+    if (typeof window.startFishing === 'function') {
+      window.startFishing();
+      return;
+    }
+  }
+
   if(!did) log('Nothing to interact with.');
 }
 
@@ -1299,9 +1487,17 @@ function handlePropSmash(x, y) {
   // Remove prop visual and physical block
   if (state.props[k]) delete state.props[k];
   state.tiles[y][x] = 1; // Turn into floor
-  
+
   SFX.weaponBreak(); // Crunch sound
   spawnParticles(x, y, '#8b5a2b', 5); // Wood chips
+
+  // Fishing pond scenery yields no items, traps, or enemies when destroyed
+  if (state._inFishingPond) {
+    log(`You smashed the ${name}. Nothing was inside.`);
+    enemyStep();
+    draw();
+    return;
+  }
 
   const roll = Math.random();
 
@@ -1798,19 +1994,19 @@ function equipWeaponByName(name, item = null){
   if (cur && cur.stats) {
     // Task 1: Removed manual flat bonus deduction since getEquipmentBonus dynamically reflects item removal
     // FIX: Restrict stat subtraction to explicit positive numeric validations to stop leakage
-    const hpBonus = Number(cur.stats.maxHp);
+    const hpBonus = Number(cur.stats?.maxHp || 0);
     if (!isNaN(hpBonus) && hpBonus > 0) {
       state.player.hpMax = Math.max(5, state.player.hpMax - hpBonus);
       state.player.hp = Math.max(1, state.player.hp - hpBonus);
       state.player.hp = Math.min(state.player.hp, state.player.hpMax);
     }
-    const mpBonus = Number(cur.stats.maxMp);
+    const mpBonus = Number(cur.stats?.maxMp || 0);
     if (!isNaN(mpBonus) && mpBonus > 0) {
       state.player.mpMax = Math.max(0, state.player.mpMax - mpBonus);
       state.player.mp = Math.max(0, state.player.mp - mpBonus);
       state.player.mp = Math.min(state.player.mp, state.player.mpMax);
     }
-    const staminaBonus = Number(cur.stats.maxStamina);
+    const staminaBonus = Number(cur.stats?.maxStamina || 0);
     if (!isNaN(staminaBonus) && staminaBonus > 0) {
       state.player.staminaMax = Math.max(5, state.player.staminaMax - staminaBonus);
       state.player.stamina = Math.max(0, state.player.stamina - staminaBonus);
@@ -1821,9 +2017,16 @@ function equipWeaponByName(name, item = null){
   // Ensure stash exists
   if (!state.inventory.stashed) state.inventory.stashed = {};
 
-  // 1) Preserve the CURRENTLY EQUIPPED weapon (if it has durability and isn't Fists)
-  if (cur && cur.name !== 'Fists' && Number.isFinite(cur.durMax) && cur.dur > 0){
-    (state.inventory.stashed[cur.name] ||= []).push({ ...cur, base: { ...cur.base } });
+  // 1) Preserve the CURRENTLY EQUIPPED weapon (if it has durability or lacks durability cap, and isn't Fists)
+  if (cur && cur.name !== 'Fists' && (cur.durMax === null || cur.durMax === undefined || (Number.isFinite(cur.durMax) && cur.dur > 0))){
+    if (!state.inventory.weapons[cur.name] || state.inventory.weapons[cur.name] <= 0) {
+      state.inventory.weapons[cur.name] = 1;
+    }
+    if (!state.inventory.stashed) state.inventory.stashed = {};
+    if (!state.inventory.stashed[cur.name]) state.inventory.stashed[cur.name] = [];
+    if (state.inventory.stashed[cur.name].length < state.inventory.weapons[cur.name]) {
+      state.inventory.stashed[cur.name].push({ ...cur, base: { ...cur.base } });
+    }
   }
 
   // 2) Equip requested weapon — prefer a stashed copy to keep its durability
@@ -1837,45 +2040,51 @@ function equipWeaponByName(name, item = null){
     return;
   }
 
-// --- TUTORIAL Step 4 -> 5 (Equip Warhammer) ---
-    if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && name === 'Warhammer') {
-      state.tutorialStep = 5;
-      state.player.stamina = 20; // Refill stamina for Art (updated for new max stats)
-      hideBanner();
-      showBanner(`Step 5: Weapon Arts: Walk to the 3 rats and press (${getInputName('art')}).`, 999999);
-    }
+  // --- TUTORIAL Step 4 -> 5 (Equip Warhammer) ---
+  if (state.gameMode === 'tutorial' && state.tutorialStep === 4 && name === 'Warhammer') {
+    state.tutorialStep = 5;
+    state.player.stamina = 20; // Refill stamina for Art (updated for new max stats)
+    hideBanner();
+    showBanner(`Step 5: Weapon Arts: Walk to the 3 rats and press (${getInputName('art')}).`, 999999);
+  }
 
   if (name !== 'Fists' && stashedCnt > 0){
-  const w = stashArr.pop();
+    const w = stashArr.pop();
 
-  // NEW: if this weapon can't use a shield, auto-unequip it
-  if (state.player.shield && !isShieldAllowedFor(w.type)){
-    unequipShield();
-    log('You put away your shield to wield the ' + name + '.');
-    updateEquipUI?.();
-  }
+    // Decrement inventory weapon count when equipping stashed item
+    if (state.inventory.weapons[name] > 0) {
+      state.inventory.weapons[name]--;
+      if (state.inventory.weapons[name] <= 0) delete state.inventory.weapons[name];
+    }
 
-  state.player.weapon = { ...w, base: { ...w.base } };
-  // --- FIX: Symmetrically re-apply ALL stashed weapon stat modifications (ATK, HP, MP, STM) to prevent stat loss ---
-  if (state.player.weapon.stats) {
-    const s = state.player.weapon.stats;
-    // Task 1: Decoupled flat attack tracking to prevent duplicate item modifications
-    // FIX: Rigidly typecast stashed weapon properties to numbers during re-equips
-    const hpBonus = Number(s.maxHp);
-    if (!isNaN(hpBonus) && hpBonus > 0) { state.player.hpMax += hpBonus; state.player.hp += hpBonus; }
-    const mpBonus = Number(s.maxMp);
-    if (!isNaN(mpBonus) && mpBonus > 0) { state.player.mpMax += mpBonus; state.player.mp += mpBonus; }
-    const staminaBonus = Number(s.maxStamina);
-    if (!isNaN(staminaBonus) && staminaBonus > 0) { state.player.staminaMax += staminaBonus; state.player.stamina += staminaBonus; }
+    // NEW: if this weapon can't use a shield, auto-unequip it
+    if (state.player.shield && !isShieldAllowedFor(w.type)){
+      unequipShield();
+      log('You put away your shield to wield the ' + name + '.');
+      updateEquipUI?.();
+    }
+
+    state.player.weapon = { ...w, base: { ...w.base } };
+    if (state.player.weapon.stats) {
+      const s = state.player.weapon.stats;
+      const hpBonus = Number(s.maxHp);
+      if (!isNaN(hpBonus) && hpBonus > 0) { state.player.hpMax += hpBonus; state.player.hp += hpBonus; }
+      const mpBonus = Number(s.maxMp);
+      if (!isNaN(mpBonus) && mpBonus > 0) { state.player.mpMax += mpBonus; state.player.mp += mpBonus; }
+      const staminaBonus = Number(s.maxStamina);
+      if (!isNaN(staminaBonus) && staminaBonus > 0) { state.player.staminaMax += staminaBonus; state.player.stamina += staminaBonus; }
+    }
+    ensureSkill(state.player.weapon.type);
+    recomputeWeapon();
+    updateEquipUI();
+    return;
   }
-  ensureSkill(state.player.weapon.type);
-  recomputeWeapon();
-  updateEquipUI();
-  return;
-}
 
   // 3) Otherwise build a fresh copy (full durability)
-  // --- FIX: Parse Affixes so we can look up base stats ---
+  if (name !== 'Fists' && state.inventory.weapons[name] > 0) {
+    state.inventory.weapons[name]--;
+    if (state.inventory.weapons[name] <= 0) delete state.inventory.weapons[name];
+  }
   let baseName = name;
   let bonMin=0, bonMax=0, isVamp=false;
   
@@ -3637,6 +3846,12 @@ const stats = {
     'Acid Staff':     [2,4,'staff'],
     'Water Staff':    [2,4,'staff'],
 
+    // --- FISHING RODS ---
+    'Wooden Pole':          [1,2,'rod'],
+    'Reinforced Line Rod':  [1,3,'rod'],
+    'Iron Reel Rod':        [2,4,'rod'],
+    'Mithril Rod':          [3,5,'rod'],
+
     // --- NEW SHIELDS ---
     'Buckler':        [1,2,'shield'], 
     'Kite Shield':    [2,3,'shield'], 
@@ -3953,10 +4168,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
                    state.inventory.weapons[wName]--;
                    if (state.inventory.weapons[wName] <= 0) delete state.inventory.weapons[wName];
 
-                   // FIX: Award skill XP upon weapon sale (Staves go to Magic, weapons to their weapon skill, armor goes nowhere)
+                   // FIX: Award skill XP upon weapon sale, excluding armor pieces and routing staves to magic
                    const wType = window.getWeaponType ? window.getWeaponType(wName) : 'hand';
                    const isArmorSlot = ['helmet', 'chest', 'gauntlets', 'pants', 'boots', 'necklace', 'ring'].includes(wType);
-                   if (!isArmorSlot) {
+                   if (!isArmorSlot && !state._inFishingPond) {
                       const xpVal = 10 + (state.floor * 2);
                       // FIX: Explicitly route shield category sales into the survivability container
                       const targetSkill = (wType === 'staff') ? 'magic' : (wType === 'shield' ? 'survivability' : wType);
@@ -3972,6 +4187,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
                 });
               }
             }
+
+    // --- NEW: Sell Caught Fish ---
+    for (const [fName, count] of Object.entries(state.inventory.fish || {})) {
+      if (count > 0) {
+        hasItems = true;
+        const FISH_PRICES = {
+          'Dungeonsnout': 15, 'Slimefin': 25, 'Glowing Tetra': 50,
+          'Ironscale Bream': 80, 'Aether Eel': 150, 'Shadow Bass': 250,
+          'Void Leviathan': 600, 'Golden Carp': 1000
+        };
+        const price = FISH_PRICES[fName] || 20;
+        addSellItem(`${fName} x${count}`, price, () => {
+          state.inventory.fish[fName]--;
+          if (state.inventory.fish[fName] <= 0) delete state.inventory.fish[fName];
+        });
+      }
+    }
 
     // --- 3. Sell Trinkets ---
     for (const [tName, count] of Object.entries(state.inventory.trinkets || {})) {
@@ -3989,17 +4221,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
           if (state.inventory.trinkets[tName] <= 0) delete state.inventory.trinkets[tName];
 
           // FIX: Symmetrically reward Magic tree XP when completing valid jewelry item sales
-          const xpVal = 10 + (state.floor * 2);
-          if (typeof awardSkillXP === 'function') {
-             awardSkillXP('magic', xpVal);
-          } else {
-             ensureSkill('magic');
-             const s = state.skills['magic'];
-             s.shown = true; s.xp += xpVal;
-             const growth = (typeof SKILL_XP_GROWTH !== 'undefined') ? SKILL_XP_GROWTH : 1.5;
-             while(s.xp >= s.next){ 
-                 s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * growth);
-                 log(`Magic advanced to ${s.lvl}!`);
+          if (!state._inFishingPond) {
+             const xpVal = 10 + (state.floor * 2);
+             if (typeof awardSkillXP === 'function') {
+                awardSkillXP('magic', xpVal);
+             } else {
+                ensureSkill('magic');
+                const s = state.skills['magic'];
+                s.shown = true; s.xp += xpVal;
+                const growth = (typeof SKILL_XP_GROWTH !== 'undefined') ? SKILL_XP_GROWTH : 1.5;
+                while(s.xp >= s.next){ 
+                    s.xp -= s.next; s.lvl++; s.next = Math.floor(s.next * growth);
+                    log(`Magic advanced to ${s.lvl}!`);
+                }
              }
           }
           if (typeof spawnFloatText === 'function') spawnFloatText(`+${xpVal} XP`, state.player.x, state.player.y, '#a78bfa');
@@ -4149,7 +4383,7 @@ window.equipGearItem = function(name) {
   if (slot === 'ring') {
     slot = !state.player.equipment.ring1 ? 'ring1' : 'ring2';
   }
-  if (slot === 'weapon') {
+  if (slot === 'weapon' || slot === 'rod') {
     state.inventory.stashed[name].push(item);
     equipWeaponByName(name);
     return;

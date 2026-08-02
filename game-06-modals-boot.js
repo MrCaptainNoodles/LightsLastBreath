@@ -84,6 +84,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if (tgtW) tgtW.disabled = !w.durMax;
   if (tgtS) tgtS.disabled = !sh;
 
+  const repairRow1 = tgtW ? tgtW.parentElement : null;
+  const repairRow2 = b1 ? b1.parentElement : null;
+
+  if (state._inFishingPond) {
+    if (repairRow1) repairRow1.style.display = 'none';
+    if (repairRow2) repairRow2.style.display = 'none';
+    bsMsg.textContent = "Oasis Blacksmith — Upgrade your fishing rod to catch rare fish!";
+  } else {
+    if (repairRow1) repairRow1.style.display = '';
+    if (repairRow2) repairRow2.style.display = '';
+  }
+
   bsGold.textContent = (state.inventory.gold|0);
 
   // --- NEW: Blacksmith Weapon Fusion UI ---
@@ -98,25 +110,93 @@ document.addEventListener('DOMContentLoaded', ()=>{
       if (sheet) sheet.appendChild(forgeDiv);
   }
   
-  forgeDiv.innerHTML = '<div style="font-weight:800; margin-bottom:8px; color:#f9d65c;">Weapon Fusion (50g)</div>';
-  
-  let canFuseAny = false;
-  if (state.inventory.weapons) {
-      Object.entries(state.inventory.weapons).forEach(([wepName, count]) => {
-          if (count >= 2) {
-              canFuseAny = true;
-              const btn = document.createElement('button');
-              btn.className = 'btn';
-              btn.style.cssText = "width:100%; margin-bottom:4px; text-align:left; display:flex; justify-content:space-between;";
-              btn.innerHTML = `<span>Fuse 2x ${wepName}</span> <span style="opacity:0.8;">[+1 Power]</span>`;
-              btn.onclick = () => window.fuseWeapon(wepName);
-              forgeDiv.appendChild(btn);
-          }
-      });
+  forgeDiv.innerHTML = '';
+  if (!state._inFishingPond) {
+    forgeDiv.innerHTML = '<div style="font-weight:800; margin-bottom:8px; color:#f9d65c;">Weapon Fusion (50g)</div>';
+
+    let canFuseAny = false;
+    if (state.inventory.weapons) {
+        Object.entries(state.inventory.weapons).forEach(([wepName, count]) => {
+            if (count >= 2) {
+                canFuseAny = true;
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.style.cssText = "width:100%; margin-bottom:4px; text-align:left; display:flex; justify-content:space-between;";
+                btn.innerHTML = `<span>Fuse 2x ${wepName}</span> <span style="opacity:0.8;">[+1 Power]</span>`;
+                btn.onclick = () => window.fuseWeapon(wepName);
+                forgeDiv.appendChild(btn);
+            }
+        });
+    }
+    if (!canFuseAny) {
+        forgeDiv.innerHTML += '<div style="font-size:13px; opacity:0.6;">You need 2 identical weapons to fuse.</div>';
+    }
   }
-  if (!canFuseAny) {
-      forgeDiv.innerHTML += '<div style="font-size:13px; opacity:0.6;">You need 2 identical weapons to fuse.</div>';
+
+  // --- NEW: Fishing Rod Upgrades UI ---
+  const rodDiv = document.createElement('div');
+  rodDiv.style.cssText = state._inFishingPond
+    ? "padding-top:6px;"
+    : "margin-top:10px; border-top:1px dashed rgba(255,255,255,0.15); padding-top:10px;";
+  const rodNames = ["Wooden Pole", "Reinforced Line Rod", "Iron Reel Rod", "Mithril Rod"];
+  const rodCosts = [0, 200, 500, 1200];
+  const curRod = state.rodLevel || 1;
+
+  if (curRod < 4) {
+    const nextCost = rodCosts[curRod];
+    const nextName = rodNames[curRod];
+    rodDiv.innerHTML = `<div style="font-weight:800; color:#38bdf8; font-size:15px; margin-bottom:6px;">Fishing Rod Upgrade</div>
+                        <div style="font-size:13px; opacity:0.9; margin-bottom:10px;">Current Tier: <b>${rodNames[curRod - 1]}</b></div>`;
+    const rBtn = document.createElement('button');
+    rBtn.className = 'btn';
+    rBtn.style.cssText = "width:100%; padding:12px; font-size:14px; font-weight:bold; background:#0284c7; border-color:#38bdf8; color:#fff;";
+    rBtn.textContent = `Upgrade to ${nextName} (${nextCost}g)`;
+    rBtn.disabled = (state.inventory.gold || 0) < nextCost;
+    rBtn.onclick = () => {
+      const oldName = rodNames[curRod - 1];
+      state.inventory.gold -= nextCost;
+      state.rodLevel = (state.rodLevel || 1) + 1;
+
+      const isEquipped = state.player.weapon && (state.player.weapon.name === oldName || state.player.weapon.type === 'rod');
+
+      // Update inventory weapons list only if an unequipped copy existed in inventory
+      if (state.inventory.weapons) {
+        if (state.inventory.weapons[oldName]) {
+          delete state.inventory.weapons[oldName];
+          state.inventory.weapons[nextName] = 1;
+        } else if (!isEquipped) {
+          state.inventory.weapons[nextName] = 1;
+        }
+      }
+
+      // Purge old rod from stashed storage to prevent phantom clones
+      if (state.inventory.stashed && state.inventory.stashed[oldName]) {
+        delete state.inventory.stashed[oldName];
+      }
+
+      // If the rod is currently equipped, update the equipped weapon object directly without adding a duplicate to inventory
+      if (isEquipped) {
+        const st = typeof weaponStatsFor === 'function' ? weaponStatsFor(nextName) : null;
+        const minDmg = st ? st.min : 1;
+        const maxDmg = st ? st.max : 2;
+        state.player.weapon.name = nextName;
+        state.player.weapon.type = 'rod';
+        state.player.weapon.min = minDmg;
+        state.player.weapon.max = maxDmg;
+        state.player.weapon.base = { min: minDmg, max: maxDmg };
+        if (typeof recomputeWeapon === 'function') recomputeWeapon();
+        if (typeof updateEquipUI === 'function') updateEquipUI();
+      }
+
+      log(`Upgraded Fishing Rod to ${nextName}!`);
+      if (typeof SFX !== 'undefined' && SFX.levelUp) SFX.levelUp();
+      refreshBsUI();
+    };
+    rodDiv.appendChild(rBtn);
+  } else {
+    rodDiv.innerHTML = `<div style="font-weight:800; color:#38bdf8; font-size:15px;">Fishing Rod: Mithril Rod (MAX TIER)</div>`;
   }
+  forgeDiv.appendChild(rodDiv);
   // -----------------------------------------
 
   let name, dur, max;
@@ -240,16 +320,22 @@ if (tgtS) tgtS.onclick = ()=>{ bsTarget='shield'; refreshBsUI(); };
     playNpcDialogue(NPC_DIALOGUE_URLS.blacksmith.interact);
   }
 
-  // Task 12: Overhaul Blacksmith panel context to redirect directly onto Inventory Grid view
-  state.ui = state.ui || {};
-  state.ui.repairMode = true;
-  state.ui.scrapMode = false;
-  state.ui.sellMode = false;
-  state.ui.lockMode = false;
+  if (state._inFishingPond) {
+    refreshBsUI();
+    const bsM = document.getElementById('blacksmithModal');
+    if (bsM) bsM.style.display = 'flex';
+  } else {
+    // Task 12: Overhaul Blacksmith panel context to redirect directly onto Inventory Grid view
+    state.ui = state.ui || {};
+    state.ui.repairMode = true;
+    state.ui.scrapMode = false;
+    state.ui.sellMode = false;
+    state.ui.lockMode = false;
 
-  if (typeof updateInvBody === 'function') updateInvBody();
-  const invM = document.getElementById('invModal');
-  if (invM) invM.style.display = 'flex';
+    if (typeof updateInvBody === 'function') updateInvBody();
+    const invM = document.getElementById('invModal');
+    if (invM) invM.style.display = 'flex';
+  }
 
   // Lock player input while at the blacksmith
   state._inputLocked = true;
@@ -1174,7 +1260,10 @@ window.handleGridItemClick = function(idx) {
   
   // FIX: Intercept cell interactions if Scrap Mode toggle parameter conditions are evaluated as active (XP Yields completely removed)
       if (state.ui?.scrapMode) {
-         if (item.isTrinket) {
+         if (item.isFish) {
+            state.inventory.fish[item.name]--;
+            if (state.inventory.fish[item.name] <= 0) delete state.inventory.fish[item.name];
+         } else if (item.isTrinket) {
             state.inventory.trinkets[item.name]--;
             if (state.inventory.trinkets[item.name] <= 0) delete state.inventory.trinkets[item.name];
          } else {
@@ -1196,14 +1285,23 @@ window.handleGridItemClick = function(idx) {
       // FIX: Implement clean transaction routines directly from the grid overlay when Sell Mode is enabled
       if (state.ui?.sellMode) {
          const W_PRICES = { 'Shortsword':14, 'Claymore':21, 'Spear':18, 'Axe':19, 'Knuckle Duster':11, 'Shield':10 };
+         const FISH_PRICES = {
+           'Dungeonsnout': 15, 'Slimefin': 25, 'Glowing Tetra': 50,
+           'Ironscale Bream': 80, 'Aether Eel': 150, 'Shadow Bass': 250,
+           'Void Leviathan': 600, 'Golden Carp': 1000
+         };
          let baseP = W_PRICES[item.name] || 15;
-         if (item.name.includes('Shield')) baseP = 12;
-         if (item.isTrinket) baseP = 40;
+         if (item.isFish) baseP = FISH_PRICES[item.name] || 20;
+         else if (item.name.includes('Shield')) baseP = 12;
+         else if (item.isTrinket) baseP = 40;
          const price = state.skills?.dungeoneering?.perks?.['dun_c3'] ? Math.ceil(baseP * 1.50) : baseP;
          
          state.inventory.gold = (state.inventory.gold || 0) + price;
          
-         if (item.isTrinket) {
+         if (item.isFish) {
+            state.inventory.fish[item.name]--;
+            if (state.inventory.fish[item.name] <= 0) delete state.inventory.fish[item.name];
+         } else if (item.isTrinket) {
             state.inventory.trinkets[item.name]--;
             if (state.inventory.trinkets[item.name] <= 0) delete state.inventory.trinkets[item.name];
          } else {
@@ -1262,10 +1360,11 @@ window.handleGridItemClick = function(idx) {
     }
   }
   
-  if (state.inventory.stashed && state.inventory.stashed[item.name]) {
+  if (state.inventory.stashed && state.inventory.stashed[item.name] && state.inventory.stashed[item.name].length > 0) {
     const arr = state.inventory.stashed[item.name];
     const matchIdx = arr.findIndex(x => JSON.stringify(x.stats) === JSON.stringify(item.stats));
     if (matchIdx !== -1) arr.splice(matchIdx, 1);
+    else arr.pop(); // Fallback pop ensures stashed array is symmetrically decremented even if stats formatting differs
   }
   
   if (state.inventory.weapons && state.inventory.weapons[item.name] > 0) {
@@ -1287,7 +1386,7 @@ window.handleGridItemClick = function(idx) {
     state.player.shield = item;
     state.player.shieldName = item.name;
     state.player.blockChance = item.name.includes('Buckler') ? 0.15 : item.name.includes('Tower') ? 0.35 : item.name.includes('Ancient') ? 0.25 : 0.20;
-  } else if (['one','two','spear','axe','hand','staff'].includes(wType)) {
+  } else if (['one','two','spear','axe','hand','staff','rod'].includes(wType)) {
     // Task 2: Auto-unequip off-hand shields if equipping an incompatible weapon directly from grid selection
     if (state.player.shield && !isShieldAllowedFor(wType)) {
        if (state.player.shield.cursed) {
@@ -1416,8 +1515,6 @@ window.handleSlotGridClick = function(slot) {
       const oldWep = state.player.weapon;
       // --- FIX: Symmetrically remove ALL weapon stat allocations (ATK, HP, MP, STM) during manual slot unequips to prevent residual trailing stats from stacking on Fists ---
       if (oldWep.stats) {
-        // Task 1: Symmetrically deduct attack power from global flat modifier to prevent retention on Fists
-        // FIX: Stripped out legacy flat accumulator subtraction to prevent weapon formula mathematical underflow loops
         if (oldWep.stats.maxHp) {
           state.player.hpMax = Math.max(5, state.player.hpMax - oldWep.stats.maxHp);
           state.player.hp = Math.max(1, state.player.hp - oldWep.stats.maxHp);
@@ -1434,9 +1531,20 @@ window.handleSlotGridClick = function(slot) {
           state.player.stamina = Math.min(state.player.stamina, state.player.staminaMax);
         }
       }
-      state.inventory.weapons[oldWep.name] = (state.inventory.weapons[oldWep.name] || 0) + 1;
-      (state.inventory.stashed[oldWep.name] ||= []).push(oldWep);
-      state.player.weapon = {name:'Fists', min:1, max:2, type:'hand', base:{min:1,max:2}, dur:null, durMax:null};
+
+      // Check if weapon was in inventory previously or needs to be returned cleanly
+      if (!state.inventory.weapons[oldWep.name] || state.inventory.weapons[oldWep.name] <= 0) {
+        state.inventory.weapons[oldWep.name] = 1;
+      }
+
+      // Ensure stashed array contains exactly one instance matching the inventory count
+      if (!state.inventory.stashed) state.inventory.stashed = {};
+      if (!state.inventory.stashed[oldWep.name]) state.inventory.stashed[oldWep.name] = [];
+      if (state.inventory.stashed[oldWep.name].length < state.inventory.weapons[oldWep.name]) {
+        state.inventory.stashed[oldWep.name].push(oldWep);
+      }
+
+      state.player.weapon = {name:'Fists', min:1, max:2, type:'hand', base:{min:1,max:2}, dur:null, durMax:null, stats:{attack:0,defense:0,maxHp:0,maxMp:0,maxStamina:0,critChance:0,blockChance:0,hpRegen:0,vampiric:0}};
       if (typeof recomputeWeapon === 'function') recomputeWeapon();
     }
   } else if (slot === 'shield') {
@@ -1490,6 +1598,16 @@ function updateInvBody(){
   };
 
 const allStashedItems = [];
+  // Inject collected fish from state.inventory.fish directly into allStashedItems
+  if (state.inventory.fish) {
+    for (const [name, qty] of Object.entries(state.inventory.fish)) {
+      if (qty > 0) {
+        for (let i = 0; i < qty; i++) {
+          allStashedItems.push({ name: name, type: 'fish', isFish: true, stats: {} });
+        }
+      }
+    }
+  }
   // CHANGE: Inject collected trinkets from state.inventory.trinkets directly into allStashedItems so they populate rows inside the user grid storage layout
   if (state.inventory.trinkets) {
     for (const [name, qty] of Object.entries(state.inventory.trinkets)) {
@@ -1534,7 +1652,7 @@ const allStashedItems = [];
          dMax = state.player.shield.durMax || dMax;
       }
       
-      allStashedItems.push({ name: name, type: type, dur: currentDur, durMax: dMax, stats: { attack:0, defense:0, maxHp:0 } });
+      allStashedItems.push({ name: name, type: type, dur: currentDur, durMax: dMax, stats: { attack: 0, defense: 0, maxHp: 0, maxMp: 0, maxStamina: 0, critChance: 0, blockChance: 0, hpRegen: 0, vampiric: 0 } });
     }
   }
   window._stashedCache = allStashedItems;
@@ -1712,6 +1830,7 @@ const allStashedItems = [];
         let kind = type === 'shield' ? 'shield' : 'weapon';
         // FIX: Route stashed grid items through 'trinket' kind to utilize specific item graphic specs
         if (trinketPool.includes(item.name) || item.type === 'ring') kind = 'trinket';
+        if (item.isFish || item.type === 'fish') kind = 'fish';
         drawPickupPixel(cctx, { kind: kind, payload: { name: item.name, type: item.type || type } }, 0, 0, 24);
       }
     });
@@ -3132,6 +3251,13 @@ function closePauseMenu(){
 
 if (btnQuit) {
     btnQuit.addEventListener('click', () => {
+      // If in fishing pond, auto-save to dedicated fishing key and quit immediately without prompt
+      if (state._inFishingPond) {
+        if (typeof window.saveFishingRun === 'function') window.saveFishingRun();
+        closePauseMenu();
+        goMenu();
+        return;
+      }
       // Open the new confirmation modal instead of quitting immediately
       const qm = document.getElementById('quitConfirmModal');
       if(qm) qm.style.display = 'flex';
@@ -3663,6 +3789,13 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// Global key tracking for continuous held-state actions (e.g., Fishing reel thrust)
+window.addEventListener('keyup', (e) => {
+  const k = (e.key || '').toLowerCase();
+  state.keys = state.keys || {};
+  state.keys[k] = false;
+});
+
 // keyboard controls (desktop)
 window.addEventListener('keydown', (e) => {
   if (!e.isGamepad) updateControlUI('keyboard');
@@ -3670,6 +3803,9 @@ window.addEventListener('keydown', (e) => {
   if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
 
   const k = (e.key || '').toLowerCase();
+  state.keys = state.keys || {};
+  state.keys[k] = true;
+
   const isPaused = !!state._pauseOpen;
 
   // Prevent page scrolling / default behavior for our game keys
@@ -4571,6 +4707,7 @@ function doRestart(className){
 
   delete state.floorEffect;
   delete state.player.tempVisionRange;
+  state._inFishingPond = false; // Reset fishing pond visual flag for standard floors
   state._miasmaSteps = 0;
   const tintEl = document.getElementById('floorTint');
   if (tintEl) tintEl.style.background = 'rgba(0,0,0,0)';

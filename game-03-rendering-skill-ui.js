@@ -1466,6 +1466,7 @@ function drawPickupPixel(ctx, item, px, py, tile){
   const pl = item?.payload; 
   // Safety: handle payload being a number (potions) or object (weapons)
   const name = (typeof pl === 'string' ? pl : (pl?.name || ''));
+  const n = name.toLowerCase();
 
   const u = (tile || 12) / 12; 
   const P = (x,y,c,w=1,h=1)=>{ 
@@ -1564,7 +1565,19 @@ function drawPickupPixel(ctx, item, px, py, tile){
            P(2,4,sL,2,4); P(5,3,sL,2,5); P(8,4,sL,2,4); 
            P(3,4,sM,1,4); P(6,3,sM,1,5); P(9,4,sM,1,4); // Blade shadows
         } 
-        // CHANGE: Rewrote vector calculations to support high-detail unique 12x12 block renderings for all 24 newly expanded equipment pieces across their 4 respective tiers
+        else if(t==='rod' || n.includes('pole') || n.includes('rod')){ // Fishing Pole
+           const rodCol = n.includes('mithril') ? '#38bdf8' : (n.includes('iron') ? '#9ca3af' : (n.includes('reinforced') ? '#451a03' : '#854d0e'));
+           const reelCol = n.includes('mithril') ? '#facc15' : '#cbd5e1';
+           // Angled Shaft (diagonal)
+           P(1,10,rodCol,2,2); P(3,8,rodCol,2,2); P(5,6,rodCol,2,2); P(7,4,rodCol,2,2); P(9,2,rodCol,2,2);
+           // Reel mechanism at handle
+           P(3,9,reelCol,2,2); P(2,10,'#1e293b',1,1);
+           // Fishing Line going down from tip
+           P(10,3,'#e2e8f0',1,5);
+           // Bobber Float
+           P(10,8,'#ef4444',1,1); P(10,9,'#ffffff',1,1);
+        }
+        // CHANGE: Rewrote vector calculations to support high-detail unique 12x12 block renderings
         else if (t === 'helmet') {
            if (n.includes('cap')) { // Leather Cap
               P(3,7, '#7c2d12', 6, 2); P(2,8, '#9a3412', 8, 1); P(4,6, '#9a3412', 4, 1); P(5,5, '#ea580c', 2, 1);
@@ -1746,6 +1759,60 @@ function drawPickupPixel(ctx, item, px, py, tile){
       P(5,5,gem,2,2); P(5,5,'#fff',1,1); // Faceted gemstone center
       P(4,3,gL,3,1); P(3,4,gL,1,3); // Polished rim glint
       P(5,1,sM,2,2); // Silver chain loop
+      return;
+    }
+
+    if (kind === 'fish' || n.includes('dungeonsnout') || n.includes('slimefin') || n.includes('tetra') || n.includes('bream') || n.includes('eel') || n.includes('bass') || n.includes('leviathan') || n.includes('carp')) {
+      if (n.includes('dungeonsnout')) {
+        // Dungeonsnout: Cave fish with prominent long snout
+        P(1,6,'#78716c',2,2); P(0,5,'#a8a29e',1,2); P(0,8,'#a8a29e',1,2); // Tail
+        P(3,5,'#78716c',5,4); P(4,8,'#a8a29e',4,1); // Body & belly
+        P(8,6,'#78716c',4,2); P(11,6,'#57534e',1,1); // Long Snout
+        P(7,5,'#facc15',1,1); P(7,5,'#000',1,1); // Eye
+        P(5,4,'#57534e',2,1); P(5,9,'#57534e',2,1); // Fins
+      } else if (n.includes('slimefin')) {
+        // Slimefin: Green dripping gelatinous fish
+        P(1,5,'#15803d',2,3); // Tail
+        P(3,4,'#22c55e',6,5); P(4,5,'#86efac',3,2); // Body & slime glow
+        P(9,5,'#15803d',2,3); P(7,5,'#fbbf24',1,1); // Head & Eye
+        P(4,9,'#86efac',1,2); P(7,9,'#86efac',1,2); // Dripping slime drops
+      } else if (n.includes('tetra')) {
+        // Glowing Tetra: Neon cyan glowing fish
+        P(1,5,'#0284c7',2,3); P(0,4,'#f0abfc',1,2); P(0,7,'#f0abfc',1,2); // Tail
+        P(3,4,'#38bdf8',6,4); P(4,5,'#a5f3fc',4,2); // Glowing body
+        P(9,5,'#38bdf8',2,2); P(7,5,'#ffffff',1,1); // Eye
+        P(5,3,'#f0abfc',2,1); P(5,8,'#f0abfc',2,1); // Neon pink fins
+      } else if (n.includes('bream')) {
+        // Ironscale Bream: Metallic steel armored fish
+        P(1,5,'#334155',2,3); P(0,4,'#64748b',1,2); P(0,7,'#64748b',1,2); // Tail
+        P(3,4,'#64748b',6,5); P(4,5,'#cbd5e1',4,2); // Metallic scales
+        P(9,5,'#475569',2,3); P(8,5,'#ef4444',1,1); // Head & Red Eye
+        P(5,3,'#334155',3,1); P(5,9,'#334155',3,1); // Steel fins
+      } else if (n.includes('eel')) {
+        // Aether Eel: Undulating electric purple eel
+        P(1,6,'#a855f7',2,2); P(3,5,'#a8a29e',1,1);
+        P(3,5,'#a855f7',3,2); P(5,6,'#a855f7',3,2); P(7,5,'#e9d5ff',3,2); // Undulating body
+        P(10,5,'#a855f7',2,2); P(10,5,'#fde047',1,1); // Head & Eye
+        P(2,4,'#fde047',1,1); P(6,8,'#fde047',1,1); // Sparks
+      } else if (n.includes('bass')) {
+        // Shadow Bass: Deep dark bass with glowing red eye
+        P(1,5,'#0f172a',2,3); P(0,4,'#1e293b',1,2); P(0,7,'#1e293b',1,2); // Tail
+        P(3,4,'#0f172a',6,5); P(4,5,'#334155',4,2); // Body
+        P(9,5,'#0f172a',2,3); P(7,5,'#ef4444',1,1); // Red glowing eye
+        P(5,8,'#4ade80',2,1); // Bioluminescent belly dots
+      } else if (n.includes('leviathan')) {
+        // Void Leviathan: Cosmic indigo horned dragon-fish
+        P(1,5,'#1e1b4b',2,3); P(0,3,'#818cf8',2,2); P(0,8,'#818cf8',2,2); // Horned Tail
+        P(3,4,'#312e81',6,5); P(5,5,'#f0abfc',2,2); // Void core
+        P(9,4,'#312e81',3,4); P(8,4,'#818cf8',2,1); // Horned head
+        P(10,5,'#ffffff',1,1); // Eye
+      } else if (n.includes('carp')) {
+        // Golden Carp: Radiant shimmering gold fish
+        P(1,5,'#ef4444',2,3); P(0,4,'#ef4444',1,2); P(0,7,'#ef4444',1,2); // Red Tail
+        P(3,4,'#facc15',6,5); P(4,5,'#fef08a',4,2); // Shimmering gold body
+        P(9,5,'#facc15',2,3); P(8,5,'#000000',1,1); // Head & Eye
+        P(5,3,'#ef4444',3,1); P(5,9,'#ef4444',3,1); // Red fins
+      }
       return;
     }
 
@@ -2286,7 +2353,7 @@ function draw(){
       }
       
      // --- NEW: Dynamic Floor Color ---
-      ctx.fillStyle = pal.floor;
+      ctx.fillStyle = (state._inFishingPond && (t === 1 || t === 8)) ? '#166534' : pal.floor;
       ctx.fillRect(px,py,tile,tile);
 
       // props
@@ -2423,6 +2490,15 @@ if (t===2){
           ctx.fillStyle='#333'; ctx.fillRect(px+tile/2-4, py+tile/2-4, 8, 8); // Lever Base
           ctx.fillStyle=(state.props[kxy].type === 'lever_locked') ? '#ef4444' : '#22c55e';
           ctx.fillRect(px+tile/2-2, py+4, 4, tile/2); // Stick
+        } else if (t===19){
+          // --- NEW: Water Tile Rendering ---
+          ctx.fillStyle = '#0284c7'; ctx.fillRect(px, py, tile, tile);
+          ctx.fillStyle = '#0369a1'; ctx.fillRect(px + 2, py + 2, tile - 4, tile - 4);
+          // Animated wave crest
+          const waveOff = (Math.floor(Date.now() / 300) + gx + gy) % 3;
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillRect(px + 4 + waveOff * 3, py + 6, 8, 2);
+          ctx.fillRect(px + 10 - waveOff * 3, py + 18, 6, 2);
         } else if (t===4){
           drawStairsPixel(ctx, px, py, tile);
         } else if (t===10){
@@ -2995,6 +3071,13 @@ ctx.fillStyle = grad;
 
   // Smart Loop: Run if effects active OR player is still sliding
   const isMoving = (Math.abs(state.player.x - state.player.rx) > 0.01 || Math.abs(state.player.y - state.player.ry) > 0.01);
+  
+  // --- Render Fishing Minigame Overlay ---
+  if (typeof window.drawFishingMinigameUI === 'function') {
+    window.drawFishingMinigameUI(ctx);
+  }
+
+  // Removed state.fishing.active from self-looping rAF to prevent compounding render loops
   state._animating = activeEffects || isMoving;
   if (state._animating) {
     requestAnimationFrame(draw);
@@ -3005,6 +3088,10 @@ ctx.fillStyle = grad;
 
 
 function updateBars(){
+  // Hide HP, MP, and STM bars while in the fishing mini-game
+  const barsEl = document.querySelector('.bars');
+  if (barsEl) barsEl.style.display = state._inFishingPond ? 'none' : '';
+
   // --- FIX: Purifier (Status Immunity) ---
   if (state.skills?.survivability?.perks?.['sur_b2']) {
       state.player.poisoned = false;
@@ -3197,6 +3284,13 @@ function renderSkills(){
   const wrap = document.getElementById('skillsList'); 
   if (!wrap) return;
   wrap.innerHTML = '';
+
+  if (state._inFishingPond) {
+    if (wrap.parentElement) wrap.parentElement.style.display = 'none';
+    return;
+  } else {
+    if (wrap.parentElement) wrap.parentElement.style.display = '';
+  }
 
   for (const [type, s] of Object.entries(state.skills)){
     if (!s.shown) continue;

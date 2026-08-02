@@ -1826,6 +1826,64 @@ function syncEndlessUnlockUI(){
 
 // --- NEW: Save/Load System ---
 const SAVE_KEY = 'dc_save_v1';
+const FISH_SAVE_KEY = 'dc_fish_save_v1';
+
+window.saveFishingRun = function(){
+  if(state.gameOver) return;
+  const copy = { ...state };
+
+  if (state.run && typeof currentRunMs === 'function') {
+      copy.run.elapsedMs = currentRunMs(); 
+      copy.run.startAt = 0;
+  }
+
+  if (copy.fishing) {
+      copy.fishing = { ...copy.fishing, active: false, phase: 'idle' };
+  }
+
+  copy.floorEffect = state.floorEffect;
+
+  copy.seen = Array.from(state.seen||[]);
+  copy.corridor = Array.from(state.corridor||[]);
+  copy.lockedDoors = Array.from(state.lockedDoors||[]);
+  copy.puzzleDoors = Array.from(state.puzzleDoors||[]);
+  copy.mimicChests = Array.from(state.mimicChests||[]);
+  if(state.redChests) copy.redChests = Array.from(state.redChests.entries());
+
+  delete copy.particles; delete copy.floatingText; delete copy.projectiles;
+  localStorage.setItem(FISH_SAVE_KEY, JSON.stringify(copy));
+  showBanner("Fishing Oasis Saved.", 2000);
+};
+
+window.loadFishingRun = function(){
+  try {
+    const raw = localStorage.getItem(FISH_SAVE_KEY);
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    
+    d.seen = new Set(d.seen);
+    d.corridor = new Set(d.corridor);
+    d.lockedDoors = new Set(d.lockedDoors);
+    d.puzzleDoors = new Set(d.puzzleDoors);
+    d.mimicChests = new Set(d.mimicChests);
+    if(d.redChests) d.redChests = new Map(d.redChests);
+
+    Object.assign(state, d);
+
+    state._inputLocked = false;   
+    state._pauseOpen = false;     
+    state.gameOver = false;       
+    
+    document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+    
+    if (typeof updateBars === 'function') updateBars();
+    if (typeof updateEquipUI === 'function') updateEquipUI();
+    if (typeof renderSkills === 'function') renderSkills();
+    if (typeof draw === 'function') draw();
+    
+    return true;
+  } catch(e){ console.error(e); return false; }
+};
 
 window.saveRun = function(){
   if(state.gameOver) return;
@@ -1835,6 +1893,11 @@ window.saveRun = function(){
   if (state.run && typeof currentRunMs === 'function') {
       copy.run.elapsedMs = currentRunMs(); 
       copy.run.startAt = 0;
+  }
+
+  // Reset active fishing mini-game reeling state so loaded saves start idle
+  if (copy.fishing) {
+      copy.fishing = { ...copy.fishing, active: false, phase: 'idle' };
   }
   
   // Explicitly ensure floorEffect is preserved in the copy
@@ -1956,10 +2019,12 @@ function goMenu(e){
   if (title) title.style.display = 'none';
   if (menu)  menu.style.display  = 'flex';
 
-  // Reset Submenus
+ // Reset Submenus
   if(document.getElementById('mm-main')) document.getElementById('mm-main').style.display = 'flex';
   if(document.getElementById('mm-play')) document.getElementById('mm-play').style.display = 'none';
   if(document.getElementById('mm-stats')) document.getElementById('mm-stats').style.display = 'none';
+  const fish = document.getElementById('btnSecretFish');
+  if (fish) fish.style.display = 'none';
 
   syncEndlessUnlockUI();
   if(typeof updateMainMenuShopLabel === 'function') updateMainMenuShopLabel(); 
@@ -2127,10 +2192,97 @@ if (title){
       const el = document.getElementById(x);
       if(el) el.style.display = (x === id) ? 'flex' : 'none';
     });
+    const fish = document.getElementById('btnSecretFish');
+    if (fish) fish.style.display = (id === 'mm-stats') ? 'block' : 'none';
   };
 
   document.getElementById('btnMenuPlay')?.addEventListener('click', () => showMenuLayer('mm-play'));
-  document.getElementById('btnMenuStats')?.addEventListener('click', () => showMenuLayer('mm-stats'));
+  document.getElementById('btnMenuStats')?.addEventListener('click', () => {
+    showMenuLayer('mm-stats');
+    // --- NEW: Randomized positioning and dense-ified detailed fish sprite ---
+    const cv = document.getElementById('btnSecretFish');
+    // Updated parentMenu reference to mainMenu to allow positioning across the full screen
+    const parentMenu = document.getElementById('mainMenu');
+    if (cv && parentMenu) {
+      // 1. Denser, more detailed fish design within the smaller 16x16 grid
+      const cctx = cv.getContext('2d');
+      cctx.clearRect(0, 0, 16, 16);
+      const P = (x, y, color) => { cctx.fillStyle = color; cctx.fillRect(x, y, 1, 1); }; // No scaling, 1x1 pixels
+      const g = '#facc15', o = '#f97316', e = '#0f172a', w = '#ffffff';
+
+      // Design: A compact, detailed fish packing texture and ornate fins into 16x16
+      //Body & texture
+      P(4,4,g); P(5,4,g); P(6,4,g); P(7,4,g); P(8,4,g); P(9,4,g); // top body contour
+      P(3,5,g); P(4,5,o); P(5,5,o); P(6,5,o); P(7,5,o); P(8,5,o); P(9,5,o); P(10,5,g); // top scales
+      P(2,6,g); P(3,6,o); P(4,6,g); P(5,6,g); P(6,6,g); P(7,6,g); P(8,6,g); P(9,6,g); P(10,6,o); P(11,6,g); // midline scales
+      P(2,7,o); P(3,7,g); P(4,7,o); P(5,7,o); P(6,7,o); P(7,7,o); P(8,7,o); P(9,7,o); P(10,7,g); P(11,7,o); // bottom scales
+      P(3,8,g); P(4,8,o); P(5,8,o); P(6,8,o); P(7,8,o); P(8,8,o); P(9,8,o); P(10,8,g); // bottom scales
+      P(4,9,g); P(5,9,g); P(6,9,g); P(7,9,g); P(8,9,g); P(9,9,g); // bottom body contour
+
+      // Head and features
+      P(10,5,g); P(11,5,g); P(12,5,g); P(13,5,g); // head top contour
+      P(11,6,o); P(12,6,w); P(13,6,e); P(14,6,e); // eye detail: white, dark lens
+      P(11,7,o); P(12,7,o); P(13,7,o); P(14,7,o); // jaw top contour
+      P(12,8,g); P(13,8,g); P(14,8,g); P(15,8,g); // jaw bottom contour
+      P(12,6,g); P(12,7,g); P(12,8,g); // gill pattern
+
+      // Fins: dense patterns
+      // Dorsal: layered scales pattern
+      P(4,1,g); P(5,1,o); P(6,1,o); P(7,1,o); P(8,1,g); // top contour
+      P(3,2,g); P(4,2,o); P(5,2,g); P(6,2,g); P(7,2,g); P(8,2,o); P(9,2,g); // second layered scales
+      P(4,3,o); P(5,3,o); P(6,3,o); P(7,3,o); P(8,3,o); // third layered scales
+
+      // Caudal (Tail): Ornately detailed
+      P(0,4,g); P(1,4,g); P(2,4,o); // upper lobe bottom contour
+      P(0,5,o); P(1,5,o); P(2,5,g); // upper lobe scales pattern
+      P(0,6,g); P(1,6,g); P(2,6,o); // lower lobe bottom contour
+      P(0,7,o); P(1,7,o); P(2,7,g); // lower lobe scales pattern
+      P(1,3,g); P(2,3,g); // upper fin connector
+      P(1,8,g); P(2,8,g); // lower fin connector
+      P(0,3,o); // top tip
+      P(0,8,o); // bottom tip
+
+      // Anal & Pelvic fin details
+      P(8,10,g); P(9,10,o); P(10,10,g); // anal fin layered details
+      P(4,10,g); P(5,10,o); P(6,10,g); // pelvic fin layered details
+
+      // 2. Randomized positioning to make it intentionally annoying to find
+      // Client-side dimensions aren't available if the menu is hidden,
+      // so calculate them after the display has been updated to 'flex'.
+      const calculatePosition = () => {
+        if (!parentMenu || !cv) return;
+        const maxTop = parentMenu.clientHeight - (cv.offsetHeight || cv.height);
+        const maxLeft = parentMenu.clientWidth - (cv.offsetWidth || cv.width);
+
+        // Ensure parent is position:relative (user context confirmed this, but safeguard is safe)
+        if (getComputedStyle(parentMenu).position === 'static') {
+          parentMenu.style.position = 'relative';
+        }
+
+        // Clear previous position (absolute with bottom/right)
+        cv.style.bottom = 'auto';
+        cv.style.right = 'auto';
+
+        // Set random position
+        cv.style.top = `${Math.random() * maxTop}px`;
+        cv.style.left = `${Math.random() * maxLeft}px`;
+      };
+
+      // Since showMenuLayer might take a moment or the element visibility might not be immediate,
+      // a short delay ensures visibility and correct client dimensions.
+      setTimeout(calculatePosition, 0);
+    }
+  });
+  // Secret Pixel Fish Click Handler
+  document.getElementById('btnSecretFish')?.addEventListener('click', () => {
+    const cv = document.getElementById('btnSecretFish');
+    if (cv) cv.style.display = 'none';
+    const mm = document.getElementById('mainMenu');
+    if (mm) mm.style.display = 'none';
+    if (typeof window.genFishingPond === 'function') {
+      window.genFishingPond();
+    }
+  });
   document.getElementById('btnMenuBackPlay')?.addEventListener('click', () => showMenuLayer('mm-main'));
   document.getElementById('btnMenuBackStats')?.addEventListener('click', () => showMenuLayer('mm-main'));
 

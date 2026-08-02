@@ -34,7 +34,20 @@ lockedDoors: new Set(),
   projectiles: [],
   _projectileAnimating: false,
   floatingText: [], 
-  particles: [] // NEW: Visual particle effects (blood, dust, etc)
+  particles: [], // NEW: Visual particle effects (blood, dust, etc)
+  rodLevel: 1,   // Fishing rod level (1: Wooden, 2: Reinforced, 3: Iron, 4: Mithril)
+  fishing: {
+    active: false,
+    phase: 'idle', // 'casting' | 'waiting' | 'hooked' | 'reeling' | 'result'
+    progress: 0,
+    tension: 0,
+    barPos: 50,
+    barSize: 35,
+    fishPos: 50,
+    fishTarget: 50,
+    fishSpeed: 0,
+    currentFish: null
+  }
 };
 
 state.ui = state.ui || {};
@@ -1871,6 +1884,142 @@ state.tiles[spot.y][spot.x] = 5;
   state.seen.add(key(state.player.x,state.player.y));
 }
 
+// ====== Secret Fishing Oasis Level Generator ======
+window.genFishingPond = function() {
+  // Mark the Fishing Oasis as discovered for the Codex
+  localStorage.setItem('foundFishingOasis', '1');
+  if (typeof unlockCodex === 'function') unlockCodex('FishingOasis');
+
+  // Attempt to load existing fishing oasis save first
+  if (typeof window.loadFishingRun === 'function' && window.loadFishingRun()) {
+    if (typeof updateBars === 'function') updateBars();
+    if (typeof draw === 'function') draw();
+    return;
+  }
+
+  state._inFishingPond = true;
+  state.noFog = true;
+  state.gameOver = false;
+  state._inputLocked = false;
+  state._pauseOpen = false;
+
+  // Hard reset player, inventory, and skills specifically for Fishing Mode so dungeon data does not bleed in
+  state.player = {
+    x: 13, y: 7, rx: 13, ry: 7,
+    hp: 20, hpMax: 20, mp: 20, mpMax: 20,
+    stamina: 20, staminaMax: 20,
+    level: 1, xp: 0, next: PLAYER_XP_START,
+    poisoned: false, poisonTicks: 0,
+    facing: 'right',
+    bow: { range: 5, loaded: 0 },
+    weapon: { name: 'Fists', type: 'hand', min: 1, max: 2, base: { min: 1, max: 2 }, dur: null, durMax: null },
+    equipment: { helmet: null, chest: null, gauntlets: null, pants: null, boots: null, ring1: null, ring2: null, necklace: null }
+  };
+  state.inventory = { lockpicks: 0, potions: 0, tonics: 0, antidotes: 0, weapons: {}, stashed: {}, arrows: 0, gold: 0, fish: {} };
+  state.skills = {};
+  state.run = typeof freshRunStats === 'function' ? freshRunStats() : { depth: 1, level: 1, kills: 0 };
+
+  const W = state.size.w || 100, H = state.size.h || 100;
+  state.tiles = Array.from({length: H}, () => Array.from({length: W}, () => 0));
+  state.rooms = [{x: 0, y: 0, w: 25, h: 15}];
+  state.seen = new Set();
+  state.enemies = [];
+  state.pickups = {};
+  state.props = {};
+
+  // Paint Grassy Shore (x: 0..13) and Water (x: 14..24)
+  for (let y = 0; y < 15; y++) {
+    for (let x = 0; x < 25; x++) {
+      if (x < 14) {
+        state.tiles[y][x] = 1; // Grassy floor
+        state.seen.add(key(x, y));
+        if (Math.random() < 0.12 && (x > 5 || y > 5)) {
+          state.props[key(x, y)] = { type: Math.random() < 0.5 ? 'fern' : 'giant flower' };
+          state.tiles[y][x] = 8;
+        }
+      } else {
+        state.tiles[y][x] = 19; // Water tile
+        state.seen.add(key(x, y));
+      }
+    }
+  }
+
+  // Position Player at Shore Facing Water
+  state.player.x = 13; state.player.y = 7;
+  state.player.rx = 13; state.player.ry = 7;
+  state.player.facing = 'right';
+
+  // Ensure player starts with the fishing pole in inventory if they do not already have one
+  state.rodLevel = state.rodLevel || 1;
+  const rodNames = ["Wooden Pole", "Reinforced Line Rod", "Iron Reel Rod", "Mithril Rod"];
+  const curRodName = rodNames[state.rodLevel - 1] || "Wooden Pole";
+  state.inventory.weapons = state.inventory.weapons || {};
+
+  const isRodEquipped = state.player.weapon && (state.player.weapon.type === 'rod' || rodNames.includes(state.player.weapon.name));
+  const hasRodInInv = Object.keys(state.inventory.weapons).some(w => rodNames.includes(w)) ||
+                      (state.inventory.stashed && Object.keys(state.inventory.stashed).some(w => rodNames.includes(w) && state.inventory.stashed[w].length > 0));
+
+  if (!isRodEquipped && !hasRodInInv) {
+    state.inventory.weapons[curRodName] = 1;
+  }
+
+  // Spawn Merchant and Blacksmith Shops
+  state.merchant = {
+    x: 3, y: 3,
+    left: { x: 2, y: 3 },
+    right: { x: 4, y: 3 },
+    room: { x: 1, y: 1, w: 5, h: 5 }
+  };
+  state.blacksmith = {
+    x: 3, y: 11,
+    left: { x: 2, y: 11 },
+    right: { x: 4, y: 11 },
+    room: { x: 1, y: 9, w: 5, h: 5 }
+  };
+
+  log("You discover a serene, secret fishing oasis!");
+  if (typeof updateBars === 'function') updateBars();
+  if (typeof renderSkills === 'function') renderSkills();
+  if (typeof draw === 'function') draw();
+  if (typeof window.openFishingHelp === 'function') window.openFishingHelp();
+};
+
+window.openFishingHelp = function() {
+  if (!document.getElementById('fishingHelpModal')) {
+    const d = document.createElement('div');
+    d.id = 'fishingHelpModal'; 
+    d.className = 'modal'; 
+    d.style.display = 'none'; 
+    d.style.zIndex = '10002';
+    d.innerHTML = `
+      <div class="sheet" style="width:min(500px, 92vw); text-align:center;">
+        <div class="title" style="color:#38bdf8; font-size:18px; margin-bottom:10px;">Secret Fishing Oasis</div>
+        <div style="font-size:13px; line-height:1.5; opacity:0.9; text-align:left; margin-bottom:15px;">
+          <b style="color:#facc15;">How to Fish:</b><br>
+          • Stand on the shore facing the water and press <b>E</b> to cast.<br>
+          • When a fish bites, <b>Hold E or Space</b> to raise your blue catch bar, and release to lower it.<br>
+          • Keep the fish inside the catch zone until the green progress meter fills!<br><br>
+          <b style="color:#facc15;">Oasis Services:</b><br>
+          • Visit the <b>Merchant</b> on the shore to sell your rare fish for Gold.<br>
+          • Visit the <b>Blacksmith</b> to upgrade your Fishing Rod for a wider catch bar!
+        </div>
+        <button class="btn" id="btnFishingHelpClose" style="width:100%; padding:10px; font-weight:bold; background:#0284c7; border-color:#38bdf8; color:#fff; cursor:pointer;">Got It!</button>
+      </div>`;
+    document.body.appendChild(d);
+    d.querySelector('#btnFishingHelpClose').onclick = () => {
+      d.style.display = 'none';
+      state._inputLocked = false;
+      if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') setMobileControlsVisible(true);
+    };
+  }
+  const m = document.getElementById('fishingHelpModal');
+  if (m) {
+    m.style.display = 'flex';
+    state._inputLocked = true;
+    if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
+  }
+};
+
 
 
 function tierForDepth(floor){
@@ -2658,6 +2807,7 @@ function recomputeWeapon(){
 }
 
 function awardKill(type,amount){
+  if (state._inFishingPond) return; // Do not gain kill XP or skill points in the fishing area
   // If killed by infighting, grant NO XP and do NOT count stats
   if (type === 'infighting') return;
 

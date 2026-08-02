@@ -58,10 +58,13 @@
         <span id="btnEndless" class="menuLink disabled" aria-disabled="true" title="Unlock after beating Classic">???</span>
       </div>
       
-      <div id="mm-stats" style="display:none; flex-direction:column; gap:18px;">
+      <div id="mm-stats" style="display:none; flex-direction:column; gap:18px; position:relative;">
         <a id="btnMenuBackStats" class="menuLink" href="#" style="opacity:0.6; font-size:14px;">&lt; Back</a>
         <a id="btnCodex" class="menuLink" href="#">Codex</a>
         <a id="btnShowLeaderboard" class="menuLink" href="#">Leaderboard</a>
+      </div>
+      <!-- Secret Pixel Fish Button (Moved to mainMenu, scaled to 24x24px, hidden by default) -->
+      <canvas id="btnSecretFish" width="16" height="16" style="cursor:pointer; position:absolute; width:24px; height:24px; bottom:5px; right:5px; opacity:0.6; display:none;" title="???"></canvas>
       </div>
     </nav>
   </div>
