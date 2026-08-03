@@ -637,8 +637,8 @@ function stopMerchantAudio(){
 function updateMerchantAudio(){
   if (!merchantGain) return;
 
-  // FIX: Kill audio channels instantly upon player death or return to main menu overlay loops
-  if (!state.merchant || state.gameOver || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ merchantGain.gain.value = 0; return; }
+  // FIX: Kill audio channels instantly upon player death, fishing oasis, or return to main menu overlay loops
+  if (!state.merchant || state.gameOver || state._inFishingPond || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ merchantGain.gain.value = 0; return; }
 
   // play until you're next to the NPC
   if (isNearMerchant(state.player.x, state.player.y)){
@@ -697,8 +697,8 @@ function stopBlacksmithAudio(){
 function updateBlacksmithAudio(){
   if (!blacksmithGain) return;
 
-  // FIX: Force clear background loops when player game-over states toggle or main dashboard opens
-  if (!state.blacksmith || state.gameOver || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ blacksmithGain.gain.value = 0; return; }
+  // FIX: Force clear background loops when player game-over states toggle, fishing oasis, or main dashboard opens
+  if (!state.blacksmith || state.gameOver || state._inFishingPond || (document.getElementById('mainMenu') && document.getElementById('mainMenu').style.display !== 'none')){ blacksmithGain.gain.value = 0; return; }
 
   // play until you're next to the NPC
   if (isNearBlacksmith(state.player.x, state.player.y)){

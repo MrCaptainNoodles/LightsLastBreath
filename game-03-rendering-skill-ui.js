@@ -1465,7 +1465,7 @@ function drawPickupPixel(ctx, item, px, py, tile){
   const kind = item?.kind;
   const pl = item?.payload; 
   // Safety: handle payload being a number (potions) or object (weapons)
-  const name = (typeof pl === 'string' ? pl : (pl?.name || ''));
+  const name = (typeof pl === 'string' ? pl : (pl?.name || item?.name || ''));
   const n = name.toLowerCase();
 
   const u = (tile || 12) / 12; 
@@ -1473,6 +1473,25 @@ function drawPickupPixel(ctx, item, px, py, tile){
     ctx.fillStyle = c; 
     ctx.fillRect(px + x*u, py + y*u, w*u, h*u); 
   };
+
+  // --- NEW: Custom Pixel Art Sprite for Fishing Bait ---
+  if (n.includes('bait')) {
+    const hookCol = '#cbd5e1'; // Silver steel hook
+    const hookDark = '#475569';
+    const baitCol = n.includes('legendary') ? '#facc15' : (n.includes('rare') ? '#a855f7' : (n.includes('uncommon') ? '#38bdf8' : '#f87171'));
+    const baitLight = n.includes('legendary') ? '#fef08a' : (n.includes('rare') ? '#e9d5ff' : (n.includes('uncommon') ? '#a5f3fc' : '#fca5a5'));
+
+    // Hook eyelet, shank, and barb
+    P(5,1,hookCol,2,1); P(5,2,hookCol,1,5); P(6,2,hookDark,1,4);
+    P(4,7,hookCol,1,2); P(5,9,hookCol,3,1); P(7,7,hookCol,1,2); P(7,6,hookCol,1,1);
+    // Tier-colored bait/worm wriggling around shank and barb
+    P(6,3,baitCol,2,2); P(6,3,baitLight,1,1);
+    P(4,5,baitCol,2,3); P(4,5,baitLight,1,1);
+    P(6,7,baitCol,2,2); P(6,7,baitLight,1,1);
+    P(7,8,baitCol,2,1);
+    return;
+  }
+  // ----------------------------------------------------
 
   // Palette
   const wood='#855e42', woodD='#5c4033', steel='#94a3b8', iron='#475569';

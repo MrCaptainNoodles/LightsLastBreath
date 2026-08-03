@@ -254,18 +254,49 @@ window.startFishing = function() {
   const waitTime = Math.max(1000, (3500 - rod * 500) + Math.random() * 2000);
   log("Casting line into the water...");
 
+  // --- NEW: Detect and consume equipped bait from ring slots upon casting ---
+  let baitSlot = null;
+  if (state.player.equipment?.ring1?.name?.includes('Bait')) baitSlot = 'ring1';
+  else if (state.player.equipment?.ring2?.name?.includes('Bait')) baitSlot = 'ring2';
+
+  let equippedBaitName = '';
+  if (baitSlot) {
+    equippedBaitName = state.player.equipment[baitSlot].name;
+    state.player.equipment[baitSlot] = null; // Consume and remove bait from equipped slot
+    log(`Used 1x ${equippedBaitName}.`);
+    if (typeof updateEquipUI === 'function') updateEquipUI();
+    if (typeof updateInvBody === 'function') updateInvBody();
+  }
+  // -------------------------------------------------------------------------
+
   setTimeout(() => {
     if (!state.fishing.active) return;
     state.fishing.phase = 'hooked';
     spawnFloatText("BITE!", state.player.x, state.player.y, '#facc15');
     if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
 
-    let totalW = FISH_SPECIES.reduce((acc, f) => acc + f.weight, 0);
+    // CHANGE: Check captured equippedBaitName to apply a weighted spawn chance bonus for the targeted fish rarity
+    let targetRarity = null;
+    let rarityMult = 1;
+    if (equippedBaitName.includes('Common Bait')) { targetRarity = 'Common'; rarityMult = 3; }
+    else if (equippedBaitName.includes('Uncommon Bait')) { targetRarity = 'Uncommon'; rarityMult = 5; }
+    else if (equippedBaitName.includes('Rare Bait')) { targetRarity = 'Rare'; rarityMult = 8; }
+    else if (equippedBaitName.includes('Legendary Bait')) { targetRarity = 'Legendary'; rarityMult = 12; }
+
+    const weights = FISH_SPECIES.map(f => {
+      let w = f.weight;
+      if (targetRarity && f.rarity === targetRarity) {
+        w *= rarityMult;
+      }
+      return w;
+    });
+
+    let totalW = weights.reduce((acc, w) => acc + w, 0);
     let roll = Math.random() * totalW;
     let chosen = FISH_SPECIES[0];
-    for (const f of FISH_SPECIES) {
-      roll -= f.weight;
-      if (roll <= 0) { chosen = f; break; }
+    for (let i = 0; i < FISH_SPECIES.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) { chosen = FISH_SPECIES[i]; break; }
     }
     state.fishing.currentFish = chosen;
 
@@ -3888,7 +3919,13 @@ const stats = {
     'Bone Amulet':    [0,0,'necklace'],
     'Silver Chain':   [0,0,'necklace'],
     'Gold Medallion': [0,0,'necklace'],
-    'Ruby Torc':      [0,0,'necklace']
+    'Ruby Torc':      [0,0,'necklace'],
+
+    // --- FISHING BAIT TYPES ---
+    'Common Bait':    [0,0,'ring'],
+    'Uncommon Bait':  [0,0,'ring'],
+    'Rare Bait':      [0,0,'ring'],
+    'Legendary Bait': [0,0,'ring']
   }[baseName];
   
   return stats ? { name, min:stats[0]+bonMin, max:stats[1]+bonMax, type:stats[2] } : null;
@@ -4023,11 +4060,45 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function getBuyStock(){
     if (!state.merchant) state.merchant = {};
     if (!state.merchant.stock){
-      state.merchant.stock = [
-        { kind:'buy', item:'Potion',   price:depthPrice(10), stock:rand(1,5), do:()=>{ state.inventory.potions=(state.inventory.potions|0)+1; } },
-        { kind:'buy', item:'Tonic',    price:depthPrice(12), stock:rand(1,5), do:()=>{ state.inventory.tonics=(state.inventory.tonics|0)+1; } },
-        { kind:'buy', item:'Lockpick', price:depthPrice(15), stock:rand(1,5), do:()=>{ state.inventory.lockpicks=(state.inventory.lockpicks|0)+1; } }
-      ].map(o => ({ ...o, sold:false }));
+      // CHANGE: Check if in Fishing Oasis to populate stock with bait types instead of standard supplies
+      if (state._inFishingPond) {
+        state.merchant.stock = [
+          { kind:'buy', item:'Common Bait', price:15, stock:Infinity, do:()=>{
+            const name = 'Common Bait';
+            state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+            state.inventory.stashed = state.inventory.stashed || {};
+            state.inventory.stashed[name] = state.inventory.stashed[name] || [];
+            state.inventory.stashed[name].push({ name, type:'ring', stats:{ attack:0, defense:0, maxHp:0, maxMp:0, maxStamina:0 } });
+          }},
+          { kind:'buy', item:'Uncommon Bait', price:45, stock:Infinity, do:()=>{
+            const name = 'Uncommon Bait';
+            state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+            state.inventory.stashed = state.inventory.stashed || {};
+            state.inventory.stashed[name] = state.inventory.stashed[name] || [];
+            state.inventory.stashed[name].push({ name, type:'ring', stats:{ attack:0, defense:0, maxHp:0, maxMp:0, maxStamina:0 } });
+          }},
+          { kind:'buy', item:'Rare Bait', price:120, stock:Infinity, do:()=>{
+            const name = 'Rare Bait';
+            state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+            state.inventory.stashed = state.inventory.stashed || {};
+            state.inventory.stashed[name] = state.inventory.stashed[name] || [];
+            state.inventory.stashed[name].push({ name, type:'ring', stats:{ attack:0, defense:0, maxHp:0, maxMp:0, maxStamina:0 } });
+          }},
+          { kind:'buy', item:'Legendary Bait', price:300, stock:Infinity, do:()=>{
+            const name = 'Legendary Bait';
+            state.inventory.weapons[name] = (state.inventory.weapons[name] || 0) + 1;
+            state.inventory.stashed = state.inventory.stashed || {};
+            state.inventory.stashed[name] = state.inventory.stashed[name] || [];
+            state.inventory.stashed[name].push({ name, type:'ring', stats:{ attack:0, defense:0, maxHp:0, maxMp:0, maxStamina:0 } });
+          }}
+        ].map(o => ({ ...o, sold:false }));
+      } else {
+        state.merchant.stock = [
+          { kind:'buy', item:'Potion',   price:depthPrice(10), stock:rand(1,5), do:()=>{ state.inventory.potions=(state.inventory.potions|0)+1; } },
+          { kind:'buy', item:'Tonic',    price:depthPrice(12), stock:rand(1,5), do:()=>{ state.inventory.tonics=(state.inventory.tonics|0)+1; } },
+          { kind:'buy', item:'Lockpick', price:depthPrice(15), stock:rand(1,5), do:()=>{ state.inventory.lockpicks=(state.inventory.lockpicks|0)+1; } }
+        ].map(o => ({ ...o, sold:false }));
+      }
     }
     return state.merchant.stock;
   }
@@ -4036,38 +4107,39 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   function renderBuy(){
     setBackMode('back');
-    msg.textContent = "I've got plenty of things that might interest you.";
+    // CHANGE: Update merchant greeting dialogue if inside Fishing Oasis and dynamically render all offer choices
+    msg.textContent = state._inFishingPond ? "I have specialized fishing bait available for purchase." : "I've got plenty of things that might interest you.";
     
     // Toggle Views
-    btnRow.style.display = 'flex'; // Show A/B/C buttons
+    btnRow.style.display = 'flex'; // Show buttons
     listDiv.style.display = 'none'; // Hide Sell List
 
     const offers = getBuyStock();
-    
-    const bindBuy = (btn, o) => {
-      if (!o){ btn.style.display='none'; return; }
-      const label = o.sold ? `${o.item} — SOLD` : `Buy ${o.item} — ${o.price}g (${o.stock})`;
+    btnRow.innerHTML = '';
+    offers.forEach(o => {
+      const btn = document.createElement('button');
+      btn.className = 'btn choice';
+      const label = o.sold ? `${o.item} — SOLD` : `Buy ${o.item} — ${o.price}g (${o.stock === Infinity ? '∞' : o.stock})`;
       btn.textContent = label;
-      btn.style.display = '';
       btn.disabled = !!o.sold;
       btn.style.opacity = o.sold ? 0.5 : 1;
       btn.onclick = () => {
         if ((state.inventory.gold|0) < o.price) { msg.textContent = 'Not enough gold.'; return; }
         state.inventory.gold -= o.price;
         o.do();
-        o.stock--;
-        if (o.stock <= 0) o.sold = true;
+        if (o.stock !== Infinity) {
+          o.stock--;
+          if (o.stock <= 0) o.sold = true;
+        }
         
+        if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
         unlockCodex('Merchant_Bought', true);
         goldNow.textContent = state.inventory.gold;
         updateInvBody?.();
         renderBuy(); // Refresh
       };
-    };
-
-    bindBuy(btnA, offers[0]);
-    bindBuy(btnB, offers[1]);
-    bindBuy(btnC, offers[2]);
+      btnRow.appendChild(btn);
+    });
   }
 
   function renderSell(){
@@ -4271,6 +4343,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // Ensure button row is visible, list is hidden
     btnRow.style.display = 'flex';
     listDiv.style.display = 'none';
+
+    // FIX: Re-append btnA, btnB, btnC to btnRow in case they were replaced by dynamic offer buttons in renderBuy()
+    btnRow.innerHTML = '';
+    btnRow.appendChild(btnA);
+    btnRow.appendChild(btnB);
+    btnRow.appendChild(btnC);
 
     // FIX: Cleanly hide the inventory screen anytime the player clicks 'Back' to return to the greeting menu
     const mainInv = document.getElementById('invModal');

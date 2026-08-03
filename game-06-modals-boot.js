@@ -654,6 +654,7 @@ if (buyBtn) buyBtn.onclick = ()=>{
   state.cartographerMapBought = true;
   state.cartographerMapActive = true;
 
+  if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
   playNpcDialogue(NPC_DIALOGUE_URLS.cartographer.buy);
 unlockCodex('Cartographer_Map', true); // <--- TRACK MAP PURCHASE
   cartographerRevealFloor();
@@ -1078,6 +1079,13 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     if (trinketDescriptions[name]) {
        bonusLines.push(`<div style="color:#a78bfa; font-weight:bold; margin-top:4px;">Effect: ${trinketDescriptions[name]}</div>`);
     }
+
+    // CHANGE: Render custom tooltip type label and target rarity info for bait ring items
+    if (name.includes('Bait')) {
+      typeLabel = "Bait (Ring Slot 1)";
+      const targetRarity = name.includes('Common') ? 'Common' : (name.includes('Uncommon') ? 'Uncommon' : (name.includes('Rare') ? 'Rare' : 'Legendary'));
+      baseAttrLabel = `Attracts ${targetRarity} Fish`;
+    }
     
     const bonusContent = bonusLines.length ? bonusLines.join('') : '<div style="opacity:0.4; font-style:italic;">No magical bonuses</div>';
     const headerTitle = name === 'Empty' ? `Empty ${typeLabel}` : name;
@@ -1441,7 +1449,8 @@ window.handleGridItemClick = function(idx) {
   } else {
     let slot = 'helmet';
     if (item.type) {
-      slot = item.type;
+      // CHANGE: Map generic 'ring' item types directly to 'ring1' so bait items equip into Ring Slot 1
+      slot = item.type === 'ring' ? 'ring1' : item.type;
     } else {
       const n = item.name;
       if (n.includes('Helm') || n.includes('Cap') || n.includes('Visor') || n.includes('Crown')) slot = 'helmet';
@@ -1450,7 +1459,7 @@ window.handleGridItemClick = function(idx) {
       else if (n.includes('Boots') || n.includes('Soles') || n.includes('Sabatons') || n.includes('of Haste')) slot = 'boots'; 
       else if (n.includes('Pants') || n.includes('Chaps') || n.includes('Chausses') || n.includes('Greaves')) slot = 'pants';
       else if (n.includes('Amulet') || n.includes('Chain') || n.includes('Medallion') || n.includes('Torc')) slot = 'necklace';
-      else if (n.includes('Ring') || n.includes('Band')) slot = !state.player.equipment.ring1 ? 'ring1' : 'ring2';
+      else if (n.includes('Ring') || n.includes('Band') || n.includes('Bait')) slot = 'ring1';
     }
     
     if (state.player.equipment[slot]) window.unequipSlot(slot);
