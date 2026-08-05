@@ -641,32 +641,50 @@
       <button class="btn" id="btnCloseWhatsNew" onclick="document.getElementById('whatsNewModal').style.display='none';">Close</button>
     </div>
     <div style="margin-top:12px; font-size:14px; line-height:1.5; color:var(--text); max-height: 60vh; overflow-y:auto;">
+        <!-- New August 4th Update Entry -->
+        <div style="font-weight:bold; font-size:16px; margin-bottom:4px; color:#facc15;">August 4th 2026</div>
+        <ul style="margin-top:0; padding-left:20px; margin-bottom:16px; opacity:0.9; list-style-type: disc;">
+            <li>Merchant &amp; Economy
+              <ul style="list-style-type: none; padding-left: 16px; margin-top: 4px; margin-bottom: 4px; opacity: 0.85;">
+                <li>- Added Antidotes to the merchant's standard stock.</li>
+                <li>- Sights of the merchant are more common (spawn chance increased from 20% to 40%).</li>
+              </ul>
+            </li>
+            <li>Dungeon &amp; Item Mechanics
+              <ul style="list-style-type: none; padding-left: 16px; margin-top: 4px; margin-bottom: 4px; opacity: 0.85;">
+                <li>- Rebalanced mob spawning so earlier/weaker monsters appear less frequently on deeper floors.</li>
+                <li>- Added a passive MP Regeneration random stat bonus on equipment (restores MP every 20 turns).</li>
+              </ul>
+            </li>
+        </ul>
+
+        <!-- Reworded July 20th Entry for Clarity -->
         <div style="font-weight:bold; font-size:16px; margin-bottom:4px; color:#facc15;">July 20th 2026</div>
         <ul style="margin-top:0; padding-left:20px; margin-bottom:16px; opacity:0.9; list-style-type: disc;">
-            <li>System Balances &amp; Mechanical Fixes
+            <li>System Balances &amp; Bug Fixes
               <ul style="list-style-type: none; padding-left: 16px; margin-top: 4px; margin-bottom: 4px; opacity: 0.85;">
-                <li>- Fixed cursed chest ambush event failures when clearing field entities via explosives.</li>
-                <li>- Balanced bomb damage against bosses and added an anti-cheese warning flag restriction.</li>
-                <li>- Corrected poison processing to prevent immunity mitigation bugs and scale damage accurately with depth.</li>
-                <li>- Enforced strict weapon compatibility pairing checks for shield slots and cursed items.</li>
-                <li>- Fixed starter gear stat leaks causing unequip underflow, corrected cinematic camera walk facing orientation bugs, and raised floor drop density loops.</li>
+                <li>- Fixed issues with Red Chest ambush waves when clearing enemies with explosives.</li>
+                <li>- Adjusted bomb damage against bosses and added an anti-cheese warning message.</li>
+                <li>- Fixed poison processing so damage scales properly with floor depth and respects immunity.</li>
+                <li>- Enforced strict equipment checks for shield slots and cursed weapons.</li>
+                <li>- Fixed stat tracking bugs when unequipping starter gear, fixed camera facing angles during cutscenes, and increased item drop rates.</li>
               </ul>
             </li>
-            <li>Inventory Systems &amp; Tooltip Overhaul
+            <li>Inventory &amp; Tooltips
               <ul style="list-style-type: none; padding-left: 16px; margin-top: 4px; margin-bottom: 4px; opacity: 0.85;">
-                <li>- Implemented real-time side-by-side equipment card comparative data arrays with contextual tag overlays.</li>
-                <li>- Added an alphabetical inventory sorting filter organized by specific gear type classifications.</li>
-                <li>- Cleaned asset visualization rules to hide durability fields from armor text slots and map unequipped staves correctly.</li>
-                <li>- Embedded visible MP consumption metrics inside spell index cells.</li>
-                <li>- Appended explicit description texts to accessory trinket tooltips and isolated unequipped multi-ring comparison nodes.</li>
+                <li>- Added side-by-side equipment tooltips comparing item stats directly against your equipped gear.</li>
+                <li>- Added an alphabetical inventory sorting button organized by gear type.</li>
+                <li>- Cleaned up item tooltips by hiding durability stats on armor pieces and fixing staff comparisons.</li>
+                <li>- Added MP cost displays directly inside the Spell Index.</li>
+                <li>- Added clear descriptions to trinket tooltips and improved dual-ring comparison popups.</li>
               </ul>
             </li>
-            <li>Progression Tuning &amp; Interface Reworks
+            <li>Progression &amp; Interface
               <ul style="list-style-type: none; padding-left: 16px; margin-top: 4px; margin-bottom: 4px; opacity: 0.85;">
-                <li>- Remodeled the Blacksmith workflow into an immediate grid repair interaction screen to resolve lockups.</li>
-                <li>- Expanded Codex indexing parameters to record exact player death histories per enemy type.</li>
-                <li>- Re-balanced starter class loadouts, unlock conditions, and added the persistent "Deep Pockets" inventory space upgrade tree.</li>
-                <li>- Overhauled Class Selection layouts with center-aligned grid cards, explicit stat modification maps, and live fractional progress bars.</li>
+                <li>- Streamlined Blacksmith repairs directly into the inventory grid.</li>
+                <li>- Added "Killed By" death counter tracking for monsters in the Codex.</li>
+                <li>- Rebalanced starter class loadouts, unlock requirements, and added the "Deep Pockets" inventory upgrade to the Soul Shop.</li>
+                <li>- Overhauled the Class Selection menu with centered class cards, detailed stat bonus breakdowns, and progress indicators.</li>
               </ul>
             </li>
         </ul>
