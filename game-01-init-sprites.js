@@ -597,7 +597,7 @@ async function saySynced(text, url) {
 // ---- Merchant config ----
 
 
-const MERCHANT_SPAWN_CHANCE = .35; // 35% per non-boss floor
+const MERCHANT_SPAWN_CHANCE = .40; // 35% per non-boss floor
 const MERCHANT_LOOP_URL = 'https://cdn.jsdelivr.net/gh/MrCaptainNoodles/DungeonCrawlerAudio@main/money.mp3'; // ← your loop SFX
 let merchantAudio = null, merchantNode = null, merchantGain = null;
 

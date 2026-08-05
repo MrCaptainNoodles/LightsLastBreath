@@ -2176,7 +2176,8 @@ const pool=[
 
   // CHANGE: Filter out any stats that this specific item type already features as a baseline property
   // This guarantees that the rolled magical bonus line is always a separate stat, preventing tooltip subtraction blanks!
-  let availableStats = ['attack', 'defense', 'maxHp', 'maxMp', 'maxStamina', 'critChance', 'blockChance', 'hpRegen'];
+  /* Added mpRegen to available random item stats pool */
+  let availableStats = ['attack', 'defense', 'maxHp', 'maxMp', 'maxStamina', 'critChance', 'blockChance', 'hpRegen', 'mpRegen'];
   
   if (choice.stats) {
     availableStats = availableStats.filter(statKey => !choice.stats[statKey] || choice.stats[statKey] === 0);
@@ -2194,6 +2195,8 @@ const pool=[
     else if (stat === 'critChance') choice.stats.critChance += rand(3, 5 + Math.floor(f / 12) * 2);
     else if (stat === 'blockChance') choice.stats.blockChance += rand(2, 4 + Math.floor(f / 15) * 2);
     else if (stat === 'hpRegen') choice.stats.hpRegen += rand(1, 1 + Math.floor(f / 15));
+    /* Random mpRegen stat scaling based on floor depth */
+    else if (stat === 'mpRegen') choice.stats.mpRegen = (choice.stats.mpRegen || 0) + rand(1, 1 + Math.floor(f / 15));
     else if (stat === 'vampiric') choice.stats.vampiric += rand(2, 5 + Math.floor(f / 12) * 2);
   }
 

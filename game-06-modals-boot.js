@@ -1050,6 +1050,7 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     const bonusCritChance = stats.critChance - (baseConfig.critChance || 0);
     const bonusBlockChance = stats.blockChance - (baseConfig.blockChance || 0);
     const bonusHpRegen = stats.hpRegen - (baseConfig.hpRegen || 0);
+    const bonusMpRegen = (stats.mpRegen || 0) - (baseConfig.mpRegen || 0);
     const bonusVampiric = stats.vampiric - (baseConfig.vampiric || 0);
 
     if (bonusAttack > 0) bonusLines.push(`<div style="color:#f6ad55;">+${bonusAttack} Attack Power</div>`);
@@ -1065,6 +1066,8 @@ window.showItemTooltip = function(name, statsStr, details, slotContext) {
     if (bonusBlockChance > 0) bonusLines.push(`<div style="color:#38bdf8;">+${bonusBlockChance}% Deflection Block Chance</div>`);
     // Task 4: Reword regeneration bonus string to precisely convey tick timing
     if (bonusHpRegen > 0) bonusLines.push(`<div style="color:#f472b6;">+${bonusHpRegen} HP Regeneration (Every 20 Turns)</div>`);
+    /* Render MP Regeneration tooltip line */
+    if (bonusMpRegen > 0) bonusLines.push(`<div style="color:#a78bfa;">+${bonusMpRegen} MP Regeneration (Every 20 Turns)</div>`);
     if (bonusVampiric > 0) bonusLines.push(`<div style="color:#f87171;">+${bonusVampiric}% Vampiric Life Steal Factor</div>`);
     
     // FIX: Standardized key-value pairs with clean uniform double quotes to satisfy strict editor linters

@@ -546,6 +546,20 @@ function enemyStep(){
       }
   }
 
+  /* Generic Equipment MP Regeneration */
+  const gearMpRegen = window.getEquipmentBonus('mpRegen') || 0;
+  if (gearMpRegen > 0) {
+      state.player.genMpTicker = (state.player.genMpTicker || 0) + 1;
+      if (state.player.genMpTicker >= 20) {
+          state.player.genMpTicker = 0;
+          if (state.player.mp < state.player.mpMax) {
+              state.player.mp = Math.min(state.player.mp + gearMpRegen, state.player.mpMax);
+              updateBars();
+              spawnFloatText("+" + gearMpRegen + " MP", state.player.x, state.player.y, '#60a5fa');
+          }
+      }
+  }
+
   // 2. Trinket: Amulet of Life (1 HP per 20 turns)
   if (state.player.trinket?.name === 'Amulet of Life' || (state.player.equipment.necklace?.name === 'Amulet of Life')) {
     state.player.regenTicker = (state.player.regenTicker || 0) + 1;
