@@ -364,6 +364,10 @@ window.updateFishingLoop = function() {
     f.active = false;
     f.phase = 'result';
     state._inputLocked = false;
+    /* Record fish escape into Codex entry */
+    if (typeof unlockCodex === 'function' && fish) {
+      unlockCodex('Fish_' + fish.name.replace(/ /g, ''), false, true);
+    }
     log("SNAP! The line broke and the fish escaped!");
     spawnFloatText("ESCAPED!", state.player.x, state.player.y, '#ef4444');
     if (typeof SFX !== 'undefined' && SFX.weaponBreak) SFX.weaponBreak();
@@ -4096,6 +4100,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
         state.merchant.stock = [
           { kind:'buy', item:'Potion',   price:depthPrice(10), stock:rand(1,5), do:()=>{ state.inventory.potions=(state.inventory.potions|0)+1; } },
           { kind:'buy', item:'Tonic',    price:depthPrice(12), stock:rand(1,5), do:()=>{ state.inventory.tonics=(state.inventory.tonics|0)+1; } },
+          /* Added Antidotes to standard merchant stock */
+          { kind:'buy', item:'Antidote', price:depthPrice(12), stock:rand(1,5), do:()=>{ state.inventory.antidotes=(state.inventory.antidotes|0)+1; } },
           { kind:'buy', item:'Lockpick', price:depthPrice(15), stock:rand(1,5), do:()=>{ state.inventory.lockpicks=(state.inventory.lockpicks|0)+1; } }
         ].map(o => ({ ...o, sold:false }));
       }

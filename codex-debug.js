@@ -694,7 +694,7 @@ function initDebugSpawner() {
 const CODEX_KEY = 'dc_codex_v1';
 const CODEX_DEF = {
   // Enemies
-  Rat: { name:'Rat', desc:'A disease-ridden rodent wandering the dungeon floors.', seen:false, kills:0 },
+  Rat: { name:'Rat', desc:'These poisonous rodents may be small but they pack quite a sting. Best to deal with them from far away.', seen:false, kills:0 },
   Bat: { name:'Bat', desc:'Flits in the shadows. Drinks blood to heal.', seen:false, kills:0 },
   Slime: { name:'Slime', desc:'A mindless blob of acidic jelly.', seen:false, kills:0 },
   Spider: { name:'Spider', desc:'Web-spinning hunter. Slows its prey.', seen:false, kills:0 },
@@ -812,14 +812,15 @@ Ancient:  { name:'Prefix: Ancient',  desc:'Lost technology. Increases Min and Ma
   
   // --- FISHING OASIS & FISH ---
   FishingOasis: { name:'Secret Fishing Oasis', desc:'A serene sanctuary filled with rare aquatic life hidden deep within the dungeon.', seen:false },
-  Fish_Dungeonsnout: { name:'Dungeonsnout', desc:'Common cave fish with a prominent long snout.', seen:false, caught:0 },
-  Fish_Slimefin: { name:'Slimefin', desc:'Common dripping gelatinous green fish.', seen:false, caught:0 },
-  Fish_GlowingTetra: { name:'Glowing Tetra', desc:'Uncommon cyan fish that illuminates dark waters.', seen:false, caught:0 },
-  Fish_IronscaleBream: { name:'Ironscale Bream', desc:'Uncommon armored fish with metallic scales.', seen:false, caught:0 },
-  Fish_AetherEel: { name:'Aether Eel', desc:'Rare undulating electric purple eel.', seen:false, caught:0 },
-  Fish_ShadowBass: { name:'Shadow Bass', desc:'Rare deep dark bass with bioluminescent markings.', seen:false, caught:0 },
-  Fish_VoidLeviathan: { name:'Void Leviathan', desc:'Legendary cosmic dragon-fish of the abyss.', seen:false, caught:0 },
-  Fish_GoldenCarp: { name:'Golden Carp', desc:'Legendary radiant carp shimmering with pure gold.', seen:false, caught:0 },
+  /* Added escaped count tracking property to all fish species entries */
+  Fish_Dungeonsnout: { name:'Dungeonsnout', desc:'Common cave fish with a prominent long snout.', seen:false, caught:0, escaped:0 },
+  Fish_Slimefin: { name:'Slimefin', desc:'Common dripping gelatinous green fish.', seen:false, caught:0, escaped:0 },
+  Fish_GlowingTetra: { name:'Glowing Tetra', desc:'Uncommon cyan fish that illuminates dark waters.', seen:false, caught:0, escaped:0 },
+  Fish_IronscaleBream: { name:'Ironscale Bream', desc:'Uncommon armored fish with metallic scales.', seen:false, caught:0, escaped:0 },
+  Fish_AetherEel: { name:'Aether Eel', desc:'Rare undulating electric purple eel.', seen:false, caught:0, escaped:0 },
+  Fish_ShadowBass: { name:'Shadow Bass', desc:'Rare deep dark bass with bioluminescent markings.', seen:false, caught:0, escaped:0 },
+  Fish_VoidLeviathan: { name:'Void Leviathan', desc:'Legendary cosmic dragon-fish of the abyss.', seen:false, caught:0, escaped:0 },
+  Fish_GoldenCarp: { name:'Golden Carp', desc:'Legendary radiant carp shimmering with pure gold.', seen:false, caught:0, escaped:0 },
 
   // --- BASE EQUIPMENT ---
   Wep_Shortsword: { name:'Shortsword', desc:'', seen:false },
@@ -871,7 +872,7 @@ function loadCodex(){
 }
 function saveCodex(c){ localStorage.setItem(CODEX_KEY, JSON.stringify(c)); }
 
-function unlockCodex(key, increment=false){
+function unlockCodex(key, increment=false, isEscape=false){
   if (!key) return;
   const c = loadCodex();
   
@@ -880,9 +881,16 @@ function unlockCodex(key, increment=false){
   if (!entry && typeof getBossName === 'function') entry = c[getBossName(key)];
   
   if (entry){
-    if (!entry.seen) entry.seen = true;
+    /* Only mark entry as seen/revealed if this is not an escape event */
+    if (!entry.seen && !isEscape) entry.seen = true;
     
-    if (increment) {
+    /* Increment escaped count when isEscape parameter is true */
+    if (isEscape) {
+       if (entry.escaped !== undefined) {
+         entry.escaped = (entry.escaped || 0) + 1;
+       }
+    }
+    else if (increment) {
        // Is it an enemy?
        if (entry.kills !== undefined) {
          entry.kills++;
@@ -1032,7 +1040,13 @@ function renderCodexUI(){
              if (data && data.seen) {
                  let statHtml = '';
                  if (data.kills !== undefined) statHtml = `<div style="font-size:12px; color:#ef4444; font-weight:700;">Kills: ${data.kills}</div>`;
-                 else if (data.caught !== undefined) statHtml = `<div style="font-size:12px; color:#38bdf8; font-weight:700;">Caught: ${data.caught}</div>`;
+                 /* Render Escaped count directly beneath Caught count in Codex UI */
+                 else if (data.caught !== undefined) {
+                   statHtml = `<div style="font-size:12px; color:#38bdf8; font-weight:700;">Caught: ${data.caught}</div>`;
+                   if (data.escaped !== undefined) {
+                     statHtml += `<div style="font-size:12px; color:#ef4444; font-weight:700;">Escaped: ${data.escaped}</div>`;
+                   }
+                 }
                  else if (data.picked !== undefined) statHtml = `<div style="font-size:12px; color:#60a5fa; font-weight:700;">Picked: ${data.picked}</div>`;
                  else if (data.activated !== undefined) {
                      const label = (k === 'Gold_Well') ? 'Donated' : 'Activated';

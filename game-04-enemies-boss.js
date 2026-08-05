@@ -272,6 +272,7 @@ function floorEnemyKinds(){
 
   // progressive availability
   const pool = [];
+  const unlockFloor = { Rat: 1, Bat: 2, Slime: 3, Spider: 4, Goblin: 5, Skeleton: 7, Mage: 8 };
   if (f >= 1) pool.push('Rat');
   if (f >= 2) pool.push('Bat');    // Early unlock
   if (f >= 3) pool.push('Slime');
@@ -280,15 +281,19 @@ function floorEnemyKinds(){
   if (f >= 7) pool.push('Skeleton');
   if (f >= 8) pool.push('Mage');
 
-  // build scaled kinds
-  const kinds = pool.map(name=>{
+  // Determine highest unlocked floor tier in current pool
+  const maxUnlock = Math.max(...pool.map(name => unlockFloor[name]));
+
+  // build scaled kinds with weighted distribution so earlier mobs spawn less deeper down
+  const kinds = [];
+  pool.forEach(name => {
     const b = base[name];
     
     // --- ANTI-MITIGATION SCALING: Calculate active player stats to dynamically adjust baseline challenge ---
     const playerDef = typeof window.getEquipmentBonus === 'function' ? window.getEquipmentBonus('defense') : 0;
     const playerHpMax = state.player?.hpMax || 20;
     
-    return {
+    const obj = {
       type: name,
       // CHANGE: Scale enemy baseline pool health to scale dynamically with both depth and player max HP metrics
       hp: Math.max(1, Math.round(b.hp * scale) + Math.floor((f - 1) * 0.5) + Math.floor(playerHpMax * 0.20)),
@@ -299,6 +304,13 @@ function floorEnemyKinds(){
       ],
       xp: Math.max(1, Math.round(b.xp * (1 + Math.max(0, f - 1) * 0.10)))
     };
+
+    /* Weight newer/higher-tier mobs higher while keeping earlier mobs at a minimum weight of 1 */
+    const tierDiff = maxUnlock - unlockFloor[name];
+    const weight = Math.max(1, 8 - tierDiff * 2);
+    for (let i = 0; i < weight; i++) {
+      kinds.push(obj);
+    }
   });
 
   return kinds;
