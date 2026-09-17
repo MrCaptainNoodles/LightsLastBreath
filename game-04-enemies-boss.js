@@ -74,53 +74,7 @@ function greedyStepToward(e){
   return equal || null;
 }
 
-function bfsStepToward(e, maxSteps=48){
-  const size = e.size || 1;
-  const canEnter = size>1 ? (x,y)=>enemyCanEnterSize(x,y,size,e) : (x,y)=>enemyCanEnter(x,y);
-
-
-  const startKey = e.x+','+e.y;
-  const q = [{x:e.x,y:e.y}];
-  const parent = new Map([[startKey, null]]);
-  let foundKey = null;
-
-  while (q.length && parent.size < 1200){
-    const cur = q.shift();
-    if (cur.x === state.player.x && cur.y === state.player.y){ foundKey = cur.x+','+cur.y; break; }
-    for (const n of neighbors4(cur.x,cur.y)){
-      if (!canEnter(n.x,n.y)) continue;
-      const k = n.x+','+n.y;
-      if (parent.has(k)) continue;
-      parent.set(k, cur);
-      q.push({x:n.x,y:n.y});
-    }
-    if (--maxSteps <= 0) break;
-  }
-
-  if (!foundKey){
-    // choose reached node closest to player
-    let bestK = null, bestD = Infinity;
-    for (const [k] of parent){
-      const [x,y] = k.split(',').map(Number);
-      const d = Math.abs(x - state.player.x) + Math.abs(y - state.player.y);
-      if (d < bestD){ bestD = d; bestK = k; }
-    }
-    if (!bestK || bestK === startKey) return null;
-    foundKey = bestK;
-  }
-
-  // walk back one step from foundKey to first move from start
-  let curK = foundKey, prev = parent.get(curK);
-  while (prev && (prev.x+','+prev.y) !== startKey){
-    curK = prev.x+','+prev.y;
-    prev = parent.get(curK);
-  }
-  const [sx, sy] = curK.split(',').map(Number);
-  if (sx === e.x && sy === e.y) return null;
-  return { x:sx, y:sy };
-}
-
-// Small BFS to route around obstacles when greedy can't progress
+// Small BFS to route around obstacles when greedy can't progress (duplicate removed)
 function bfsStepToward(e, maxSteps=48){
   const size = e.size || 1;
   const canEnter = size>1 ? (x,y)=>enemyCanEnterSize(x,y,size,e) : (x,y)=>enemyCanEnter(x,y);
@@ -130,8 +84,9 @@ function bfsStepToward(e, maxSteps=48){
   const parent = new Map([[start, null]]);
   let foundKey = null;
 
-  while (q.length && parent.size < 1200){
-    const cur = q.shift();
+  let head = 0; // CHANGED: Read the queue without shifting its contents.
+  while (head < q.length && parent.size < 1200){
+    const cur = q[head++];
     const k = cur.x+','+cur.y;
 
     // stop early if we reached any tile adjacent (or best) to the player
@@ -772,13 +727,12 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
         }
     }
 
-    // --- NEW: Aggro/Vision Check ---
-    // If enemy is far away (8+ tiles) and healthy, they stay idle.
-    // (Exceptions: Bosses, Elites, or if they've been damaged)
+    // Aggro/Vision Check: Give off-screen elites a bounded hunting radius to stop heavy BFS searches across the map
     let aggroRange = 8;
     if (state.skills?.lockpicking?.perks?.['loc_c7']) aggroRange = 2; // Shadow Walk
+    const maxActiveDistance = e.boss ? 999 : ((e.elite || e.miniBoss) ? 18 : aggroRange);
 
-    if (d2p > aggroRange && !e.boss && !e.elite && e.hp >= e.hpMax) {
+    if (d2p > maxActiveDistance && e.hp >= (e.hpMax || e.hp)) {
       continue; // Skip turn (Idle)
     }
 
@@ -976,6 +930,19 @@ if ((state.player.bow?.loaded|0) === 0 && (state.inventory.arrows|0) > 0){
       }
       
       const eName = e.displayName || (e.elite ? 'Elite ' + e.type : e.type);
+
+      // TEMP DEBUG: Record the exact position and pattern used for damage.
+      console.trace('[Charge resolve]', JSON.stringify({
+        enemy: eName,
+        enemyPosition: [e.x, e.y],
+        size: e.size || 1,
+        pattern: e.chargePattern,
+        player: [state.player.x, state.player.y],
+        visual: [state.player.rx, state.player.ry],
+        hpBeforeCrush: state.player.hp,
+        hit: adj,
+        tiles: e.chargeTiles || []
+      }));
 
       if (adj) {
         const dmg = rand(e.atk[1] * 2, e.atk[1] * 3); // Massive Dmg

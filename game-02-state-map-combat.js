@@ -42,6 +42,7 @@ lockedDoors: new Set(),
     progress: 0,
     tension: 0,
     barPos: 50,
+    barVel: 0,     // Responsive velocity tracking for physics-based reeling
     barSize: 35,
     fishPos: 50,
     fishTarget: 50,
@@ -56,8 +57,19 @@ state.ui.invTab = state.ui.invTab || 'items';
 
 const logEl = document.getElementById('log');
 
-function renderLog(){
+function renderLog(frameTime){
   if (!logEl) return;
+
+  // CHANGED: Batch messages from the same turn into one DOM rebuild.
+  if (!Number.isFinite(frameTime)) {
+    if (!renderLog._pending) {
+      renderLog._pending = true;
+      requestAnimationFrame(renderLog);
+    }
+    return;
+  }
+
+  renderLog._pending = false;
   logEl.innerHTML = '';
   // Loop through the state array and create the text lines
   for(const line of state._log){
@@ -304,6 +316,11 @@ if(state.floor % 10 === 0){
   state.rooms=[{x:rx,y:ry,w:rw,h:rh}];
   state.player.x = rx + 3;
   state.player.y = ry + Math.floor(rh/2);
+  state.player.rx = state.player.x;
+  state.player.ry = state.player.y;
+  state._fovDirty = true;
+  if (state._currentVis instanceof Set) state._currentVis.clear();
+  else state._currentVis = new Set();
 
 // turn off fog for boss floors and pre-reveal the whole boss room
 state.noFog = true;
@@ -678,10 +695,15 @@ function ensurePathToStairsUnlocked(){
 
 
 
- // --- spawn point ---
+// --- spawn point ---
 const startRoom = state.rooms[0];
 state.player.x = Math.floor(startRoom.x+startRoom.w/2);
 state.player.y = Math.floor(startRoom.y+startRoom.h/2);
+state.player.rx = state.player.x;
+state.player.ry = state.player.y;
+state._fovDirty = true;
+if (state._currentVis instanceof Set) state._currentVis.clear();
+else state._currentVis = new Set();
 
 // keep a reference to the current floor's spawn room
 state.startRoom = startRoom;
@@ -1498,13 +1520,13 @@ if (isMerchantTile(x,y) || isBlacksmithTile(x,y) || isJesterTile(x,y) || isCarto
 
     const roll = Math.random();
     let kind, payload;
-// ORDER MATTERS: lowest → highest
-if (roll < 0.14) { kind='weapon';    payload=randomWeapon(); }  // was 0.18
-else if (roll < 0.35) { kind='potion';    payload=1; }
-else if (roll < 0.47) { kind='tonic';     payload=1; }
-else if (roll < 0.65) { kind='lockpicks'; payload=rand(1,3); }
-else if (roll < 0.75) { kind='antidote';  payload=1; }
-else if (roll < 0.87) { kind='arrows';    payload=rand(4,9); }
+// ORDER MATTERS: lowest → highest (boosted weapon drop rate from 14% to 30%)
+if (roll < 0.30) { kind='weapon';    payload=randomWeapon(); }
+else if (roll < 0.46) { kind='potion';    payload=1; }
+else if (roll < 0.56) { kind='tonic';     payload=1; }
+else if (roll < 0.70) { kind='lockpicks'; payload=rand(1,3); }
+else if (roll < 0.78) { kind='antidote';  payload=1; }
+else if (roll < 0.88) { kind='arrows';    payload=rand(4,9); }
 else { kind='spell';   payload=randomSpell(); }
 
 
@@ -1746,53 +1768,50 @@ if (typeof isClericTile === 'function' && isClericTile(spot.x, spot.y)) continue
     
          // already something here
 
-// simple, stable distribution; tweak as you like
+// simple, stable distribution (boosted weapon top-up rate from 12% to 28%)
     let kind, payload;
     const r = Math.random();
 
-    if (r < 0.12){
-      kind = 'weapon';                      // ~12%
+    if (r < 0.28){
+      kind = 'weapon';                      // ~28%
       payload = randomWeapon();
-    } else if (r < 0.18){
+    } else if (r < 0.34){
       kind = 'spell';                       // +6%
       payload = randomSpell();
-    } else if (r < 0.24){
+    } else if (r < 0.40){
       kind = 'arrows';                      // +6%
       payload = rand(2, 6);
-    } else if (r < 0.27){                   // --- NEW: 3% Chance for Bomb
+    } else if (r < 0.43){                   // 3% Chance for Bomb
       kind = 'bomb';
       payload = 1;
-    } else if (r < 0.29){                   // --- NEW: 2% Chance for Warp Stone
+    } else if (r < 0.45){                   // 2% Chance for Warp Stone
       kind = 'warp';
       payload = 1;
-    } else if (r < 0.44){                   // Adjusted: 15% Potion (was 23%)
+    } else if (r < 0.58){                   // 13% Potion
       kind = 'potion';                      
       payload = 1;
-    } else if (r < 0.59){                   // Adjusted: 15% Tonic (was 23%)
+    } else if (r < 0.70){                   // 12% Tonic
       kind = 'tonic';                       
       payload = 1;
-    } else if (r < 0.65){                   // Shifted down (maintains ~6% Shield)
+    } else if (r < 0.76){                   // 6% Shield
       kind = 'shield';
-      // FIX: Pick a specific shield name instead of generic "1"
       const sTypes = ['Buckler', 'Kite Shield', 'Tower Shield', 'Ancient Shield'];
       payload = sTypes[Math.floor(Math.random() * sTypes.length)];
-    } else if (r < 0.69){                   // Shifted down (maintains ~4% Trinket)
-      // --- NEW: Trinket Drop Chance (4%) ---
+    } else if (r < 0.80){                   // 4% Trinket
       kind = 'trinket';
-  // Buffed & Expanded Pool
-  const tPool = [
-    'Ring of Haste',   // +2 Stamina
-    'Amulet of Life',  // Regen HP
-    "Thief's Band",    // Gold +25%
-    "Warrior's Ring",  // +1 Dmg
-    "Stone Charm",     // +10% Armor
-    "Scholar's Lens"   // +15% XP
-  ];
-  payload = tPool[Math.floor(Math.random() * tPool.length)];
-}  else {
-  kind = 'antidote';                    
-  payload = 1;
-}
+      const tPool = [
+        'Ring of Haste',   // +2 Stamina
+        'Amulet of Life',  // Regen HP
+        "Thief's Band",    // Gold +25%
+        "Warrior's Ring",  // +1 Dmg
+        "Stone Charm",     // +10% Armor
+        "Scholar's Lens"   // +15% XP
+      ];
+      payload = tPool[Math.floor(Math.random() * tPool.length)];
+    } else {
+      kind = 'antidote';                    
+      payload = 1;
+    }
 
 
 state.pickups[kxy] = { kind, payload };
@@ -2542,7 +2561,8 @@ function damageAfterDR(raw){
 
   // --- Iron Body (Hand-to-Hand) ---
   if (state.skills?.hand?.perks?.['hand_c8']) {
-      flatReduction += Math.floor(state.player.hpMax * 0.10);
+      // BALANCED: Cap flat reduction at 3 (4% max HP) to prevent complete damage immunity
+      flatReduction += Math.min(3, Math.floor(state.player.hpMax * 0.04));
   }
 
   if (state.player.blessTicks > 0) { dr += 0.20; }
@@ -2613,7 +2633,8 @@ function accuracyBonusFromSkill(type){
   let perkBonus = 0;
   if (s.perks) {
     if (type === 'spear' && s.perks['spear_base']) perkBonus += s.perks['spear_base'] * 0.05;
-    if (type === 'bow' && s.perks['bow_base']) perkBonus += s.perks['bow_base'] * 0.02;
+    // BALANCED: Standardize bow base accuracy to +5% per rank
+    if (type === 'bow' && s.perks['bow_base']) perkBonus += s.perks['bow_base'] * 0.05;
     if (type === 'magic' && s.perks['mag_base']) perkBonus += s.perks['mag_base'] * 0.05;
   }
   return base + bowBonus + perkBonus;
@@ -2691,7 +2712,8 @@ function applyBleed(e, ticks=BLEED_TICKS, perTick=BLEED_DMG){
   
   // Deep Cuts (One-Handed)
   if (state.skills?.one?.perks && state.skills.one.perks['one_b4']) {
-      bonusDmg += (2 * state.skills.one.perks['one_b4']);
+      // BALANCED: Scaled bonus damage to +1 per level
+      bonusDmg += (1 * state.skills.one.perks['one_b4']);
   }
   
   e.bleedTicks = Math.max(e.bleedTicks|0, 0) + ticks + bonusTicks;
@@ -2838,6 +2860,10 @@ function awardKill(type,amount){
   if (barsChanged && typeof updateBars === 'function') updateBars();
 
   incrementMetaStat('kills_' + type);
+  // Track Endless class unlock statistics when in Endless mode
+  if (state.gameMode === 'endless') {
+    incrementMetaStat('kills_' + type + '_endless');
+  }
 
   // --- XP Multiplier based on Effect Count ---
   let count = 0;
@@ -2917,7 +2943,10 @@ function awardKill(type,amount){
     recomputeWeapon();
   }
   updateEquipUI();
-  renderSkills();
+  // PERFORMANCE FIX: Only rebuild skills list DOM elements if a skill actually leveled up
+  if (up || upS) {
+    renderSkills();
+  }
 }
 
 // --- GLOBAL FAIL-SAFE GAME OVER: Prevent execution freeze on death and seamlessly reveal high score initials screen ---

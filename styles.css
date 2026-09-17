@@ -710,6 +710,63 @@ input[type=range].custom-slider::-webkit-slider-thumb {
 
 
 
+/* Spell Radial Wheel Styles */
+.radial-sheet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  pointer-events: auto;
+}
+.radial-btn {
+  position: absolute;
+  width: 80px;
+  height: 62px;
+  padding: 4px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease, background-color 0.1s ease;
+  font-size: 10px;
+  text-align: center;
+  box-sizing: border-box;
+  z-index: 5;
+  user-select: none;
+}
+.radial-btn:hover, .radial-btn.controller-focus {
+  transform: scale(1.12);
+  z-index: 10;
+  border-color: #f9d65c !important;
+  background-color: rgba(249, 214, 92, 0.22) !important;
+}
+.radial-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+  box-sizing: border-box;
+  pointer-events: none;
+  box-shadow: inset 0 0 15px rgba(0,0,0,0.7), 0 0 12px rgba(56,189,248,0.25);
+}
+
 /* Controller Focus Highlight */
 .controller-focus {
   outline: 3px solid #f9d65c !important;

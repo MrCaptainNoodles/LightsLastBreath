@@ -1851,6 +1851,7 @@ window.saveFishingRun = function(){
   if(state.redChests) copy.redChests = Array.from(state.redChests.entries());
 
   delete copy.particles; delete copy.floatingText; delete copy.projectiles;
+  delete copy._currentVis; delete copy._drawPending; delete copy._animating;
   localStorage.setItem(FISH_SAVE_KEY, JSON.stringify(copy));
   showBanner("Fishing Oasis Saved.", 2000);
 };
@@ -1867,8 +1868,11 @@ window.loadFishingRun = function(){
     d.puzzleDoors = new Set(d.puzzleDoors);
     d.mimicChests = new Set(d.mimicChests);
     if(d.redChests) d.redChests = new Map(d.redChests);
+    delete d._currentVis;
 
     Object.assign(state, d);
+    state._currentVis = new Set();
+    state._fovDirty = true;
 
     state._inputLocked = false;   
     state._pauseOpen = false;     
@@ -1911,8 +1915,9 @@ window.saveRun = function(){
   copy.mimicChests = Array.from(state.mimicChests||[]);
   if(state.redChests) copy.redChests = Array.from(state.redChests.entries());
   
-  // Clean heavy objects
+  // Clean transient/rendering and Set-based caches that would stringify into invalid objects
   delete copy.particles; delete copy.floatingText; delete copy.projectiles;
+  delete copy._currentVis; delete copy._drawPending; delete copy._animating;
   localStorage.setItem(SAVE_KEY, JSON.stringify(copy));
   showBanner("Game Saved.", 2000);
 };
@@ -1930,8 +1935,11 @@ window.loadRun = function(){
     d.puzzleDoors = new Set(d.puzzleDoors);
     d.mimicChests = new Set(d.mimicChests);
     if(d.redChests) d.redChests = new Map(d.redChests);
+    delete d._currentVis;
 
     Object.assign(state, d);
+    state._currentVis = new Set();
+    state._fovDirty = true;
 
     // --- FIX: Refresh Floor Effect Visuals (Tint) ---
     const tintEl = document.getElementById('floorTint');

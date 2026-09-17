@@ -309,6 +309,144 @@ if (tgtS) tgtS.onclick = ()=>{ bsTarget='shield'; refreshBsUI(); };
   if (b5) b5.onclick = ()=>doRepair(5);
   if (bf) bf.onclick = ()=>doRepair(999);
 
+// --- NEW: Unified Spell Cycling Helper ---
+window.cycleEquippedSpell = function cycleEquippedSpell() {
+  if (state.spells && state.spells.length > 0) {
+    let idx = -1;
+    if (state.equippedSpell) {
+      idx = state.spells.findIndex(s => s.name === state.equippedSpell.name);
+    }
+    const next = state.spells[(idx + 1) % state.spells.length];
+    state.equippedSpell = next;
+    
+    if (typeof recomputeWeapon === 'function') recomputeWeapon();
+    if (typeof updateEquipUI === 'function') updateEquipUI();
+    if (typeof spawnFloatText === 'function') spawnFloatText(next.name, state.player.x, state.player.y, '#60a5fa');
+    if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
+  } else {
+    if (typeof log === 'function') log("No spells memorized.");
+  }
+};
+
+// --- NEW: Radial Spell Wheel Window Controller (Hold-to-Select / Release-to-Equip) ---
+window.openSpellRadial = function openSpellRadial() {
+  if (!state.spells || state.spells.length === 0) {
+    if (typeof log === 'function') log("No spells memorized.");
+    return;
+  }
+  const modal = document.getElementById('spellRadialModal');
+  const container = document.getElementById('spellRadialContainer');
+  if (!modal || !container) return;
+
+  container.innerHTML = '';
+  state._inputLocked = true;
+  state._radialActive = true;
+  state._radialSelectedSpell = state.equippedSpell || state.spells[0];
+  if (typeof setMobileControlsVisible === 'function') setMobileControlsVisible(false);
+
+  const W = 320, H = 320;
+  const centerX = W / 2, centerY = H / 2;
+  const radius = 104;
+  const total = state.spells.length;
+
+  // Center display preview node
+  const centerEl = document.createElement('div');
+  centerEl.className = 'radial-center';
+  container.appendChild(centerEl);
+
+  window._updateRadialCenterPreview = (sp) => {
+    if (!sp) {
+      centerEl.innerHTML = '<span style="font-size:11px; opacity:0.6;">No Spell</span>';
+      return;
+    }
+    const color = typeof projectileColorForMagic === 'function' ? projectileColorForMagic(sp.name) : '#60a5fa';
+    let detail = '';
+    if (typeof getSpellStats === 'function') {
+      const st = getSpellStats(sp.name);
+      detail = sp.name === 'Heal' ? `Heal ${Math.round((st.pct || 0)*100)}%` : `${st.min}–${st.max} DMG`;
+      detail += `<br><span style="color:#a78bfa;">${st.cost || 0} MP</span>`;
+    }
+    centerEl.innerHTML = `
+      <div style="font-weight:900; font-size:12px; color:${color}; margin-bottom:2px;">${sp.name}</div>
+      <div style="font-size:10px; color:#cbd5e1; line-height:1.2;">Lv ${sp.tier || 1}<br>${detail}</div>
+    `;
+  };
+
+  window._updateRadialCenterPreview(state._radialSelectedSpell);
+
+  state._radialButtons = [];
+
+  state.spells.forEach((sp, i) => {
+    const angle = (2 * Math.PI * i / total) - (Math.PI / 2);
+    const btnW = 80, btnH = 62;
+    const posX = centerX + (radius * Math.cos(angle)) - (btnW / 2);
+    const posY = centerY + (radius * Math.sin(angle)) - (btnH / 2);
+
+    const isSelected = state._radialSelectedSpell && state._radialSelectedSpell.name === sp.name;
+    const color = typeof projectileColorForMagic === 'function' ? projectileColorForMagic(sp.name) : '#60a5fa';
+
+    const b = document.createElement('button');
+    b.className = 'btn radial-btn' + (isSelected ? ' controller-focus' : '');
+    b.dataset.spellName = sp.name;
+    b.dataset.angle = angle;
+    b.style.left = `${Math.round(posX)}px`;
+    b.style.top = `${Math.round(posY)}px`;
+    b.style.background = isSelected ? 'rgba(56, 189, 248, 0.28)' : 'rgba(17, 24, 39, 0.9)';
+    b.style.borderColor = isSelected ? '#facc15' : 'rgba(255,255,255,0.2)';
+
+    b.innerHTML = `
+      <span style="font-weight:bold; color:${color}; font-size:11px; white-space:nowrap;">${sp.name}</span>
+      <span style="font-size:9px; opacity:0.75; color:#cbd5e1;">Lv ${sp.tier || 1}</span>
+    `;
+
+    const selectThis = () => {
+      state._radialSelectedSpell = sp;
+      window._updateRadialCenterPreview(sp);
+      container.querySelectorAll('.radial-btn').forEach(btn => {
+        const active = btn.dataset.spellName === sp.name;
+        btn.classList.toggle('controller-focus', active);
+        btn.style.borderColor = active ? '#facc15' : 'rgba(255,255,255,0.2)';
+        btn.style.background = active ? 'rgba(56, 189, 248, 0.28)' : 'rgba(17, 24, 39, 0.9)';
+      });
+    };
+
+    b.onmouseenter = selectThis;
+    b.onclick = (ev) => {
+      ev.stopPropagation();
+      selectThis();
+      window.commitAndCloseRadialSpell();
+    };
+
+    container.appendChild(b);
+    state._radialButtons.push({ btn: b, spell: sp, angle: angle });
+  });
+
+  modal.style.display = 'flex';
+};
+
+window.commitAndCloseRadialSpell = function commitAndCloseRadialSpell() {
+  if (state._radialSelectedSpell) {
+    state.equippedSpell = state._radialSelectedSpell;
+    if (typeof recomputeWeapon === 'function') recomputeWeapon();
+    if (typeof updateEquipUI === 'function') updateEquipUI();
+    if (typeof updateInvBody === 'function') updateInvBody();
+    if (typeof spawnFloatText === 'function') spawnFloatText(state.equippedSpell.name, state.player.x, state.player.y, '#60a5fa');
+    if (typeof SFX !== 'undefined' && SFX.pickup) SFX.pickup();
+  }
+  window.closeSpellRadial();
+};
+
+window.closeSpellRadial = function closeSpellRadial() {
+  const modal = document.getElementById('spellRadialModal');
+  if (modal) modal.style.display = 'none';
+  document.querySelectorAll('.controller-focus').forEach(el => el.classList.remove('controller-focus'));
+  state._inputLocked = false;
+  if (!state._pauseOpen && typeof setMobileControlsVisible === 'function') {
+    setMobileControlsVisible(true);
+  }
+  if (typeof draw === 'function') draw();
+};
+
 // global open
  window.openBlacksmith = function openBlacksmith(){
   unlockCodex('Blacksmith'); // <--- ADD THIS
@@ -3405,24 +3543,28 @@ function updateControlUI(type) {
 }
 
 function getVisibleModal() {
-  const modals = Array.from(document.querySelectorAll('.modal, .fullOverlay')).filter(m => {
-    const style = window.getComputedStyle(m);
-    return style.display !== 'none' && style.visibility !== 'hidden';
-  });
-  
-  if (modals.length === 0) return null;
-  
-  // Sort strictly by computed z-index (highest wins). If tie, last in DOM wins.
-  modals.sort((a, b) => {
-    const zA = parseInt(window.getComputedStyle(a).zIndex) || 0;
-    const zB = parseInt(window.getComputedStyle(b).zIndex) || 0;
-    if (zA === zB) {
-      return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+  // Fast inline check avoids 30+ getComputedStyle forced reflows every frame
+  const modals = document.querySelectorAll('.modal, .fullOverlay');
+  let topModal = null;
+  let topZ = -Infinity;
+
+  for (let i = 0; i < modals.length; i++) {
+    const m = modals[i];
+    const disp = m.style.display;
+    if (disp === 'none') continue;
+    if (!disp) {
+      if (m.id !== 'titleScreen') continue;
     }
-    return zA - zB;
-  });
-  
-  return modals[modals.length - 1];
+    if (m.style.visibility === 'hidden') continue;
+
+    const z = parseInt(m.style.zIndex) || (m.classList.contains('fullOverlay') ? 9999 : 100);
+    if (z >= topZ) {
+      topZ = z;
+      topModal = m;
+    }
+  }
+
+  return topModal;
 }
 
 window.openSkillsModal = function() {
@@ -3519,20 +3661,60 @@ function pollGamepad() {
     } else { gpState.buttons[idx] = false; }
   };
 
- // 1. MENU NAVIGATION (Controller Snapping)
+ // 1. MENU NAVIGATION (Controller Snapping & Position Retention)
   if (openModal) {
     const thresh = 0.5;
 
-      // Gather Navigable Elements
-      // ADDED: .menuLink to catch Endless Mode (which is a span) and removed aria-disabled block
-      const navs = Array.from(openModal.querySelectorAll('button, a, .btn, .tab-btn, .menuLink, input[type="range"], select, input[type="checkbox"], .card, .item, .slot, .item-slot, .perk-btn, .menu-btn, .menu-item, [onclick], [tabindex="0"]'))
-          .filter(el => {
+    // Reset tracked focus position when switching between different modals
+    if (gpState._activeModal !== openModal) {
+      gpState._activeModal = openModal;
+      gpState.lastFocusPos = null;
+      gpState.lastFocusIndex = -1;
+    }
+
+    // Query active navigable elements in the visible modal
+    const navs = Array.from(openModal.querySelectorAll('button, a, .btn, .tab-btn, .menuLink, input[type="range"], select, input[type="checkbox"], .card, .item, .slot, .item-slot, .perk-btn, .menu-btn, .menu-item, [onclick], [tabindex="0"]'))
+      .filter(el => {
         const r = el.getBoundingClientRect();
         const comp = window.getComputedStyle(el);
         return r.width > 0 && r.height > 0 && comp.visibility !== 'hidden' && comp.opacity !== '0';
       });
 
     let focusEl = document.querySelector('.controller-focus');
+
+    // If focus was lost due to a UI redraw (e.g., repairs or merchant purchases), restore it at the same position
+    if ((!focusEl || !openModal.contains(focusEl)) && navs.length > 0) {
+      let restored = null;
+      if (gpState.lastFocusPos) {
+        let bestDist = Infinity;
+        for (const el of navs) {
+          const r = el.getBoundingClientRect();
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          const d = Math.hypot(cx - gpState.lastFocusPos.x, cy - gpState.lastFocusPos.y);
+          if (d < bestDist) {
+            bestDist = d;
+            restored = el;
+          }
+        }
+      }
+      if (!restored && gpState.lastFocusIndex >= 0 && gpState.lastFocusIndex < navs.length) {
+        restored = navs[gpState.lastFocusIndex];
+      }
+      if (restored) {
+        document.querySelectorAll('.controller-focus').forEach(e => e.classList.remove('controller-focus'));
+        focusEl = restored;
+        focusEl.classList.add('controller-focus');
+        if (typeof focusEl.onmouseenter === 'function') focusEl.onmouseenter();
+      }
+    }
+
+    // Save active element position if focus is valid
+    if (focusEl && openModal.contains(focusEl)) {
+      const fr = focusEl.getBoundingClientRect();
+      gpState.lastFocusPos = { x: fr.left + fr.width / 2, y: fr.top + fr.height / 2 };
+      gpState.lastFocusIndex = navs.indexOf(focusEl);
+    }
 
     // --- Spatial UI Navigation (Left Stick / D-Pad) ---
     let lsX = 0, lsY = 0;
@@ -3575,6 +3757,9 @@ function pollGamepad() {
                    focusEl.classList.add('controller-focus');
                    if (typeof focusEl.onmouseenter === 'function') focusEl.onmouseenter(); // Fire tooltip if it exists
                    focusEl.scrollIntoView({behavior:'smooth', block:'nearest'});
+                   const fr = focusEl.getBoundingClientRect();
+                   gpState.lastFocusPos = { x: fr.left + fr.width / 2, y: fr.top + fr.height / 2 };
+                   gpState.lastFocusIndex = 0;
                } else {
                    // Find best neighbor
                    const cx = focusEl.getBoundingClientRect().left + focusEl.getBoundingClientRect().width/2;
@@ -3608,6 +3793,9 @@ function pollGamepad() {
                        best.classList.add('controller-focus');
                        if (typeof best.onmouseenter === 'function') best.onmouseenter(); // Trigger new item popup info
                        best.scrollIntoView({behavior:'smooth', block:'nearest'});
+                       const br = best.getBoundingClientRect();
+                       gpState.lastFocusPos = { x: br.left + br.width / 2, y: br.top + br.height / 2 };
+                       gpState.lastFocusIndex = navs.indexOf(best);
                    }
                }
             }
@@ -3617,28 +3805,67 @@ function pollGamepad() {
         if (gpState.navMoving) gpState.navMoving = false; 
     }
 
-    // Select (A / Cross)
+    // Select (A / Cross) with Focus Memory
     btn(0, () => { 
         let focusedEl = document.querySelector('.controller-focus');
         
-        // --- FIX: Ghost Button Exploit ---
-        // If the focused element is no longer in our list of visible, active buttons
-        // (like a stat button on a modal that just closed), strip its focus!
         if (focusedEl && !navs.includes(focusedEl)) {
             focusedEl.classList.remove('controller-focus');
             focusedEl = null;
         }
-        // ---------------------------------
 
-        // Auto-target the first item if nothing is focused (Fixes Main Menu bug)
+        // Auto-target first navigable item if modal has no active focus
         if (!focusedEl && navs.length > 0) {
             focusedEl = navs[0];
             focusedEl.classList.add('controller-focus');
+            if (typeof focusedEl.onmouseenter === 'function') focusedEl.onmouseenter();
         }
 
         if (focusedEl) {
             if (focusedEl.disabled || focusedEl.getAttribute('aria-disabled') === 'true' || focusedEl.classList.contains('disabled')) return;
+            
+            // Cache element coordinates and index before triggering action
+            const r = focusedEl.getBoundingClientRect();
+            const savedPos = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+            const savedIdx = navs.indexOf(focusedEl);
+
+            gpState.lastFocusPos = savedPos;
+            gpState.lastFocusIndex = savedIdx;
+
             focusedEl.click();
+
+            // If action redrew the modal DOM synchronously (e.g., renderBuy, updateInvBody), restore focus immediately
+            if (!document.body.contains(focusedEl) && openModal) {
+                const refreshedNavs = Array.from(openModal.querySelectorAll('button, a, .btn, .tab-btn, .menuLink, input[type="range"], select, input[type="checkbox"], .card, .item, .slot, .item-slot, .perk-btn, .menu-btn, .menu-item, [onclick], [tabindex="0"]'))
+                  .filter(el => {
+                    const cr = el.getBoundingClientRect();
+                    const comp = window.getComputedStyle(el);
+                    return cr.width > 0 && cr.height > 0 && comp.visibility !== 'hidden' && comp.opacity !== '0';
+                  });
+
+                if (refreshedNavs.length > 0) {
+                    let target = null, bestDist = Infinity;
+                    for (const el of refreshedNavs) {
+                        const cr = el.getBoundingClientRect();
+                        const d = Math.hypot((cr.left + cr.width / 2) - savedPos.x, (cr.top + cr.height / 2) - savedPos.y);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            target = el;
+                        }
+                    }
+                    if (!target && savedIdx >= 0 && savedIdx < refreshedNavs.length) {
+                        target = refreshedNavs[savedIdx];
+                    }
+                    if (target) {
+                        document.querySelectorAll('.controller-focus').forEach(e => e.classList.remove('controller-focus'));
+                        target.classList.add('controller-focus');
+                        if (typeof target.onmouseenter === 'function') target.onmouseenter();
+                        const tr = target.getBoundingClientRect();
+                        gpState.lastFocusPos = { x: tr.left + tr.width / 2, y: tr.top + tr.height / 2 };
+                        gpState.lastFocusIndex = refreshedNavs.indexOf(target);
+                    }
+                }
+            }
         } else if (openModal) {
             openModal.click();
         }
@@ -3686,14 +3913,66 @@ function pollGamepad() {
   btn(0, () => attack());
   btn(1, () => cast());
   btn(2, () => interact());
-  btn(3, () => {
-    if (state.spells?.length) {
-      let idx = state.equippedSpell ? state.spells.findIndex(s => s.name === state.equippedSpell.name) : -1;
-      state.equippedSpell = state.spells[(idx + 1) % state.spells.length];
-      updateEquipUI();
-      spawnFloatText(state.equippedSpell.name, state.player.x, state.player.y, '#60a5fa');
+  
+  // Controller Button 3 (Triangle / Y): Hold > 260ms opens radial wheel, stick aims, release equips and closes
+  if (gp.buttons[3]?.pressed) {
+    if (!gpState.btn3Pressed) {
+      gpState.btn3Pressed = true;
+      gpState.btn3Time = Date.now();
+      gpState.btn3HoldTriggered = false;
+    } else if (!gpState.btn3HoldTriggered && (Date.now() - gpState.btn3Time > 260)) {
+      gpState.btn3HoldTriggered = true;
+      if (typeof window.openSpellRadial === 'function') {
+        window.openSpellRadial();
+      }
     }
-  });
+
+    // While holding, angle stick to aim and highlight radial slice
+    if (gpState.btn3HoldTriggered && state._radialActive && state._radialButtons && state._radialButtons.length > 0) {
+      const ax = gp.axes[0], ay = gp.axes[1];
+      if (Math.hypot(ax, ay) > 0.35) {
+        const stickAngle = Math.atan2(ay, ax);
+        let best = null, minDiff = Infinity;
+        state._radialButtons.forEach(item => {
+          let diff = Math.abs(item.angle - stickAngle);
+          while (diff > Math.PI) diff = Math.abs(diff - 2 * Math.PI);
+          if (diff < minDiff) { minDiff = diff; best = item; }
+        });
+        if (best && best.spell !== state._radialSelectedSpell) {
+          state._radialSelectedSpell = best.spell;
+          if (typeof window._updateRadialCenterPreview === 'function') {
+            window._updateRadialCenterPreview(best.spell);
+          }
+          const container = document.getElementById('spellRadialContainer');
+          if (container) {
+            container.querySelectorAll('.radial-btn').forEach(btn => {
+              const active = btn.dataset.spellName === best.spell.name;
+              btn.classList.toggle('controller-focus', active);
+              btn.style.borderColor = active ? '#facc15' : 'rgba(255,255,255,0.2)';
+              btn.style.background = active ? 'rgba(56, 189, 248, 0.28)' : 'rgba(17, 24, 39, 0.9)';
+            });
+          }
+        }
+      }
+    }
+  } else {
+    if (gpState.btn3Pressed) {
+      if (gpState.btn3HoldTriggered) {
+        // Released button after hold: equip highlighted spell and close immediately
+        if (typeof window.commitAndCloseRadialSpell === 'function') {
+          window.commitAndCloseRadialSpell();
+        }
+      } else {
+        // Quick tap: cycle to next spell
+        if (typeof window.cycleEquippedSpell === 'function') {
+          window.cycleEquippedSpell();
+        }
+      }
+      gpState.btn3Pressed = false;
+      gpState.btn3HoldTriggered = false;
+    }
+  }
+
   btn(10, () => { const h = document.getElementById('helpModal'); if(h) h.style.display = h.style.display==='flex'?'none':'flex'; });
   btn(5, () => { updateSpellBody(); document.getElementById('spellModal').style.display = 'flex'; setMobileControlsVisible(false); });
   btn(6, () => shootBow());
@@ -3806,6 +4085,26 @@ window.addEventListener('keyup', (e) => {
   const k = (e.key || '').toLowerCase();
   state.keys = state.keys || {};
   state.keys[k] = false;
+
+  // Handle F release: if held, equip selected slice and close instantly; if tapped, cycle spell
+  if (k === 'f') {
+    if (state._fHoldTimer) {
+      clearTimeout(state._fHoldTimer);
+      state._fHoldTimer = null;
+    }
+    if (state._fHoldTriggered) {
+      // Release-to-equip: instantly commit and close the radial overlay
+      if (typeof window.commitAndCloseRadialSpell === 'function') {
+        window.commitAndCloseRadialSpell();
+      }
+    } else if (state._fKeyDownTime) {
+      if (typeof window.cycleEquippedSpell === 'function') {
+        window.cycleEquippedSpell();
+      }
+    }
+    state._fHoldTriggered = false;
+    state._fKeyDownTime = 0;
+  }
 });
 
 // keyboard controls (desktop)
@@ -4027,24 +4326,26 @@ if (state.gameMode === 'tutorial' && (state._tutGotArrows || state._tutArrowsPic
       if (typeof window.openSkillsModal === 'function') window.openSkillsModal();
   }
 
-  // --- NEW: Cycle Spells (F) ---
+  // --- Cycle Spells / Radial Wheel (F) ---
   else if (k === 'f') {
-    if (state.spells && state.spells.length > 0) {
-       let idx = -1;
-       if (state.equippedSpell) {
-         idx = state.spells.findIndex(s => s.name === state.equippedSpell.name);
-       }
-       // Cycle forward, loop to start
-       const next = state.spells[(idx + 1) % state.spells.length];
-       state.equippedSpell = next;
-       
-       if (typeof recomputeWeapon === 'function') recomputeWeapon();
-       updateEquipUI();
-       spawnFloatText(next.name, state.player.x, state.player.y, '#60a5fa'); // Blue text
-       SFX.pickup(); // Click sound
-    } else {
-       log("No spells memorized.");
+    if (!state.spells || state.spells.length === 0) {
+      log("No spells memorized.");
+      return;
     }
+    // Ignore key repeat events caused by holding the key down
+    if (e.repeat) return;
+
+    state._fKeyDownTime = Date.now();
+    state._fHoldTriggered = false;
+    if (state._fHoldTimer) clearTimeout(state._fHoldTimer);
+
+    // Hold > 260ms opens radial wheel
+    state._fHoldTimer = setTimeout(() => {
+      state._fHoldTriggered = true;
+      if (typeof window.openSpellRadial === 'function') {
+        window.openSpellRadial();
+      }
+    }, 260);
   }
   // -----------------------------
 
@@ -4411,8 +4712,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 // ----------------------------------------------
 
-function loadMeta(){ try{ return JSON.parse(localStorage.getItem(META_KEY)||'{}'); }catch{ return {}; } }
-function saveMeta(m){ localStorage.setItem(META_KEY, JSON.stringify(m)); }
+let _metaCache = null;
+function loadMeta(){ 
+  if (_metaCache) return _metaCache;
+  try{ _metaCache = JSON.parse(localStorage.getItem(META_KEY)||'{}'); return _metaCache; }catch{ return {}; } 
+}
+function saveMeta(m){ 
+  _metaCache = m;
+  try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch(e){}
+}
 
 function incrementMetaStat(key, amt=1){
   const m = loadMeta();
@@ -4534,11 +4842,13 @@ function doRestart(className){
   state.projectiles = [];
   state.explosions = [];
   state.enemies = []; 
+  state._currentVis = new Set();
+  state._fovDirty = true;
   
   // 2. Clear Props & Pickups (The "Ghost Objects" you were seeing)
   state.props = {};
   state.pickups = {};
-  state.decals = []; 
+  state.decals = [];
   
   // 3. Reset Map & Fog (Prevents Boss Floor "No Fog" form revealing the empty map)
   const W = state.size.w || 50, H = state.size.h || 50;
@@ -4618,21 +4928,38 @@ function doRestart(className){
           const m = document.getElementById('classSelectModal');
           const b = document.getElementById('classSelectBody');
       b.innerHTML = '';
-      // --- NEW: Grid Layout Styles (4 Columns Fixed) ---
+
+      // Expand modal sheet dimensions for a larger, readable selection grid
+      const sheet = m ? m.querySelector('.sheet') : null;
+      if (sheet) {
+        sheet.style.width = 'min(980px, 95vw)';
+        sheet.style.maxHeight = '90vh';
+        sheet.style.overflowY = 'auto';
+      }
+
+      // --- Grid Layout Styles (4 Columns with breathing room) ---
       b.style.display = 'grid';
-      b.style.gridTemplateColumns = 'repeat(4, 1fr)'; 
-      b.style.gap = '10px';
-      b.style.padding = '10px';
+      b.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))'; 
+      b.style.gap = '12px';
+      b.style.padding = '10px 4px';
       
-      // 1. Show Unlocked Classes
+      // 1. Show Unlocked Classes with full stat and skill names
       const classBonusMap = {
-        Squire: "+2 HP, +2 STM", Apprentice: "+5 MP", Thief: "+2 STM",
-        Barbarian: "+10 HP, +5 STM, -5 MP", Mercenary: "+5 HP, +5 STM, -5 MP",
-        Ranger: "+5 STM, +5 MP", Acolyte: "+5 HP, +10 MP, -2 STM",
-        Paladin: "+20 HP, -5 MP", Spellblade: "+15 MP, +5 STM, -2 HP",
-        Assassin: "+10 STM, +5 MP, -5 HP", Dragoon: "+10 STM, +5 HP, -5 MP",
-        Warlord: "+30 HP, +20 STM, -10 MP", Archmage: "+30 MP, +5 STM, -10 HP",
-        Phantom: "+20 STM, +10 MP, -5 HP", Vampire: "+15 HP, +15 MP, +15 STM"
+        Squire: "+2 HP, +2 Stamina<br><span style='color:#facc15;'>+1 One-Handed, +1 Survivability</span>", 
+        Apprentice: "+5 MP<br><span style='color:#facc15;'>+2 Magic</span>", 
+        Thief: "+2 Stamina<br><span style='color:#facc15;'>+1 Lockpicking, +1 Hand-to-Hand</span>",
+        Barbarian: "+10 HP, +5 Stamina, -5 MP<br><span style='color:#facc15;'>+2 Hafted</span>", 
+        Mercenary: "+5 HP, +5 Stamina, -5 MP<br><span style='color:#facc15;'>+2 Two-Handed</span>", 
+        Ranger: "+5 Stamina, +5 MP<br><span style='color:#facc15;'>+2 Archery</span>", 
+        Acolyte: "+5 HP, +10 MP, -2 Stamina<br><span style='color:#facc15;'>+1 Polearm, +1 Magic</span>",
+        Paladin: "+20 HP, -5 MP<br><span style='color:#facc15;'>+2 Two-Handed, +1 Survivability</span>", 
+        Spellblade: "+15 MP, +5 Stamina, -2 HP<br><span style='color:#facc15;'>+1 One-Handed, +2 Magic</span>",
+        Assassin: "+10 Stamina, +5 MP, -5 HP<br><span style='color:#facc15;'>+2 Hand-to-Hand, +1 Lockpicking</span>", 
+        Dragoon: "+10 Stamina, +5 HP, -5 MP<br><span style='color:#facc15;'>+2 Polearm, +1 Survivability</span>",
+        Warlord: "+30 HP, +20 Stamina, -10 MP<br><span style='color:#facc15;'>+2 Hafted, +1 Two-Handed</span>", 
+        Archmage: "+30 MP, +5 Stamina, -10 HP<br><span style='color:#facc15;'>+3 Magic</span>", 
+        Phantom: "+20 Stamina, +10 MP, -5 HP<br><span style='color:#facc15;'>+2 Lockpicking, +1 Hand-to-Hand</span>", 
+        Vampire: "+15 HP, +15 MP, +15 Stamina<br><span style='color:#facc15;'>+2 One-Handed, +1 Survivability</span>"
       };
 
       unlocked.forEach(k => {
@@ -4640,29 +4967,26 @@ function doRestart(className){
         const btn = document.createElement('button');
         btn.className = 'btn';
         btn.style.textAlign = 'center';
-        
-        // Force Square Shape & Center Content
-        btn.style.aspectRatio = '1 / 1'; 
         btn.style.display = 'flex';
         btn.style.flexDirection = 'column';
-        btn.style.justifyContent = 'center';
+        btn.style.justifyContent = 'space-between';
         btn.style.alignItems = 'center';
-        btn.style.padding = '4px';
-        btn.style.minHeight = '0'; // Reset min-height so aspect-ratio rules
+        btn.style.padding = '12px 10px';
+        btn.style.minHeight = '145px';
+        btn.style.cursor = 'pointer';
         
-        const badge = c.endless ? '<div style="color:#a78bfa; font-size:9px; margin-bottom:2px;">(Endless)</div>' : '';
-        // FIX: Inject visual indicator row detailing specific baseline class resource pools adjustments
-        const bonusLine = classBonusMap[c.name] ? `<div style="font-size:9.5px; color:#4ade80; font-weight:bold; margin-top:4px; line-height:1;">${classBonusMap[c.name]}</div>` : '';
+        const badge = c.endless ? '<div style="color:#a78bfa; font-size:11px; font-weight:bold; margin-bottom:2px;">(Endless)</div>' : '';
+        const bonusLine = classBonusMap[c.name] ? `<div style="font-size:11.5px; color:#4ade80; font-weight:700; margin-top:8px; line-height:1.3; border-top:1px dashed rgba(255,255,255,0.15); padding-top:6px; width:100%;">${classBonusMap[c.name]}</div>` : '';
         
-        // Name is bold, Description is small (visible inside the square)
         btn.innerHTML = `
-            ${badge}
-            <div style="font-weight:800; font-size:13px; color:#f9d65c; line-height:1.1; margin-bottom:4px;">${c.name}</div>
-            <div style="font-size:10px; opacity:0.8; line-height:1.1; overflow:hidden;">${c.desc}</div>
+            <div>
+              ${badge}
+              <div style="font-weight:800; font-size:16px; color:#f9d65c; line-height:1.2; margin-bottom:6px;">${c.name}</div>
+              <div style="font-size:12px; opacity:0.85; line-height:1.3;">${c.desc}</div>
+            </div>
             ${bonusLine}
         `;
         
-        // Also add full description as tooltip just in case it cuts off
         btn.title = c.desc; 
         
         btn.onclick = () => {
@@ -4679,17 +5003,16 @@ function doRestart(className){
         const d = document.createElement('div');
         d.className = 'chip';
         d.style.opacity = '0.5';
-        // FIX: Enforce flexbox layout alignments to center all card content horizontally and vertically
         d.style.display = 'flex';
         d.style.flexDirection = 'column';
         d.style.justifyContent = 'center';
         d.style.alignItems = 'center';
         d.style.textAlign = 'center';
-        d.style.aspectRatio = '1 / 1'; 
+        d.style.padding = '12px 10px';
+        d.style.minHeight = '145px';
         const currentCount = meta[c.req] || 0;
-        // FIX: Add intentional line breaks to isolate the numerical progress line below the requirement description text block
-        const progressRatio = c.req ? `<br><br><span style="font-size:12px;">( ${currentCount} / ${c.val} )</span>` : '';
-        d.innerHTML = `<b>${c.name}</b><br><span style="font-size:12px">${c.msg || 'Locked'}${progressRatio}</span>`;
+        const progressRatio = c.req ? `<div style="font-size:12px; font-weight:bold; color:#facc15; margin-top:6px;">(${currentCount} / ${c.val})</div>` : '';
+        d.innerHTML = `<b style="font-size:15px; color:#d9e7f5; margin-bottom:4px;">${c.name}</b><div style="font-size:12px; opacity:0.85; line-height:1.3;">${c.msg || 'Locked'}</div>${progressRatio}`;
         b.appendChild(d);
       });
 
@@ -4837,9 +5160,24 @@ function doRestart(className){
     shields: 0, bombs:0, warpStones:0
   };
 
-  // --- Apply Class Gear ---
+  // Helper to grant balanced starter skill points without overwriting progression
+  const grantStarterSkill = (skillType, points) => {
+    state.skills[skillType] = {
+      lvl: 1, // Keep skill baseline visually and mechanically at Level 1
+      xp: 0,
+      next: (typeof SKILL_XP_START !== 'undefined' ? SKILL_XP_START : 25),
+      shown: true,
+      perks: {},
+      spentPoints: 0,
+      bonusPoints: points // Store bonus spendable points separately from skill level
+    };
+  };
+
+  // --- Apply Class Starting Skills & Gear ---
   // TIER 1
   if (className === 'Squire') {
+    grantStarterSkill('one', 1);
+    grantStarterSkill('survivability', 1);
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.weapons['Buckler'] = 1; equipShield('Buckler');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
@@ -4849,6 +5187,7 @@ function doRestart(className){
     state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
     state.inventory.potions = 1;
   } else if (className === 'Apprentice') {
+    grantStarterSkill('magic', 2);
     state.inventory.weapons['Earth Staff'] = 1; equipWeaponByName('Earth Staff');
     state.spells.push({name:'Pebble', cost:1, tier:1}); state.equippedSpell = state.spells[0];  
     state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
@@ -4857,6 +5196,8 @@ function doRestart(className){
     state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
     state.inventory.tonics = 1;
   } else if (className === 'Thief') {
+    grantStarterSkill('lockpicking', 1);
+    grantStarterSkill('hand', 1);
     state.inventory.weapons['Knuckle Duster'] = 1; equipWeaponByName('Knuckle Duster');
     state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
     state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
@@ -4866,12 +5207,14 @@ function doRestart(className){
     state.inventory.lockpicks = 5; state.inventory.bombs = 1;
   // TIER 2
   } else if (className === 'Barbarian') {
+    grantStarterSkill('axe', 2);
     state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
     state.player.equipment.gauntlets = { name: 'Leather Gloves', type: 'gauntlets', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2 } };
     state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
     state.inventory.potions = 1;
   } else if (className === 'Mercenary') {
+    grantStarterSkill('two', 2);
     state.inventory.weapons['Claymore'] = 1; equipWeaponByName('Claymore');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
     state.player.equipment.chest = { name: 'Chainmail Jacket', type: 'chest', stats: { defense: 4 } };
@@ -4880,6 +5223,7 @@ function doRestart(className){
     state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.gold = 50; 
   } else if (className === 'Ranger') {
+    grantStarterSkill('bow', 2);
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.arrows = 20; state.player.bow.loaded = 1;
     state.spells.push({name:'Gust', cost:2, tier:1}); state.equippedSpell = state.spells[0];
@@ -4889,6 +5233,8 @@ function doRestart(className){
     state.player.equipment.pants = { name: 'Leather Chaps', type: 'pants', stats: { defense: 2 } };
     state.player.equipment.boots = { name: 'Leather Boots', type: 'boots', stats: { defense: 1 } };
   } else if (className === 'Acolyte') {
+    grantStarterSkill('spear', 1);
+    grantStarterSkill('magic', 1);
     state.inventory.weapons['Spear'] = 1; equipWeaponByName('Spear');
     state.spells.push({name:'Heal', cost:4, tier:1}); state.equippedSpell = state.spells[0];
     state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
@@ -4898,6 +5244,8 @@ function doRestart(className){
     state.inventory.potions = 1; state.inventory.tonics = 1;
   // TIER 3
   } else if (className === 'Paladin') {
+    grantStarterSkill('two', 2);
+    grantStarterSkill('survivability', 1);
     state.inventory.weapons['Warhammer'] = 1; equipWeaponByName('Warhammer');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
     state.player.equipment.chest = { name: 'Platemail Heavy', type: 'chest', stats: { defense: 9 } };
@@ -4906,6 +5254,8 @@ function doRestart(className){
     state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.potions = 2; state.inventory.gold = 50;
   } else if (className === 'Spellblade') {
+    grantStarterSkill('one', 1);
+    grantStarterSkill('magic', 2);
     state.inventory.weapons['Shortsword'] = 1; equipWeaponByName('Shortsword');
     state.inventory.weapons['Ice Staff'] = 1; 
     state.spells.push({name:'Frost', cost:3, tier:1}); state.equippedSpell = state.spells[0];
@@ -4916,6 +5266,8 @@ function doRestart(className){
     state.player.equipment.boots = { name: 'Reinforced Soles', type: 'boots', stats: { defense: 2 } };
     state.inventory.potions = 1; state.inventory.tonics = 1;
   } else if (className === 'Assassin') {
+    grantStarterSkill('hand', 2);
+    grantStarterSkill('lockpicking', 1);
     state.inventory.weapons['Claws'] = 1; equipWeaponByName('Claws');
     state.player.equipment.helmet = { name: 'Leather Cap', type: 'helmet', stats: { defense: 1 } };
     state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
@@ -4925,6 +5277,8 @@ function doRestart(className){
     state.player.equipment.ring1 = { name: 'Ring of Haste', type: 'ring', stats: { maxStamina: 2 } };
     state.inventory.bombs = 2; state.inventory.lockpicks = 10;
   } else if (className === 'Dragoon') {
+    grantStarterSkill('spear', 2);
+    grantStarterSkill('survivability', 1);
     state.inventory.weapons['Halberd'] = 1; equipWeaponByName('Halberd');
     state.player.equipment.helmet = { name: 'Steel Visor', type: 'helmet', stats: { defense: 5 } };
     state.player.equipment.chest = { name: 'Scale Mail', type: 'chest', stats: { defense: 6 } };
@@ -4934,6 +5288,8 @@ function doRestart(className){
     state.inventory.warpStones = 2; 
   // TIER 4
   } else if (className === 'Warlord') {
+    grantStarterSkill('axe', 2);
+    grantStarterSkill('two', 1);
     state.inventory.weapons['Battleaxe'] = 1; equipWeaponByName('Battleaxe');
     state.player.equipment.helmet = { name: 'Iron Helm', type: 'helmet', stats: { defense: 3 } };
     state.player.equipment.chest = { name: 'Platemail Heavy', type: 'chest', stats: { defense: 9 } };
@@ -4942,6 +5298,7 @@ function doRestart(className){
     state.player.equipment.boots = { name: 'Iron Sabatons', type: 'boots', stats: { defense: 4 } };
     state.inventory.potions = 2; 
   } else if (className === 'Archmage') {
+    grantStarterSkill('magic', 3);
     state.inventory.weapons['Fire Staff'] = 1; equipWeaponByName('Fire Staff');
     state.spells.push({name:'Ember', cost:3, tier:1}); 
     state.spells.push({name:'Spark', cost:1, tier:1}); 
@@ -4954,6 +5311,8 @@ function doRestart(className){
     state.player.equipment.necklace = { name: 'Silver Chain', type: 'necklace', stats: { maxMp: 8 } };
     state.inventory.tonics = 3;
   } else if (className === 'Phantom') {
+    grantStarterSkill('lockpicking', 2);
+    grantStarterSkill('hand', 1);
     state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };
     state.player.equipment.boots = { name: 'Greaves of Haste', type: 'boots', stats: { defense: 5 } };
@@ -4961,6 +5320,8 @@ function doRestart(className){
     state.inventory.lockpicks = 50;
     state.inventory.bombs = 3; state.inventory.warpStones = 3;
   } else if (className === 'Vampire') {
+    grantStarterSkill('one', 2);
+    grantStarterSkill('survivability', 1);
     state.inventory.weapons['Vampiric Shortsword'] = 1; equipWeaponByName('Vampiric Shortsword');
     state.player.equipment.chest = { name: 'Cloth Tunic', type: 'chest', stats: { defense: 1 } };
     state.player.equipment.pants = { name: 'Cloth Trousers', type: 'pants', stats: { defense: 1 } };

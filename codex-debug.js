@@ -850,27 +850,39 @@ if (typeof PICK2_POOL !== 'undefined') {
     };
   });
 }
+let _codexCache = null;
 function loadCodex(){
+  if (_codexCache) return _codexCache;
   const stored = JSON.parse(localStorage.getItem(CODEX_KEY)||'{}');
-  const merged = { ...CODEX_DEF }; // Start with the complete default definition
-  
+  const merged = { ...CODEX_DEF };
+
   for (const k in stored) {
     if (merged[k]) {
-        // Merge the saved data INTO the default definition,
-      // preserving default properties like 'interactions: 0' if not present in 'stored'.
       merged[k] = {
-        ...merged[k], // default properties (like interactions:0)
-        ...stored[k], // saved values (like kills:10 or seen:true)
-        
-        // --- FIX: Force fresh text from code (ignores saved legacy text) ---
+        ...merged[k],
+        ...stored[k],
         name: merged[k].name,
         desc: merged[k].desc
       };
     }
   }
-  return merged;
+  _codexCache = merged;
+  return _codexCache;
 }
-function saveCodex(c){ localStorage.setItem(CODEX_KEY, JSON.stringify(c)); }
+function saveCodex(c){
+  _codexCache = c;
+
+  // CHANGED: Combine synchronous combat updates into one storage write.
+  if (saveCodex._pending) return;
+  saveCodex._pending = true;
+
+  queueMicrotask(() => {
+    saveCodex._pending = false;
+    try {
+      localStorage.setItem(CODEX_KEY, JSON.stringify(_codexCache));
+    } catch(e){}
+  });
+}
 
 function unlockCodex(key, increment=false, isEscape=false){
   if (!key) return;
@@ -880,7 +892,10 @@ function unlockCodex(key, increment=false, isEscape=false){
   let entry = c[key];
   if (!entry && typeof getBossName === 'function') entry = c[getBossName(key)];
   
-  if (entry){
+   if (entry){
+    // CHANGED: A known discovery without counter changes needs no save.
+    if (entry.seen && !increment && !isEscape) return;
+
     /* Only mark entry as seen/revealed if this is not an escape event */
     if (!entry.seen && !isEscape) entry.seen = true;
     

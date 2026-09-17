@@ -234,6 +234,9 @@ if (!window._fishingInputWired) {
   window.addEventListener('pointerup', () => {
     if (state.fishing && state.fishing.active) state._fishingThrust = false;
   });
+  // Prevent stuck reeling thrust when dragging or losing focus
+  window.addEventListener('pointercancel', () => { if (state.fishing) state._fishingThrust = false; });
+  window.addEventListener('blur', () => { if (state.fishing) state._fishingThrust = false; });
 }
 
 window.startFishing = function() {
@@ -244,6 +247,7 @@ window.startFishing = function() {
   state.fishing.progress = 30;
   state.fishing.tension = 0;
   state.fishing.barPos = 50;
+  state.fishing.barVel = 0; // Reset velocity on cast
   state.fishing.fishPos = 50;
   state.fishing.fishTarget = 50;
   state._inputLocked = true;
@@ -309,41 +313,81 @@ window.startFishing = function() {
   }, waitTime);
 };
 
-window.updateFishingLoop = function() {
+window.updateFishingLoop = function(frameTime) {
   if (!state.fishing || !state.fishing.active || state.fishing.phase !== 'reeling') return;
+
+  // CHANGED: Keep existing physics at 60 updates/second on any display.
+  const loop = window.updateFishingLoop;
+  const stepMs = 1000 / 60;
+  const now = Number.isFinite(frameTime)
+    ? frameTime
+    : performance.now();
+
+  const starting =
+    !Number.isFinite(frameTime) || loop._lastTime === undefined;
+
+  // CHANGED: Cap catch-up after a stall or a background-tab pause.
+  const elapsed = starting
+    ? stepMs
+    : Math.max(0, Math.min(50, now - loop._lastTime));
+
+  loop._lastTime = now;
+  loop._accumulator =
+    (starting ? 0 : (loop._accumulator || 0)) + elapsed;
 
   const f = state.fishing;
   const rod = state.rodLevel || 1;
   const fish = f.currentFish;
 
-  // 1. Player Catch Bar Thrust
-  const isHolding = state.keys?.['e'] || state.keys?.[' '] || state._fishingThrust;
+  // 1. Player Catch Bar Thrust with responsive acceleration and controller support
+  const gp = navigator.getGamepads ? (navigator.getGamepads()[0] || navigator.getGamepads()[1]) : null;
+  const gpPressed = gp && (gp.buttons[0]?.pressed || gp.buttons[2]?.pressed || gp.buttons[7]?.pressed);
+  const isHolding = state.keys?.['e'] || state.keys?.[' '] || state.keys?.['enter'] || state._fishingThrust || gpPressed;
+  
+    // CHANGED: Consume elapsed time in fixed 60 Hz physics steps.
+  for (
+    ;
+    loop._accumulator + 0.000001 >= stepMs;
+    loop._accumulator -= stepMs
+  ) {
+  // Acceleration & damping physics for responsive reeling
+  f.barVel = f.barVel || 0;
   if (isHolding) {
-    f.barPos = Math.max(0, f.barPos - 2.2);
+    f.barVel = Math.max(-3.6, f.barVel - 0.48); // Snappy upward reel impulse
   } else {
-    f.barPos = Math.min(100, f.barPos + 1.8);
+    f.barVel = Math.min(3.2, f.barVel + 0.38);  // Smooth gravity descent
   }
+  f.barPos += f.barVel;
+  // Boundary bounce damping
+  if (f.barPos <= 0) { f.barPos = 0; f.barVel = Math.max(0, -f.barVel * 0.2); }
+  if (f.barPos >= 100) { f.barPos = 100; f.barVel = Math.min(0, -f.barVel * 0.2); }
 
   // 2. Fish AI Movement
-  if (Math.random() < 0.06) { // Increased re-targeting frequency for more unpredictable fish AI
+  if (Math.random() < 0.05) {
     f.fishTarget = Math.random() * 90;
   }
-  const speed = (fish.minSpeed + Math.random() * (fish.maxSpeed - fish.minSpeed)) * 0.85 * (rod === 4 ? 0.8 : 1.0); // Increased fish movement velocity
+  const speed = (fish.minSpeed + Math.random() * (fish.maxSpeed - fish.minSpeed)) * 0.75 * (rod === 4 ? 0.8 : 1.0);
   if (f.fishPos < f.fishTarget) f.fishPos = Math.min(100, f.fishPos + speed);
   else if (f.fishPos > f.fishTarget) f.fishPos = Math.max(0, f.fishPos - speed);
 
-  // 3. Catch Evaluation
+  // 3. Catch Evaluation (FIX: Align hit box exactly with the rendered visual bar height)
+  // In UI: bar track height h=200, barSize in px, barPos 0..100. Effective percentage is (f.barSize / 200) * 100
+  const barEffectivePct = (f.barSize / 200) * 100;
   const barTop = f.barPos;
-  const barBottom = f.barPos + (f.barSize / 1.8);
-  const inside = (f.fishPos >= barTop && f.fishPos <= barBottom);
+  const barBottom = f.barPos + barEffectivePct;
+  const inside = (f.fishPos >= barTop - 2.5 && f.fishPos <= barBottom + 2.5); // 2.5% forgiving grace buffer
 
-  const progRate = rod >= 3 ? 0.95 : 0.70; // Reduced progress fill rate
+  const progRate = rod >= 3 ? 0.90 : 0.70;
   if (inside) {
     f.progress = Math.min(100, f.progress + progRate);
-    f.tension = Math.max(0, f.tension - 0.6); // Slower tension relief
+    f.tension = Math.max(0, f.tension - 0.75); // Responsive line tension relief
   } else {
-    f.progress = Math.max(0, f.progress - 0.25); // Faster progress decay when outside the bar
-    f.tension = Math.min(100, f.tension + (rod >= 2 ? 0.35 : 0.5)); // Faster line tension accumulation
+    f.progress = Math.max(0, f.progress - 0.20);
+    f.tension = Math.min(100, f.tension + (rod >= 2 ? 0.30 : 0.45));
+  }
+
+    // CHANGED: Stop at a result before simulating another physics step.
+    if (f.progress >= 100 || f.tension >= 100) break;
   }
 
   // 4. Win / Loss Resolution
@@ -422,6 +466,19 @@ window.drawFishingMinigameUI = function(ctx) {
 };
 
 function tryMove(dx,dy){
+  // TEMP DEBUG: Snapshot the requested dodge before movement logic runs.
+  if (state.enemies.some(e => e.charging)) {
+    console.log('[Charge move]', JSON.stringify({
+      from: [state.player.x, state.player.y],
+      to: [state.player.x + dx, state.player.y + dy],
+      visual: [state.player.rx, state.player.ry],
+      hp: state.player.hp,
+      locked: !!state._inputLocked,
+      descending: !!state._descending,
+      gameOver: !!state.gameOver
+    }));
+  }
+
   if (state.gameOver) return;
   if (state._inputLocked || state._descending) return;
 
@@ -656,11 +713,9 @@ function tryMove(dx,dy){
   }
 
 // Handle Player Slow (Spider web)
-  if (state.player.slowed && state.player.slowTicks > 0) {
-      // 50% chance to fail movement? Or move every other turn? 
-      // Let's do: Movement takes 2 turns of enemy time.
-      // Implementation: We move, but we call enemyStep() TWICE.
-      enemyStep(); // Extra enemy turn cost
+  // CHANGED: Record the extra turn now; resolve it only after movement.
+  const extraEnemyStep = !!(state.player.slowed && state.player.slowTicks > 0);
+  if (extraEnemyStep) {
       state.player.slowTicks--;
       if (state.player.slowTicks <= 0) {
           state.player.slowed = false;
@@ -699,9 +754,14 @@ function tryMove(dx,dy){
             log('You slide on the ice!');
             
             SFX.step();
-            collectIfPickup(); 
-            enemyStep(); draw();
-            return; 
+            collectIfPickup();
+            enemyStep();
+
+            // CHANGED: Apply the slow penalty from the final slide position.
+            if (extraEnemyStep && !state.gameOver) enemyStep();
+
+            draw();
+            return;
         }
     }
  }
@@ -727,10 +787,10 @@ function tryMove(dx,dy){
       state.player.y = ny;
       state.player._justMoved = true; // Perk: Track movement for Spear Lunge
       
-      // FIX: Snap visuals if animation loop isn't active (fixes Tutorial movement freeze)
       
-      // FIX: Snap visuals if animation loop isn't active (fixes Tutorial movement freeze)
-      if (!state._animating) { state.player.rx = nx; state.player.ry = ny; draw(); }
+      
+            // CHANGED: Keep the current visual position so every step interpolates.
+      draw();
 
       SFX.step();
 
@@ -794,6 +854,10 @@ function tryMove(dx,dy){
 
   collectIfPickup();
   enemyStep();
+
+  // CHANGED: Apply the slow penalty after the player has moved.
+  if (extraEnemyStep && !state.gameOver) enemyStep();
+
   draw();
 }
 
@@ -1071,11 +1135,16 @@ state.run.depth = Math.max(state.run.depth, state.floor);
 
 // build the next floor while we’re still black
 gen(); 
+state.player.rx = state.player.x;
+state.player.ry = state.player.y;
+state._fovDirty = true;
+if (state._currentVis instanceof Set) state._currentVis.clear();
+else state._currentVis = new Set();
 
 // (Sixth Sense removed, ID loc_c1 repurposed to Bounty)
 
 updateDynamicMusic(); // <--- NEW: Switch track based on new floor
-enemyStep(); draw?.(); updateBars(); updateEquipUI(); 
+enemyStep(); draw?.(); updateBars(); updateEquipUI();
 
     // sync Depth chip
     const fc = document.getElementById('floorChip');
@@ -1605,10 +1674,10 @@ function handlePropSmash(x, y) {
   draw();
 }
 
-// Chest weapon chance scales with depth (floor 1 ≈ 45%, +1%/floor, capped 65%)
-const CHEST_WEAPON_BASE        = 0.40;
-const CHEST_WEAPON_FLOOR_BONUS = 0.01;
-const CHEST_WEAPON_MAX         = 0.50;
+// Chest weapon chance scales with depth (increased base and cap so weapons spawn significantly more often)
+const CHEST_WEAPON_BASE        = 0.60;
+const CHEST_WEAPON_FLOOR_BONUS = 0.015;
+const CHEST_WEAPON_MAX         = 0.75;
 
 // Weighted picker for non-weapon chest loot
 function pickWeighted(weights){
@@ -2458,8 +2527,9 @@ function shootBow(){
       if (enemiesPierced > pierceAllowed) {
           const onDone = ()=>{ 
             let extraArrows = 0;
-            if (state.skills?.bow?.perks?.['bow_b3']) extraArrows = state.skills.bow.perks['bow_b3'];
-            if (state.skills?.bow?.perks?.['bow_c5']) extraArrows *= 2; 
+            // BALANCED: Multishot capped at 3 extra arrows; Volley applies 75% splash damage rather than multiplying arrows to 10
+            if (state.skills?.bow?.perks?.['bow_b3']) extraArrows = Math.min(3, state.skills.bow.perks['bow_b3']);
+            const hasVolley = !!state.skills?.bow?.perks?.['bow_c5'];
             
             if (extraArrows > 0) {
                // Limit to enemies within reasonable bow range
@@ -2467,9 +2537,10 @@ function shootBow(){
                if (targets.length > 0) {
                    const shuffledTargets = shuffle([...targets]).slice(0, extraArrows);
                    shuffledTargets.forEach(extraTarget => {
-                       const splashDmg = Math.max(1, Math.floor(rand(3+skillDamageBonus('bow'), 6+skillDamageBonus('bow'))));
+                       const dmgScale = hasVolley ? 0.75 : 0.50;
+                       const splashDmg = Math.max(1, Math.floor(rand(3+skillDamageBonus('bow'), 6+skillDamageBonus('bow')) * dmgScale));
                        extraTarget.hp -= splashDmg;
-                       spawnFloatText(splashDmg, extraTarget.x, extraTarget.y, '#fff');
+                       spawnFloatText(splashDmg + (hasVolley ? " (Volley)" : ""), extraTarget.x, extraTarget.y, '#fff');
                        if (extraTarget.hp <= 0) handleEnemyDeath(extraTarget, 'bow');
                        spawnProjectileEffect({
                            kind: 'arrow', fromX: state.player.x, fromY: state.player.y, toX: extraTarget.x, toY: extraTarget.y
@@ -2718,7 +2789,8 @@ function attack(){
         state.player._consecutiveHits = 0;
     }
     if (w.type === 'two' && state.player._ruthlessStacks > 0) {
-        dmg += (2 * state.player._ruthlessStacks); // Ruthless buff from prior kill
+        // BALANCED: Scaled Ruthless bonus damage to +1 per stack (max +5)
+        dmg += (1 * state.player._ruthlessStacks);
         state.player._ruthlessStacks = 0; 
     }
 
@@ -2935,13 +3007,7 @@ function attack(){
        }
     }
 
-    if (dmg > 0) {
-      const cvs = document.getElementById('view');
-      if (cvs) {
-        cvs.style.transform = `translate(${rand(-2,2)}px, ${rand(-2,2)}px)`;
-        setTimeout(()=>{ cvs.style.transform = 'none'; }, 60); 
-      }
-    }
+// Screen shake removed to prevent viewport dislocation and visual tearing against floor tints
 
     if (w.type === 'hand' && state.skills?.hand?.perks?.['hand_b1'] && Math.random() < (0.05 * state.skills.hand.perks['hand_b1'])) {
         target.atk[0] = Math.max(0, target.atk[0] - 1);

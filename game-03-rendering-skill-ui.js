@@ -3,15 +3,27 @@ const canvas=document.getElementById('view');
 const ctx=canvas.getContext('2d');
 let renderer3D, scene, camera, sceneObjects;
 
-function setupCanvas(){
+let _canvasNeedsResize = true;
+let _cachedW = 0, _cachedH = 0;
+
+function setupCanvas(force = false){
+  if (!force && !_canvasNeedsResize) return;
   const dpr=window.devicePixelRatio||1;
   const wrap=document.getElementById('cw');
+  if (!wrap) return;
   const w=wrap.clientWidth, h=wrap.clientHeight;
-  canvas.width=w*dpr; canvas.height=h*dpr; canvas.style.width=w+'px'; canvas.style.height=h+'px';
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.imageSmoothingEnabled=false;
+  const targetW = Math.floor(w*dpr);
+  const targetH = Math.floor(h*dpr);
+  _cachedW = w;
+  _cachedH = h;
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width=targetW; canvas.height=targetH; canvas.style.width=w+'px'; canvas.style.height=h+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.imageSmoothingEnabled=false;
+  }
+  _canvasNeedsResize = false;
 }
-window.addEventListener('resize',setupCanvas,{passive:true});
+window.addEventListener('resize', () => { _canvasNeedsResize = true; setupCanvas(true); }, {passive:true});
 
 // Centers an N×N pixel grid inside a tile.
 // Returns { s, bx, by, R } where R(cx,cy,w,h,color) draws a rect in grid units.
@@ -65,37 +77,41 @@ function spawnFloatText(text, x, y, color='#fff') {
     state.floatingText.shift(); 
   }
 
-  if (!state._animating) { state._animating = true; requestAnimationFrame(draw); }
+    state._animating = true;
+  draw(); // CHANGED: Request the shared render instead of a separate callback.
 }
 
-// --- OPTIMIZED: Particle Spawner with Hard Cap ---
-const MAX_PARTICLES = 30; // Hard limit on total particles
+// --- OPTIMIZED: Particle Spawner with Hard Cap & Shortened Lifespan ---
+const MAX_PARTICLES = 24; // Lower particle capacity to eliminate GPU and CPU bottlenecks
 
 function spawnParticles(x, y, color, count=4) {
   if(!state.particles) state.particles = [];
   
-  // 1. Reduced count for low-end safety (default was 5-6)
-  const safeCount = Math.min(count, 4); 
+  // CHANGED: Allocate only particles that fit in the existing budget.
+  const safeCount = Math.max(
+    0,
+    Math.min(count, 3, MAX_PARTICLES - state.particles.length)
+  );
   
   for(let i=0; i<safeCount; i++){
     state.particles.push({
       x: x, 
       y: y,
-      vx: (Math.random() - 0.5) * 0.15, 
-      vy: (Math.random() - 0.5) * 0.15, 
-      life: rand(40, 70), // Slightly shorter life
+      vx: (Math.random() - 0.5) * 0.18, 
+      vy: (Math.random() - 0.5) * 0.18, 
+      life: rand(16, 26), // Shorter life prevents 60fps render loop lockups
       color: color,
       size: rand(2, 3)
     });
   }
 
-  // 2. FIFO Culling: If we have too many, remove the oldest ones immediately
+  // FIFO Culling: Keep particle buffer bounded
   if (state.particles.length > MAX_PARTICLES) {
-    // Remove the excess from the beginning of the array
     state.particles.splice(0, state.particles.length - MAX_PARTICLES);
   }
 
-  if (!state._animating) { state._animating = true; requestAnimationFrame(draw); }
+    state._animating = true;
+  draw(); // CHANGED: Request the shared render instead of a separate callback.
 }
 
 // draws one projectile in a tile-sized slot (screenX,screenY are in pixels)
@@ -1325,79 +1341,108 @@ function drawMagePixel(ctx, x, y, tile, enemy){
 
 
 
-// Generic dispatcher, scales to tile or 2*tile for bosses
-// Backward-compatible: accepts (ctx, type, x, y, sizePx) OR (ctx, enemyObj, x, y, sizePx)
+// Global offscreen sprite cache to avoid running expensive CSS filter pipelines every frame
+const _enemySpriteCache = new Map();
+
+function _drawEnemyRaw(tCtx, enemy, px, py, sizePx) {
+  const t = String(enemy.type || '').toLowerCase();
+  if (t.includes('mad') && t.includes('king')) { drawMadKingPixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('hood'))                     { drawHoodedPixel(tCtx, px, py, sizePx); return; }
+  if (t.includes('shadow'))                   { drawShadowPixel(tCtx, px, py, sizePx); return; }
+  if (t.includes('reaper'))                   { drawReaperPixel(tCtx, px, py, sizePx); return; }
+  if (t.includes('heartless'))                { drawHeartlessPixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('rat'))                      { drawRatPixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('bat'))                      { drawBatPixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('spider'))                   { drawSpiderPixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('goblin'))                   { drawGoblinPixel(tCtx, px, py, sizePx, enemy); return; } 
+  if (t.includes('slime'))                    { drawSlimePixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('skeleton'))                 { drawSkeletonPixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('mage'))                     { drawMagePixel(tCtx, px, py, sizePx, enemy); return; }
+  if (t.includes('mimic'))                    { drawMimicPixel(tCtx, px, py, sizePx); return; }
+  if (t.includes('clone') || t.includes('mirror')){
+    drawPlayerHelmet(tCtx, px, py, sizePx, state.player.facing || 'down');
+    return;
+  }
+  if (t === 'warlord') {
+    tCtx.fillStyle = '#ef4444'; 
+    tCtx.font = 'bold ' + (sizePx) + 'px monospace';
+    tCtx.textAlign = 'center'; tCtx.textBaseline='middle';
+    tCtx.fillText('W', px + sizePx/2, py + sizePx/2);
+    return;
+  }
+  const s = Math.max(1, Math.floor(sizePx/6));
+  tCtx.fillStyle='#7a2b2b'; tCtx.fillRect(px+s, py+2*s, 4*s, 3*s);
+  tCtx.fillStyle='#0b141d'; tCtx.fillRect(px+2*s, py+3*s, s, s);
+  tCtx.fillRect(px+3*s, py+3*s, s, s);
+}
+
+// Generic dispatcher with offscreen texture memoization for elite/boss tints
 function drawEnemyPixel(ctx, typeOrEnemy, x, y, sizePx){
   const enemy = (typeof typeOrEnemy === 'string' || !typeOrEnemy || !typeOrEnemy.type)
     ? { type: typeOrEnemy }
     : typeOrEnemy;
 
-  // apply boss/elite tint or damage/heal flash
-ctx.save();
-if (enemy._flashColor && enemy._flashTime > Date.now()) {
-    // Override filter for flash effect
-    // Red flash (damage) or Green flash (heal)
-    const color = enemy._flashColor;
-    // Simple filter hack: brightness/sepia/hue-rotate to approximate color
-    if (color === 'red') ctx.filter = 'brightness(0.6) sepia(1) hue-rotate(-50deg) saturate(5)'; 
-    else if (color === 'green') ctx.filter = 'brightness(1.2) sepia(1) hue-rotate(50deg) saturate(5)';
-// AFTER
-} else if (enemy.burning) {
-    ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(3)';
-} else if (enemy.bleeding) {
-    ctx.filter = 'sepia(1) hue-rotate(-50deg) saturate(1) brightness(0.7)';
-// AFTER
-} else if (enemy.frozenTicks > 0) { 
-    ctx.filter = 'sepia(1) hue-rotate(180deg) saturate(2) brightness(1.2)'; // Light icy blue tint
-} else if (enemy.slipperyTicks > 0) { 
-    ctx.filter = 'sepia(1) hue-rotate(210deg) saturate(1.5)'; // Deep water blue tint
-} else if (enemy.poisoned) { 
-    ctx.filter = 'sepia(1) hue-rotate(50deg) saturate(3)'; // Toxic green acid/poison tint
-} else if ((enemy.boss || enemy.elite) && enemy.tint){
-      ctx.filter = enemy.tint;
+  const facing = enemy.facing || 'down';
+  const isLeft = facing === 'left';
+  const drawFacing = isLeft ? 'right' : facing; // Left uses mirrored 'right' sprite
+
+  // Compute active visual filter string
+  let activeFilter = 'none';
+  if (enemy._flashColor && enemy._flashTime > Date.now()) {
+    activeFilter = enemy._flashColor === 'red' 
+      ? 'brightness(0.6) sepia(1) hue-rotate(-50deg) saturate(5)' 
+      : 'brightness(1.2) sepia(1) hue-rotate(50deg) saturate(5)';
+  } else if (enemy.burning) {
+    activeFilter = 'sepia(1) hue-rotate(-50deg) saturate(3)';
+  } else if (enemy.bleeding) {
+    activeFilter = 'sepia(1) hue-rotate(-50deg) saturate(1) brightness(0.7)';
+  } else if (enemy.frozenTicks > 0) { 
+    activeFilter = 'sepia(1) hue-rotate(180deg) saturate(2) brightness(1.2)';
+  } else if (enemy.slipperyTicks > 0) { 
+    activeFilter = 'sepia(1) hue-rotate(210deg) saturate(1.5)';
+  } else if (enemy.poisoned) { 
+    activeFilter = 'sepia(1) hue-rotate(50deg) saturate(3)';
+  } else if ((enemy.boss || enemy.elite) && enemy.tint){
+    activeFilter = enemy.tint;
+  }
+
+  // Generate unique cache key for offscreen rasterization
+  const cacheKey = `${enemy.type}_${drawFacing}_${sizePx}_${enemy.elite?'1':'0'}_${activeFilter}`;
+  let sprite = _enemySpriteCache.get(cacheKey);
+
+  if (!sprite) {
+    sprite = document.createElement('canvas');
+    sprite.width = sizePx;
+    sprite.height = sizePx;
+    const sCtx = sprite.getContext('2d');
+    sCtx.imageSmoothingEnabled = false;
+
+    if (activeFilter !== 'none') sCtx.filter = activeFilter;
+    const dummyEnemy = { ...enemy, facing: drawFacing };
+    _drawEnemyRaw(sCtx, dummyEnemy, 0, 0, sizePx);
+    if (activeFilter !== 'none') sCtx.filter = 'none';
+
+    // CHANGED: Evict one least-recently-used sprite instead of clearing everything.
+    if (_enemySpriteCache.size >= 80) {
+      _enemySpriteCache.delete(_enemySpriteCache.keys().next().value);
     }
+    _enemySpriteCache.set(cacheKey, sprite);
+  } else {
+    // CHANGED: Keep recently drawn sprites at the end of the cache.
+    _enemySpriteCache.delete(cacheKey);
+    _enemySpriteCache.set(cacheKey, sprite);
+  }
 
-    // --- NEW: Horizontal Sprite Mirroring Only ---
-    // Flips the "Right" side-profile pixel art to face "Left" automatically.
-    if (enemy.facing === 'left') {
-        ctx.translate(x + sizePx / 2, y + sizePx / 2);
-        ctx.scale(-1, 1);
-        ctx.translate(-(x + sizePx / 2), -(y + sizePx / 2));
-    }
-
-      const t = String(enemy.type || '').toLowerCase();
-        if (t.includes('mad') && t.includes('king')) { drawMadKingPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('hood'))                     { drawHoodedPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
-  if (t.includes('shadow'))                   { drawShadowPixel(ctx, x, y, sizePx);  ctx.restore(); return; }
-// --- NEW: Link Reaper ---
-  if (t.includes('reaper'))    { drawReaperPixel(ctx, x, y, sizePx);    ctx.restore(); return; }
-
-  if (t.includes('heartless')) { drawHeartlessPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('rat'))       { drawRatPixel(ctx, x, y, sizePx, enemy);       ctx.restore(); return; }
-  if (t.includes('bat'))       { drawBatPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('spider'))    { drawSpiderPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('goblin'))    { drawGoblinPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; } 
-  if (t.includes('slime'))     { drawSlimePixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('skeleton')) { drawSkeletonPixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('mage'))      { drawMagePixel(ctx, x, y, sizePx, enemy); ctx.restore(); return; }
-  if (t.includes('mimic')) { drawMimicPixel(ctx, x, y, sizePx); ctx.restore(); return; } // Added ctx.restore()
-  if (t.includes('clone') || t.includes('mirror')){
-    drawPlayerHelmet(ctx, x, y, sizePx, state.player.facing || 'down');
+  // Draw cached texture with hardware-accelerated direct blit
+  if (isLeft) {
+    ctx.save();
+    ctx.translate(x + sizePx / 2, y + sizePx / 2);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sprite, -sizePx / 2, -sizePx / 2);
     ctx.restore();
-    return;
+  } else {
+    ctx.drawImage(sprite, x, y);
   }
-if (t === 'warlord') {
-      ctx.fillStyle = '#ef4444'; 
-      ctx.font = 'bold ' + (sizePx) + 'px monospace';
-      ctx.textAlign = 'center'; ctx.textBaseline='middle';
-      ctx.fillText('W', x + sizePx/2, y + sizePx/2);
-      ctx.restore(); return;
-  }
-  // fallback blocky monster
-  const s = Math.max(1, Math.floor(sizePx/6)), px=x, py=y;
-  const R=(cx,cy,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(px+cx*s,py+cy*s,w*s,h*s);};
-  R(1,2,4,3,'#7a2b2b'); R(2,3,1,1,'#0b141d'); R(3,3,1,1,'#0b141d');
-  ctx.restore();
 }
 
 
@@ -2297,9 +2342,28 @@ function checkLOS(x0, y0, x1, y1) {
   }
 }
 
-function draw(){
-  setupCanvas();
-  const w = canvas.width/(window.devicePixelRatio||1), h = canvas.height/(window.devicePixelRatio||1);
+function draw(frameTime){
+  // CHANGED: All ordinary calls share one pending animation-frame render.
+  if (!Number.isFinite(frameTime)) {
+    if (!state._drawPending) {
+      state._drawPending = true;
+      requestAnimationFrame(draw);
+    }
+    return;
+  }
+  state._drawPending = false;
+
+  // CHANGED: Express visual motion in 60 Hz frame units; cap long gaps.
+  const elapsed = frameTime - (draw._lastFrameTime ?? (frameTime - 1000 / 60));
+  const frameScale = elapsed > 100
+    ? 1
+    : Math.max(0, Math.min(3, elapsed / (1000 / 60)));
+  draw._lastFrameTime = frameTime;
+
+  if (_canvasNeedsResize) setupCanvas();
+  const dpr = window.devicePixelRatio || 1;
+  const w = _cachedW || (canvas.width / dpr);
+  const h = _cachedH || (canvas.height / dpr);
   const tile = 35;
   const viewW = Math.floor(w/tile), viewH = Math.floor(h/tile);
 
@@ -2309,15 +2373,16 @@ function draw(){
 
   
   // 2. Player Sprite Interpolation (Smooth, consistent speed)
-    const lerp = 0.25;
+    // CHANGED: Preserve 60 Hz smoothing while accounting for elapsed time.
+    const lerp = 1 - Math.pow(0.75, frameScale);
     let sx = (state.player.x - state.player.rx) * lerp;
     let sy = (state.player.y - state.player.ry) * lerp;
 
-    // Reduced slide speed so it doesn't move too fast on ice
-    if (sx > 0.35) sx = 0.35;
-    if (sx < -0.35) sx = -0.35;
-    if (sy > 0.35) sy = 0.35;
-    if (sy < -0.35) sy = -0.35;
+    // CHANGED: Scale the slide-speed limit by elapsed time too.
+    if (sx > 0.35 * frameScale) sx = 0.35 * frameScale;
+    if (sx < -0.35 * frameScale) sx = -0.35 * frameScale;
+    if (sy > 0.35 * frameScale) sy = 0.35 * frameScale;
+    if (sy < -0.35 * frameScale) sy = -0.35 * frameScale;
     
     state.player.rx += sx;
     state.player.ry += sy;
@@ -2326,48 +2391,103 @@ function draw(){
     if (Math.abs(state.player.y - state.player.ry) < 0.01) state.player.ry = state.player.y;
 
     // --------------------------------
-    // Camera centered on the visual interpolated position so it pans smoothly
-    const ox = Math.round(state.player.rx) - Math.floor(viewW/2);
-    const oy = Math.round(state.player.ry) - Math.floor(viewH/2);
+    // CHANGED: Move the camera in pixels instead of whole tiles.
+    const ox = Math.round(state.player.rx * tile) / tile - Math.floor(viewW/2);
+    const oy = Math.round(state.player.ry * tile) / tile - Math.floor(viewH/2);
   const rad = state.player.tempVisionRange || state.fovRadius;
 
-  const bossesToDraw = []; // {sym, px, py}
-  const fogRects = [];     // {px, py}
+  const bossesToDraw = [];
+  // Reusable flat coordinate buffers eliminate heap allocation per frame
+  if (!window._fogCoordsBuffer) window._fogCoordsBuffer = new Int16Array(4096);
+  const fogCoords = window._fogCoordsBuffer;
+  let fogCount = 0;
   
-  // --- NEW: Fetch Palette ---
-  const pal = getBiomePalette(state.floor); 
+  // Fetch Biome Palette
+  const pal = getBiomePalette(state.floor);
 
-  for (let y=-1; y+oy<state.size.h && y<viewH+1; y++){
-    for (let x=-1; x+ox<state.size.w && x<viewW+1; x++){
-      const gx=ox+x, gy=oy+y;
-      const px=x*tile, py=y*tile;
+  // Clear stale FOV cache when player coordinates, floor, or vision radius change
+  if (state._fovDirty || state._fovOriginX !== state.player.x || state._fovOriginY !== state.player.y || state._fovRad !== rad || state._fovFloor !== state.floor || !(state._currentVis instanceof Set)) {
+    state._fovDirty = true;
+    state._fovOriginX = state.player.x;
+    state._fovOriginY = state.player.y;
+    state._fovRad = rad;
+    state._fovFloor = state.floor;
+    if (!(state._currentVis instanceof Set)) state._currentVis = new Set();
+    else state._currentVis.clear();
 
-      ctx.fillStyle='#0b141d'; // Void color
-      ctx.fillRect(px,py,tile,tile);
+    // Compute FOV around player coordinates independently of camera viewport position
+    if (state._inPuzzleRoom) {
+      // Puzzle room grants full vision
+    } else {
+      for (let dy = -rad; dy <= rad; dy++) {
+        for (let dx = -rad; dx <= rad; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) <= rad) {
+            const tx = state.player.x + dx;
+            const ty = state.player.y + dy;
+            if (inBounds(tx, ty) && checkLOS(state.player.x, state.player.y, tx, ty)) {
+              const k = key(tx, ty);
+              state._currentVis.add(k);
+              state.seen.add(k);
+            }
+          }
+        }
+      }
+    }
+    state._fovDirty = false;
+  }
+
+  // Index enemies into a spatial Map and reset frame visibility
+  const enemyMap = new Map();
+  const nowTime = Date.now();
+  for (let i = 0; i < state.enemies.length; i++) {
+    const e = state.enemies[i];
+    e._inView = false;
+    if (e._flashTime && nowTime > e._flashTime) {
+      e._flashTime = 0; e._flashColor = null;
+    }
+    enemyMap.set(key(e.x, e.y), e);
+  }
+
+  // Single-pass canvas background clear
+  ctx.fillStyle = '#0b141d';
+  ctx.fillRect(0, 0, w, h);
+
+  // CHANGED: Keep map indices integral while the camera scrolls between tiles.
+  const startX = Math.floor(ox), startY = Math.floor(oy);
+
+  for (let y=-1; y+startY<state.size.h && y<viewH+1; y++){
+    for (let x=-1; x+startX<state.size.w && x<viewW+1; x++){
+      const gx=startX+x, gy=startY+y;
+
+      // CHANGED: Align tiles with entities and keep fog coordinates integral.
+      const px=Math.round((gx-ox)*tile), py=Math.round((gy-oy)*tile);
+
       if(!inBounds(gx,gy)) continue;
 
-      const d = Math.abs(gx-state.player.x)+Math.abs(gy-state.player.y);
-      // FIX: Vision requires distance AND clear line of sight
-      const vis = d<=rad && (state._inPuzzleRoom || checkLOS(state.player.x, state.player.y, gx, gy));
-
       const kxy = key(gx,gy);
+      const vis = state._inPuzzleRoom || ((state._currentVis instanceof Set) && state._currentVis.has(kxy));
+
       if (vis) state.seen.add(kxy);
       const seen = state.seen.has(kxy);
 
-      if (!seen){ ctx.fillStyle='#081018'; ctx.fillRect(px,py,tile,tile); fogRects.push({px,py}); continue; }
+      if (!seen){ 
+        ctx.fillStyle='#081018'; 
+        ctx.fillRect(px,py,tile,tile); 
+        if (fogCount < 4094) { fogCoords[fogCount++] = px; fogCoords[fogCount++] = py; }
+        continue; 
+      }
 
       const t = state.tiles[gy][gx];
 
       // base floor
       if (t===0){ 
-        // --- NEW: Dynamic Wall Colors ---
         ctx.fillStyle = pal.wall; 
         ctx.fillRect(px,py,tile,tile); 
         
         ctx.fillStyle = pal.top; 
         ctx.fillRect(px, py, tile, tile - 10); 
         
-        fogRects.push({px,py}); 
+        if (fogCount < 4094) { fogCoords[fogCount++] = px; fogCoords[fogCount++] = py; }
         continue; 
       }
       
@@ -2665,6 +2785,8 @@ if (state.jester) {
 // --- NEW: Draw Volatile Aether Bombs ---
 if (state.explosions) {
   for (const bomb of state.explosions) {
+    // CHANGED: This block runs per tile; draw each marker only on its own tile.
+    if (bomb.x !== gx || bomb.y !== gy) continue;
     if (!state.seen.has(key(bomb.x, bomb.y))) continue;
     
     // Draw pulsing red zone
@@ -2683,43 +2805,35 @@ if (state.explosions) {
 }
 // ---------------------------------------
 
-// enemies (collect bosses for later, now pixel-based)
-for (const e of state.enemies){
+// enemies (lookup indexed enemy via spatial map instead of scanning full enemy array per tile)
+const e = enemyMap.get(kxy);
+if (e) {
+  e._inView = vis; // Store calculated visibility so subsequent passes skip redundant checkLOS raycasts
   const s = e.size || 1;
-  
-  // Handle flash expiration
-  if (e._flashTime && Date.now() > e._flashTime) {
-    e._flashTime = 0; e._flashColor = null;
-  }
-
   if (s === 1){
-    // FIX: Only draw enemy if tile is currently visible (vis)
-    if (e.x === gx && e.y === gy && vis) {
-        drawEnemyPixel(ctx, e, px, py, tile); 
-        
-        // --- NEW: Warlord Label ---
-        if (e.miniBoss) {
-            ctx.fillStyle = '#ef4444';
-            ctx.font = 'bold 10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText("MINI", px + tile/2, py + tile - 2);
-        }
-        // --------------------------
+    if (vis) {
+      drawEnemyPixel(ctx, e, px, py, tile); 
+      
+      // Warlord Label
+      if (e.miniBoss) {
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText("MINI", px + tile/2, py + tile - 2);
+      }
     }
   } else {
-    if (gx === e.x && gy === e.y) bossesToDraw.push({ enemy: e, px, py }); // keep the whole enemy
+    if (gx === e.x && gy === e.y) bossesToDraw.push({ enemy: e, px, py });
   }
 }
 
-
-
-      if (!vis) fogRects.push({px,py});
+      if (!vis && fogCount < 4094) { fogCoords[fogCount++] = px; fogCoords[fogCount++] = py; }
     }
   }
 
   // draw stretched bosses AFTER tiles (2× footprint)
   for (const b of bossesToDraw){
-    drawEnemyPixel(ctx, b.enemy, b.px, b.py, tile*2); // pass enemy object
+    drawEnemyPixel(ctx, b.enemy, b.px, b.py, tile*2);
   }
 
   // --- NEW: Draw Telegraph Zones for Charging Enemies ---
@@ -2747,16 +2861,25 @@ for (const e of state.enemies){
 // --- NEW: Draw Bomb Explosions (3x3 Sprite) - OUTSIDE TILE LOOP ---
 if (state.bombEffects) {
     const now = Date.now();
-    state.bombEffects = state.bombEffects.filter(b => now < b.start + b.duration);
-    
+    // CHANGED: Existing cleanup later in draw() removes expired effects in place.
     for (const b of state.bombEffects) {
+        if (now >= b.start + b.duration) continue;
+
         // Check if explosion center is seen
         if (!state.seen.has(key(b.x, b.y))) continue;
 
         const exX = (b.x - 1 - ox) * tile;
         const exY = (b.y - 1 - oy) * tile;
         const exSize = tile * 3;
-        
+
+        // CHANGED: Skip explosion artwork entirely outside the viewport.
+        if (
+          exX + exSize <= 0 ||
+          exY + exSize <= 0 ||
+          exX >= w ||
+          exY >= h
+        ) continue;
+
         const elapsed = now - b.start;
         const progress = elapsed / b.duration; // 0.0 to 1.0
         
@@ -2911,60 +3034,54 @@ drawCartographerStairsArrow(ctx, ox, oy, tile);
 
 
 
-updateMerchantAudio();
-if (merchantAudio && merchantAudio.muted && audioCtx && audioCtx.state === 'running') merchantAudio.muted = false;
-
-updateBlacksmithAudio();
-if (blacksmithAudio && blacksmithAudio.muted && audioCtx && audioCtx.state === 'running') blacksmithAudio.muted = false;
-
-updateJesterAudio();
-if (jesterAudio && jesterAudio.muted && audioCtx && audioCtx.state === 'running') jesterAudio.muted = false;
-
-updateCartographerAudio();
-if (cartographerAudio && cartographerAudio.muted && audioCtx && audioCtx.state === 'running') cartographerAudio.muted = false;
-
-// --- FIX: Add Cleric Here ---
-updateClericAudio();
-if (clericAudio && clericAudio.muted && audioCtx && audioCtx.state === 'running') clericAudio.muted = false;
+// Throttle ambient NPC audio updates to avoid running DOM queries and audio gain math 60 times/sec
+if (!state._lastAudioUpdate || nowTime - state._lastAudioUpdate > 200) {
+  state._lastAudioUpdate = nowTime;
+  if (state.merchant) updateMerchantAudio();
+  if (state.blacksmith) updateBlacksmithAudio();
+  if (state.jester) updateJesterAudio();
+  if (state.cartographer) updateCartographerAudio();
+  if (state.cleric) updateClericAudio();
+}
 // ----------------------------
 
 
-  // fog last so it still darkens bosses & player outside FOV
+  // Fast flat fog pass without iterating over object instances
   if (!state.noFog && !state.cartographerMapActive) {
-    ctx.fillStyle='rgba(0,0,0,0.55)';
-    for (const f of fogRects) ctx.fillRect(f.px, f.py, tile, tile);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    for (let i = 0; i < fogCount; i += 2) {
+      ctx.fillRect(fogCoords[i], fogCoords[i + 1], tile, tile);
+    }
   }
-
 
   updateBossHud();
 
-  // --- NEW: Miasma Chamber green screen tint ---
+  // Miasma Chamber green screen tint
   if (state.floorEffect === 'MiasmaChamber' && !state.gameOver) {
     ctx.fillStyle = 'rgba(0, 80, 0, 0.22)';
     ctx.fillRect(0, 0, w, h);
   }
-  // --- END: Miasma tint ---
 
+  // Memoized Low-HP Vignette Gradient (recreated only if screen dimensions change)
   if (state.player.hp / state.player.hpMax <= 0.30 && !state.gameOver) {
-    const grad = ctx.createRadialGradient(
-      w/2, h/2, 40,
-      w/2, h/2, Math.max(w,h)/1.2
-    );
-    grad.addColorStop(0, 'rgba(140,0,0,0)');
-    grad.addColorStop(1, 'rgba(140,0,0,0.62)');
-ctx.fillStyle = grad;
+    if (!window._cachedVignetteGrad || window._vignetteW !== w || window._vignetteH !== h) {
+      window._vignetteW = w;
+      window._vignetteH = h;
+      const grad = ctx.createRadialGradient(w/2, h/2, 40, w/2, h/2, Math.max(w, h)/1.2);
+      grad.addColorStop(0, 'rgba(140,0,0,0)');
+      grad.addColorStop(1, 'rgba(140,0,0,0.62)');
+      window._cachedVignetteGrad = grad;
+    }
+    ctx.fillStyle = window._cachedVignetteGrad;
     ctx.fillRect(0, 0, w, h);
   }
 
-  // --- NEW: Enemy Intent Icons & HP Bars ---
+  // Enemy Intent Icons & HP Bars (uses tile loop cached visibility)
   ctx.font = "bold 16px sans-serif";
   ctx.textAlign = "center";
   for (const e of state.enemies) {
-    // FIX: Only show intent/HP if the enemy is CURRENTLY visible (in FOV and Line of Sight)
-    const d = Math.abs(e.x - state.player.x) + Math.abs(e.y - state.player.y);
-    const rad = state.player.tempVisionRange || state.fovRadius;
-    const vis = d <= rad && (state._inPuzzleRoom || checkLOS(state.player.x, state.player.y, e.x, e.y));
-    if (!vis) continue;
+    // Rely on cached visibility calculated during primary tile loop to avoid repeating Bresenham raycasts
+    if (!e._inView) continue;
     
     // Safety fallback for hpMax if it wasn't explicitly set on spawn
     if (!e.hpMax) e.hpMax = e.hp;
@@ -3011,64 +3128,69 @@ ctx.fillStyle = grad;
 
   
 
-  // --- Particle Rendering (Optimized) ---
+  // --- Particle Rendering (Zero-Allocation In-Place Compaction) ---
   let activeEffects = false;
 
   if (state.bombEffects && state.bombEffects.length > 0) {
       activeEffects = true;
+      const now = Date.now();
+      let bWrite = 0;
+      for (let i = 0; i < state.bombEffects.length; i++) {
+        const b = state.bombEffects[i];
+        if (now < b.start + b.duration) state.bombEffects[bWrite++] = b;
+      }
+      state.bombEffects.length = bWrite;
   }
 
   if (state.particles && state.particles.length > 0) {
     activeEffects = true;
-    state.particles = state.particles.filter(p => p.life > 0);
-    state.particles.forEach(p => {
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life--;
-      
-      const sx = (p.x - ox) * tile + tile/2;
-      const sy = (p.y - oy) * tile + tile/2;
-      
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = p.life < 20 ? p.life / 20 : 1.0;
-      ctx.fillRect(sx, sy, p.size, p.size);
-      ctx.globalAlpha = 1.0;
-    });
+    let pWrite = 0;
+    for (let i = 0; i < state.particles.length; i++) {
+      const p = state.particles[i];
+      p.life -= frameScale; // CHANGED: Lifetime follows elapsed time.
+      if (p.life > 0) {
+        p.x += p.vx * frameScale; // CHANGED: Match motion to elapsed time.
+        p.y += p.vy * frameScale;
+        const sx = Math.floor((p.x - ox) * tile + tile / 2);
+        const sy = Math.floor((p.y - oy) * tile + tile / 2);
+
+        if (p.life < 8) ctx.globalAlpha = p.life / 8;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(sx, sy, p.size, p.size);
+        if (p.life < 8) ctx.globalAlpha = 1.0;
+
+        state.particles[pWrite++] = p;
+      }
+    }
+    state.particles.length = pWrite;
   }
 
-  // --- Floating Text (Time-Based & Optimized) ---
-// --- Floating Text (Highly Optimized) ---
+  // --- Floating Text (Zero-Allocation In-Place Compaction) ---
   if (state.floatingText && state.floatingText.length > 0) {
     activeEffects = true;
     const now = Date.now();
     ctx.font = "bold 14px monospace";
     ctx.textAlign = "center";
     
-    // Filter expired
-    state.floatingText = state.floatingText.filter(ft => now < ft.start + ft.duration);
-    
-    state.floatingText.forEach(ft => {
+    let ftWrite = 0;
+    for (let i = 0; i < state.floatingText.length; i++) {
+      const ft = state.floatingText[i];
       const elapsed = now - ft.start;
-      const pct = elapsed / ft.duration;
-      
-      const rise = pct * 30; 
-      
-      // OPTIMIZATION: Math.floor coords prevents sub-pixel rendering lag
-      const sx = Math.floor((ft.x - ox) * tile + tile/2);
-      const sy = Math.floor((ft.y - oy) * tile - rise); 
-      
-      // Fade out logic
-      if (pct > 0.8) ctx.globalAlpha = 1 - (pct - 0.8) * 5;
-      
-      // OPTIMIZATION: Removed the black shadow text draw. 
-      // It doubles the render cost. If visibility is an issue, 
-      // use a darker background color or just keep it simple.
-      
-      ctx.fillStyle = ft.color;
-      ctx.fillText(ft.text, sx, sy);
-      
-      ctx.globalAlpha = 1.0;
-    });
+      if (elapsed < ft.duration) {
+        const pct = elapsed / ft.duration;
+        const rise = pct * 30;
+        const sx = Math.floor((ft.x - ox) * tile + tile / 2);
+        const sy = Math.floor((ft.y - oy) * tile - rise);
+
+        if (pct > 0.8) ctx.globalAlpha = 1 - (pct - 0.8) * 5;
+        ctx.fillStyle = ft.color;
+        ctx.fillText(ft.text, sx, sy);
+        if (pct > 0.8) ctx.globalAlpha = 1.0;
+
+        state.floatingText[ftWrite++] = ft;
+      }
+    }
+    state.floatingText.length = ftWrite;
   }
 
 // --- REAPER OVERRIDE: Always draw (Glowing) on top of fog ---
@@ -3096,10 +3218,9 @@ ctx.fillStyle = grad;
     window.drawFishingMinigameUI(ctx);
   }
 
-  // Removed state.fishing.active from self-looping rAF to prevent compounding render loops
-  state._animating = activeEffects || isMoving;
+    state._animating = activeEffects || isMoving;
   if (state._animating) {
-    requestAnimationFrame(draw);
+    draw(); // CHANGED: Queue the next frame through the shared scheduler.
   }
 }
 
@@ -3183,14 +3304,23 @@ function updateBossHud(){
   // Ensure boss has a max for the bar
   if (!Number.isFinite(b.hpMax)) b.hpMax = Math.max(b.hp|0, 1);
 
-  document.getElementById('bossName').textContent =
-    b.displayName || (b.type ? `${b.type} Boss` : 'Boss');
+  const bName = b.displayName || (b.type ? `${b.type} Boss` : 'Boss');
+  const bHp = Math.max(0, b.hp | 0);
+  const bMax = b.hpMax | 0;
 
-  const pct = clamp((b.hp / (b.hpMax||1))*100, 0, 100);
-  document.getElementById('bossHpFill').style.width = pct + '%';
-  document.getElementById('bossHpText').textContent = `${Math.max(0, b.hp|0)}/${b.hpMax|0}`;
+  // Memoize DOM properties to avoid layout reflow every frame
+  if (hud._lastHp !== bHp || hud._lastMax !== bMax || hud._lastName !== bName) {
+    hud._lastHp = bHp;
+    hud._lastMax = bMax;
+    hud._lastName = bName;
 
-  hud.style.display = 'block';
+    const pct = clamp((b.hp / (b.hpMax || 1)) * 100, 0, 100);
+    document.getElementById('bossName').textContent = bName;
+    document.getElementById('bossHpFill').style.width = pct + '%';
+    document.getElementById('bossHpText').textContent = `${bHp}/${bMax}`;
+  }
+
+  if (hud.style.display !== 'block') hud.style.display = 'block';
 }
 
 function unlockControls(src){
@@ -3316,7 +3446,8 @@ function renderSkills(){
 
     const L = s.lvl | 0;
     const spent = s.spentPoints || 0;
-    const available = Math.max(0, (L - 1) - spent);
+    // Factor in starting bonus points when calculating available unspent points
+    const available = Math.max(0, (L - 1) + (s.bonusPoints || 0) - spent);
 
     const chip = document.createElement('button');
     chip.className   = 'skill';
@@ -3418,43 +3549,46 @@ function showSkillDetails(type){
   // Initialize perk tracking & logic cleanly derived from Level
   s.perks = s.perks || {};
   s.spentPoints = s.spentPoints || 0;
-  const available = Math.max(0, (L - 1) - s.spentPoints);
+  // Factor in starting bonus points so Level 1 displays available skill points
+  const available = Math.max(0, (L - 1) + (s.bonusPoints || 0) - s.spentPoints);
 
-  // Define Skyrim-like branched trees for each category with Max Levels
+  // Define branched skill trees with strict Root -> Tier A (Simple) -> Tier B (Triggers) -> Tier C (Capstones)
   const trees = {
   one: [
     { id: 'one_base', name: 'Blade Mastery', max: 5, desc: '+1 Base Damage per level.', req: null },
     
-    { id: 'one_a1', name: 'Evasion', max: 5, desc: '5% chance per level to Dodge.', req: 'one_base' },
-    { id: 'one_a2', name: 'Lacerate', max: 5, desc: '10% chance per level to Bleed enemies.', req: 'one_base' },
+    { id: 'one_a1', name: 'Evasion', max: 5, desc: '+5% chance per level to Dodge incoming attacks.', req: 'one_base' },
+    { id: 'one_a2', name: 'Lacerate', max: 5, desc: '+10% chance per level to apply Bleed on hit.', req: 'one_base' },
     
-    { id: 'one_b1', name: 'Shadow Step', max: 1, desc: 'Take 0 damage when you dodge instead of partial.', req: 'one_a1' },
+    { id: 'one_b1', name: 'Shadow Step', max: 1, desc: 'Dodging completely nullifies all incoming damage.', req: 'one_a1' },
     { id: 'one_b2', name: 'Fleet Footed', max: 1, desc: 'Moving 3 tiles without stopping grants +50% Dodge chance for 1 turn.', req: 'one_a1' },
-    { id: 'one_b3', name: 'Relentless', max: 5, desc: '10% chance per level for a free follow-up attack.', req: 'one_a2' },
-    { id: 'one_b4', name: 'Deep Cuts', max: 5, desc: 'Bleed deals +2 extra damage per tick per level.', req: 'one_a2' },
+    { id: 'one_b3', name: 'Relentless', max: 5, desc: '+10% chance per level for an immediate free follow-up attack.', req: 'one_a2' },
+    // BALANCED: Deep Cuts adjusted from +2 to +1 damage per tick per level (max +5 per tick)
+    { id: 'one_b4', name: 'Deep Cuts', max: 5, desc: 'Bleed deals +1 extra damage per tick per level.', req: 'one_a2' },
     
-    { id: 'one_c1', name: 'Phantom Strike', max: 1, desc: 'Dodging guarantees your next attack is a Critical Hit.', req: 'one_b1' },
-    { id: 'one_c2', name: 'Riposte', max: 1, desc: 'Dodging triggers an immediate, free counter-attack.', req: 'one_b1' },
+    { id: 'one_c1', name: 'Phantom Strike', max: 1, desc: 'Dodging an attack guarantees your next strike is a Critical Hit.', req: 'one_b1' },
+    { id: 'one_c2', name: 'Riposte', max: 1, desc: 'Successfully dodging triggers an automatic counter-attack.', req: 'one_b1' },
     { id: 'one_c3', name: 'Afterimage', max: 1, desc: 'Moving 3 tiles without stopping guarantees you dodge the next attack.', req: 'one_b2' },
     { id: 'one_c4', name: 'Momentum', max: 1, desc: 'Moving 3 tiles without stopping doubles your next attack damage.', req: 'one_b2' },
-    { id: 'one_c5', name: 'Flurry', max: 1, desc: 'Follow-up attacks can trigger a second follow-up.', req: 'one_b3' },
+    { id: 'one_c5', name: 'Flurry', max: 1, desc: 'Follow-up attacks can trigger additional follow-ups.', req: 'one_b3' },
     { id: 'one_c6', name: 'Thousand Cuts', max: 5, desc: 'Each consecutive hit on the same target adds +1 Damage per level.', req: 'one_b3' },
-    { id: 'one_c7', name: 'Hemorrhage', max: 1, desc: 'Bleeding enemies take 50% more damage from all your attacks.', req: 'one_b4' },
-    { id: 'one_c8', name: 'Bloodthirst', max: 5, desc: 'Attacking a bleeding enemy heals you for 1 HP per level.', req: 'one_b4' }
+    { id: 'one_c7', name: 'Hemorrhage', max: 1, desc: 'Bleeding enemies take +50% damage from all your attacks.', req: 'one_b4' },
+    { id: 'one_c8', name: 'Bloodthirst', max: 5, desc: 'Attacking a bleeding enemy restores +1 HP per level.', req: 'one_b4' }
   ],
   two: [
     { id: 'two_base', name: 'Heavy Grip', max: 5, desc: '+1 Base Damage per level.', req: null },
     
-    { id: 'two_a1', name: 'Follow-Through', max: 1, desc: 'Excess overkill damage is dealt to an adjacent enemy.', req: 'two_base' },
+    { id: 'two_a1', name: 'Follow-Through', max: 1, desc: 'Overkill damage is dealt to an adjacent enemy.', req: 'two_base' },
     { id: 'two_a2', name: 'Sunder', max: 1, desc: '+50% Damage to Bosses and Warlords.', req: 'two_base' },
     
     { id: 'two_b1', name: 'Brutal Force', max: 1, desc: 'Overkill damage ignores enemy Armor and Damage Reduction.', req: 'two_a1' },
-    { id: 'two_b2', name: 'Stagger', max: 1, desc: 'Critical hits push enemies back 1 tile.', req: 'two_a1' },
+    { id: 'two_b2', name: 'Stagger', max: 1, desc: 'Critical hits forcefully push enemies back 1 tile.', req: 'two_a1' },
     { id: 'two_b3', name: 'Crush', max: 5, desc: 'Attacks deal +10% damage per level to Bosses and Elites.', req: 'two_a2' },
-    { id: 'two_b4', name: 'Ruthless', max: 5, desc: 'Killing an enemy grants +2 Damage per level to your next attack.', req: 'two_a2' },
+    // BALANCED: Ruthless adjusted from +2 to +1 damage per level (max +5 bonus)
+    { id: 'two_b4', name: 'Ruthless', max: 5, desc: 'Killing an enemy grants +1 Damage per level to your next attack.', req: 'two_a2' },
     
     { id: 'two_c1', name: 'Shockwave', max: 1, desc: 'Regular attacks also damage the tile directly behind the target.', req: 'two_b1' },
-    { id: 'two_c2', name: 'Meteor Strike', max: 1, desc: 'Your Weapon Art permanently Stuns all 8 surrounding enemies for 2 turns.', req: 'two_b1' },
+    { id: 'two_c2', name: 'Meteor Strike', max: 1, desc: 'Your Cleave Weapon Art stuns all surrounding enemies for 2 turns.', req: 'two_b1' },
     { id: 'two_c3', name: 'Colossus', max: 1, desc: 'Enemies knocked back are also Stunned for 1 turn.', req: 'two_b2' },
     { id: 'two_c4', name: 'Executioner', max: 1, desc: 'Knocking enemies into a wall deals triple damage.', req: 'two_b2' },
     { id: 'two_c5', name: 'Giant Slayer', max: 1, desc: 'Attacks against Bosses/Warlords cannot miss and roll max damage.', req: 'two_b3' },
@@ -3466,81 +3600,86 @@ function showSkillDetails(type){
     { id: 'axe_base', name: 'Chopper', max: 5, desc: '+1 Base Damage per level.', req: null },
     
     { id: 'axe_a1', name: 'Savage Strikes', max: 5, desc: '+10% Critical Hit Chance per level.', req: 'axe_base' },
-    { id: 'axe_a2', name: 'Cripple', max: 5, desc: '10% chance per level to Slow enemies.', req: 'axe_base' },
+    { id: 'axe_a2', name: 'Cripple', max: 5, desc: '+10% chance per level to Slow enemies on hit.', req: 'axe_base' },
     
-    { id: 'axe_b1', name: 'Bloodlust', max: 5, desc: 'Melee kills heal you for 1 HP per level.', req: 'axe_a1' },
+    { id: 'axe_b1', name: 'Bloodlust', max: 5, desc: 'Melee kills heal you for +1 HP per level.', req: 'axe_a1' },
     { id: 'axe_b2', name: 'Berserker', max: 5, desc: 'Gain +1 Damage per level for every 20% missing HP.', req: 'axe_a1' },
     { id: 'axe_b3', name: 'Executioner\'s Mark', max: 5, desc: 'Slowed enemies take +2 Damage from your attacks per level.', req: 'axe_a2' },
-    { id: 'axe_b4', name: 'Deep Wounds', max: 5, desc: '10% chance per level to Bleed enemies.', req: 'axe_a2' },
+    { id: 'axe_b4', name: 'Deep Wounds', max: 5, desc: '+10% chance per level to apply Bleed on hit.', req: 'axe_a2' },
     
-    { id: 'axe_c1', name: 'Vampirism', max: 1, desc: 'Bloodlust now heals 10% of Max HP.', req: 'axe_b1' },
-    { id: 'axe_c2', name: 'Feast', max: 1, desc: 'Killing a Warlord or Boss permanently increases Max HP by 1.', req: 'axe_b1' },
-    { id: 'axe_c3', name: 'Death Wish', max: 1, desc: 'Dropping below 20% HP grants 100% Crit Chance.', req: 'axe_b2' },
+    { id: 'axe_c1', name: 'Vampirism', max: 1, desc: 'Bloodlust now heals for 10% of your Max HP.', req: 'axe_b1' },
+    { id: 'axe_c2', name: 'Feast', max: 1, desc: 'Defeating a Warlord or Boss permanently increases Max HP by 1.', req: 'axe_b1' },
+    { id: 'axe_c3', name: 'Death Wish', max: 1, desc: 'Dropping below 20% HP grants 100% Critical Hit Chance.', req: 'axe_b2' },
     { id: 'axe_c4', name: 'Unstoppable', max: 1, desc: 'While below 50% HP, you are immune to Stun and Slow.', req: 'axe_b2' },
-    { id: 'axe_c5', name: 'Decapitate', max: 1, desc: 'Crits against Slowed enemies instantly kill non-bosses.', req: 'axe_b3' },
+    { id: 'axe_c5', name: 'Decapitate', max: 1, desc: 'Critical hits against Slowed enemies instantly kill non-bosses.', req: 'axe_b3' },
     { id: 'axe_c6', name: 'Shatter', max: 1, desc: 'Attacking a Slowed enemy completely strips their Armor.', req: 'axe_b3' },
     { id: 'axe_c7', name: 'Agony', max: 1, desc: 'Bleeding enemies are automatically Slowed as well.', req: 'axe_b4' },
-    { id: 'axe_c8', name: 'Carnage', max: 1, desc: 'Killing a Bleeding enemy causes them to explode, dealing Bleed damage to adjacent enemies.', req: 'axe_b4' }
+    { id: 'axe_c8', name: 'Carnage', max: 1, desc: 'Killing a Bleeding enemy causes an explosion of Bleed damage to adjacent enemies.', req: 'axe_b4' }
   ],
   spear: [
-    { id: 'spear_base', name: 'Reach', max: 4, desc: '+5% Base Accuracy per level.', req: null },
+    // BALANCED: Standardized Reach max rank from 4 to 5 to match all other weapon tree masteries
+    { id: 'spear_base', name: 'Reach', max: 5, desc: '+5% Base Accuracy per level.', req: null },
     
-    { id: 'spear_a1', name: 'First Strike', max: 5, desc: 'Your attacks against enemies at 100% HP deal +2 damage per level.', req: 'spear_base' },
-    { id: 'spear_a2', name: 'Phalanx', max: 5, desc: '5% chance per level to Parry incoming damage.', req: 'spear_base' },
+    { id: 'spear_a1', name: 'First Strike', max: 5, desc: 'Attacks against enemies at 100% HP deal +2 damage per level.', req: 'spear_base' },
+    { id: 'spear_a2', name: 'Phalanx', max: 5, desc: '+5% chance per level to Parry incoming attacks.', req: 'spear_base' },
     
-    { id: 'spear_b1', name: 'Impale', max: 5, desc: '15% chance per level to pierce and hit the enemy directly behind your target.', req: 'spear_a1' },
+    { id: 'spear_b1', name: 'Impale', max: 5, desc: '+15% chance per level to pierce through to the enemy behind your target.', req: 'spear_a1' },
     { id: 'spear_b2', name: 'Keep Away', max: 1, desc: 'Hitting an enemy forcefully pushes them back 1 tile.', req: 'spear_a1' },
-    { id: 'spear_b3', name: 'Impenetrable', max: 1, desc: 'Parries block 100% of damage instead of a percentage.', req: 'spear_a2' },
-    { id: 'spear_b4', name: 'Sweeping Strike', max: 5, desc: 'Hitting an enemy has a 20% chance per level to hit all diagonally adjacent enemies.', req: 'spear_a2' },
+    { id: 'spear_b3', name: 'Impenetrable', max: 1, desc: 'Parrying negates 100% of incoming damage.', req: 'spear_a2' },
+    { id: 'spear_b4', name: 'Sweeping Strike', max: 5, desc: '+20% chance per level to hit all diagonally adjacent enemies.', req: 'spear_a2' },
     
     { id: 'spear_c1', name: 'Gungnir', max: 1, desc: 'Impale pierces infinitely in a straight line.', req: 'spear_b1' },
     { id: 'spear_c2', name: 'Skewer', max: 1, desc: 'Pierced enemies are pinned and Stunned for 1 turn.', req: 'spear_b1' },
     { id: 'spear_c3', name: 'Pinning Strike', max: 1, desc: 'Pushing an enemy into a wall Stuns them for 2 turns.', req: 'spear_b2' },
     { id: 'spear_c4', name: 'Hit and Run', max: 1, desc: 'Killing an enemy refunds 1 Stamina and lets you move 1 tile for free.', req: 'spear_b2' },
-    { id: 'spear_c5', name: 'Phalanx Commander', max: 1, desc: 'Successfully Parrying triggers a free counter-attack.', req: 'spear_b3' },
-    { id: 'spear_c6', name: 'Perfect Stance', max: 1, desc: 'While you have full Stamina, your Parry chance is doubled.', req: 'spear_b3' },
-    { id: 'spear_c7', name: 'Dragoon', max: 1, desc: 'Moving straight toward an enemy for 2+ tiles guarantees your attack is a Crit.', req: 'spear_b4' },
-    { id: 'spear_c8', name: 'Zoning', max: 5, desc: 'Enemies that step into your melee range take 1 damage automatically per level.', req: 'spear_b4' }
+    { id: 'spear_c5', name: 'Phalanx Commander', max: 1, desc: 'Successfully Parrying triggers an immediate free counter-attack.', req: 'spear_b3' },
+    { id: 'spear_c6', name: 'Perfect Stance', max: 1, desc: 'While at full Stamina, your Parry chance is doubled.', req: 'spear_b3' },
+    { id: 'spear_c7', name: 'Dragoon', max: 1, desc: 'Moving straight toward an enemy for 2+ tiles guarantees your attack Crits.', req: 'spear_b4' },
+    { id: 'spear_c8', name: 'Zoning', max: 5, desc: 'Enemies that step into your melee range take 1 damage per level automatically.', req: 'spear_b4' }
   ],
   hand: [
     { id: 'hand_base', name: 'Iron Fists', max: 5, desc: '+1 Base Damage per level.', req: null },
     
-    { id: 'hand_a1', name: 'Knockout', max: 5, desc: '5% chance per level to Stun enemies.', req: 'hand_base' },
-    { id: 'hand_a2', name: 'Deflect', max: 5, desc: '10% chance per level to reduce incoming damage by 50%.', req: 'hand_base' },
+    { id: 'hand_a1', name: 'Knockout', max: 5, desc: '+5% chance per level to Stun enemies on hit.', req: 'hand_base' },
+    { id: 'hand_a2', name: 'Deflect', max: 5, desc: '+10% chance per level to reduce incoming damage by 50%.', req: 'hand_base' },
     
-    { id: 'hand_b1', name: 'Disarm', max: 5, desc: '5% chance per level to permanently reduce enemy Attack power.', req: 'hand_a1' },
-    { id: 'hand_b2', name: 'Earthbreaker', max: 1, desc: 'Crits trigger a 3x3 shockwave damaging nearby enemies.', req: 'hand_a1' },
-    { id: 'hand_b3', name: 'Counter-Throw', max: 5, desc: '15% chance per level when attacked to swap places with enemy.', req: 'hand_a2' },
+    { id: 'hand_b1', name: 'Disarm', max: 5, desc: '+5% chance per level to permanently reduce enemy Attack power.', req: 'hand_a1' },
+    { id: 'hand_b2', name: 'Earthbreaker', max: 1, desc: 'Critical hits trigger a 3x3 shockwave damaging nearby enemies.', req: 'hand_a1' },
+    { id: 'hand_b3', name: 'Counter-Throw', max: 5, desc: '+15% chance per level when hit to swap positions with the attacker.', req: 'hand_a2' },
     { id: 'hand_b4', name: 'Chi Focus', max: 5, desc: 'Permanently gain +5 Max HP per level.', req: 'hand_a2' },
     
-    { id: 'hand_c1', name: 'Pressure Points', max: 1, desc: 'Crits apply Slow and halve enemy damage for 3 turns.', req: 'hand_b1' },
+    { id: 'hand_c1', name: 'Pressure Points', max: 1, desc: 'Critical hits apply Slow and halve enemy attack power for 3 turns.', req: 'hand_b1' },
     { id: 'hand_c2', name: 'Nerve Strike', max: 1, desc: 'Stunned enemies take double damage from all sources.', req: 'hand_b1' },
-    { id: 'hand_c3', name: 'Quake', max: 1, desc: 'Earthbreaker shockwave now also Stuns any enemies hit.', req: 'hand_b2' },
-    { id: 'hand_c4', name: 'Palm Strike', max: 1, desc: 'Attacking a Stunned enemy forcefully throws them 2 tiles away.', req: 'hand_b2' },
+    { id: 'hand_c3', name: 'Quake', max: 1, desc: 'Earthbreaker shockwaves also Stun all enemies caught in the blast.', req: 'hand_b2' },
+    { id: 'hand_c4', name: 'Palm Strike', max: 1, desc: 'Attacking a Stunned enemy forcefully knocks them back 2 tiles.', req: 'hand_b2' },
     { id: 'hand_c5', name: 'Judo', max: 1, desc: 'Counter-Throw also Stuns the thrown enemy for 2 turns.', req: 'hand_b3' },
     { id: 'hand_c6', name: 'Redirection', max: 1, desc: 'Deflecting an attack reflects the blocked damage back to the attacker.', req: 'hand_b3' },
-    { id: 'hand_c7', name: 'Flowing Water', max: 5, desc: 'Successfully Deflecting or Dodging an attack restores 2 HP per level.', req: 'hand_b4' },
-    { id: 'hand_c8', name: 'Iron Body', max: 1, desc: '10% of Max HP converts into flat Damage Reduction.', req: 'hand_b4' }
+    { id: 'hand_c7', name: 'Flowing Water', max: 5, desc: 'Successfully Deflecting or Dodging an attack restores +2 HP per level.', req: 'hand_b4' },
+    // BALANCED: Iron Body converted from 10% un-capped flat DR to 4% (capped at 3 flat DR) to prevent total damage immunity
+    { id: 'hand_c8', name: 'Iron Body', max: 1, desc: '4% of your Max HP (max 3) is converted into flat Damage Reduction.', req: 'hand_b4' }
   ],
   bow: [
-    { id: 'bow_base', name: 'Eagle Eye', max: 5, desc: '+2% Base Accuracy per level.', req: null },
+    // BALANCED: Eagle eye brought to +5% per level to match other weapon mastery base accuracy bonuses
+    { id: 'bow_base', name: 'Eagle Eye', max: 5, desc: '+5% Base Accuracy per level.', req: null },
     
-    { id: 'bow_a1', name: 'Tension', max: 5, desc: '+1 Range per level.', req: 'bow_base' },
-    { id: 'bow_a2', name: 'Fletching', max: 5, desc: '5% chance per level to not consume an arrow.', req: 'bow_base' },
+    { id: 'bow_a1', name: 'Tension', max: 5, desc: '+1 Bow Range per level.', req: 'bow_base' },
+    { id: 'bow_a2', name: 'Fletching', max: 5, desc: '+5% chance per level to not consume an arrow when shooting.', req: 'bow_base' },
     
     { id: 'bow_b1', name: 'Sniper', max: 5, desc: '+10% Critical Hit Chance per level.', req: 'bow_a1' },
     { id: 'bow_b2', name: 'Bodkin', max: 1, desc: 'Arrows pierce through 1 enemy.', req: 'bow_a1' },
-    { id: 'bow_b3', name: 'Multishot', max: 5, desc: 'Fire 1 extra arrow at a random visible enemy per level.', req: 'bow_a2' },
-    { id: 'bow_b4', name: 'Scavenger (Arrows)', max: 1, desc: 'Enemies killed by arrows have 50% chance to drop an arrow.', req: 'bow_a2' },
+    // BALANCED: Multishot capped at 3 extra arrows instead of 5
+    { id: 'bow_b3', name: 'Multishot', max: 3, desc: 'Fire +1 extra arrow (up to 3) at a random visible enemy per level.', req: 'bow_a2' },
+    { id: 'bow_b4', name: 'Scavenger', max: 1, desc: 'Enemies killed by arrows have a 50% chance to drop an arrow.', req: 'bow_a2' },
     
-    { id: 'bow_c1', name: 'Headshot', max: 1, desc: 'Crits instantly kill non-bosses.', req: 'bow_b1' },
+    { id: 'bow_c1', name: 'Headshot', max: 1, desc: 'Critical hits instantly kill non-bosses.', req: 'bow_b1' },
     { id: 'bow_c2', name: 'Assassin', max: 1, desc: 'Shooting an enemy at maximum range deals double damage.', req: 'bow_b1' },
-    { id: 'bow_c3', name: 'Railgun', max: 1, desc: 'Bodkin arrows deal full damage to all pierced targets.', req: 'bow_b2' },
+    { id: 'bow_c3', name: 'Railgun', max: 1, desc: 'Bodkin arrows deal 100% damage to all pierced targets.', req: 'bow_b2' },
     { id: 'bow_c4', name: 'Pinning Shot', max: 1, desc: 'Piercing an enemy pins them to a wall, Stunning for 3 turns.', req: 'bow_b2' },
-    { id: 'bow_c5', name: 'Volley', max: 1, desc: 'Multishot fires twice as many extra arrows.', req: 'bow_b3' },
-    { id: 'bow_c6', name: 'Seeker Arrows', max: 1, desc: 'Arrows fired into empty space automatically seek out the nearest visible enemy.', req: 'bow_b3' },
+    // BALANCED: Volley grants 75% splash damage rather than firing 10 arrows per shot
+    { id: 'bow_c5', name: 'Volley', max: 1, desc: 'Multishot extra arrows deal 75% splash damage to adjacent targets.', req: 'bow_b3' },
+    { id: 'bow_c6', name: 'Seeker Arrows', max: 1, desc: 'Arrows fired into empty space automatically seek the nearest enemy.', req: 'bow_b3' },
     { id: 'bow_c7', name: 'Endless Quiver', max: 1, desc: 'Fletching chance increases to 50%.', req: 'bow_b4' },
-    { id: 'bow_c8', name: 'Explosive Tipped', max: 1, desc: 'Arrows explode on impact, dealing half damage to adjacent tiles.', req: 'bow_b4' }
+    { id: 'bow_c8', name: 'Explosive Tipped', max: 1, desc: 'Arrows explode on impact, dealing 50% damage to adjacent tiles.', req: 'bow_b4' }
   ],
   magic: [
     { id: 'mag_base', name: 'Arcane Focus', max: 5, desc: '+5% Spell Accuracy per level.', req: null },
@@ -3548,75 +3687,75 @@ function showSkillDetails(type){
     { id: 'mag_a1', name: 'Empower', max: 5, desc: '+1 Spell Damage per level.', req: 'mag_base' },
     { id: 'mag_a2', name: 'Leyline', max: 5, desc: '+2 Max MP per level.', req: 'mag_base' },
     
-    { id: 'mag_b1', name: 'Overcharge', max: 5, desc: '10% chance per level for a spell to deal double damage.', req: 'mag_a1' },
-    { id: 'mag_b2', name: 'Echo', max: 5, desc: '10% chance per level to cast a second time for free at half damage.', req: 'mag_a1' },
-    { id: 'mag_b3', name: 'Siphon', max: 5, desc: 'Melee kills restore 1 MP per level.', req: 'mag_a2' },
-    { id: 'mag_b4', name: 'Channeling', max: 5, desc: 'Spells cost 1 less MP per level.', req: 'mag_a2' },
+    { id: 'mag_b1', name: 'Overcharge', max: 5, desc: '+10% chance per level for a spell to deal double damage.', req: 'mag_a1' },
+    { id: 'mag_b2', name: 'Echo', max: 5, desc: '+10% chance per level to cast a duplicate spell for free at half damage.', req: 'mag_a1' },
+    { id: 'mag_b3', name: 'Siphon', max: 5, desc: 'Melee kills restore +1 MP per level.', req: 'mag_a2' },
+    { id: 'mag_b4', name: 'Channeling', max: 5, desc: 'Spells cost 1 less MP per level (minimum 1).', req: 'mag_a2' },
     
     { id: 'mag_c1', name: 'Devastation', max: 1, desc: 'Overcharge deals 3x damage instead of 2x.', req: 'mag_b1' },
     { id: 'mag_c2', name: 'Arcane Chain', max: 1, desc: 'Overcharged spells automatically bounce to a second nearby enemy.', req: 'mag_b1' },
     { id: 'mag_c3', name: 'Resonance', max: 1, desc: 'Echo triggers a 3rd cast at quarter damage.', req: 'mag_b2' },
     { id: 'mag_c4', name: 'Archmage', max: 1, desc: 'Spells ignore Line of Sight and can be cast through walls.', req: 'mag_b2' },
-    { id: 'mag_c5', name: 'Blood Magic', max: 1, desc: 'Cast spells using HP if you are out of MP.', req: 'mag_b3' },
-    { id: 'mag_c6', name: 'Mana Shield', max: 1, desc: 'Take damage to MP instead of HP while above 0 MP.', req: 'mag_b3' },
+    { id: 'mag_c5', name: 'Blood Magic', max: 1, desc: 'Allows casting spells using HP when out of MP.', req: 'mag_b3' },
+    { id: 'mag_c6', name: 'Mana Shield', max: 1, desc: 'Incoming damage absorbs MP before HP while above 0 MP.', req: 'mag_b3' },
     { id: 'mag_c7', name: 'Elemental Weaver', max: 1, desc: 'Casting a spell reduces your next different spell\'s cost to 0.', req: 'mag_b4' },
-    { id: 'mag_c8', name: 'Mana Surge', max: 1, desc: 'Descending the stairs to a new floor completely restores your MP to max.', req: 'mag_b4' }
+    { id: 'mag_c8', name: 'Mana Surge', max: 1, desc: 'Descending stairs to a new floor completely restores your MP.', req: 'mag_b4' }
   ],
   survivability: [
     { id: 'sur_base', name: 'Thick Skin', max: 5, desc: '+2 Max HP per level.', req: null },
-    
-    { id: 'sur_a1', name: 'Hardened', max: 5, desc: '-1 Flat Damage Taken per level.', req: 'sur_base' },
+    // BALANCED: Hardened capped at 3 ranks (-3 flat DR maximum)
+    { id: 'sur_a1', name: 'Hardened', max: 3, desc: '-1 Flat Damage Taken per level (max 3).', req: 'sur_base' },
     { id: 'sur_a2', name: 'Athleticism', max: 5, desc: '+5 Max Stamina per level.', req: 'sur_base' },
     
-    { id: 'sur_b1', name: 'Spiked Armor', max: 5, desc: 'Enemies take 1 damage per level when they hit you.', req: 'sur_a1' },
-    { id: 'sur_b2', name: 'Purifier', max: 1, desc: 'Immune to Poison and Status effects.', req: 'sur_a1' },
-    { id: 'sur_b3', name: 'Troll Blood', max: 5, desc: 'Heal 1 HP per level every 10 turns.', req: 'sur_a2' },
-    { id: 'sur_b4', name: 'Alchemist', max: 1, desc: 'Potions heal 50% more.', req: 'sur_a2' },
+    { id: 'sur_b1', name: 'Spiked Armor', max: 5, desc: 'Enemies take 1 damage per level when attacking you in melee.', req: 'sur_a1' },
+    { id: 'sur_b2', name: 'Purifier', max: 1, desc: 'Immune to Poison, Web/Slow, and Status effects.', req: 'sur_a1' },
+    { id: 'sur_b3', name: 'Troll Blood', max: 5, desc: 'Regenerate +1 HP per level every 10 turns.', req: 'sur_a2' },
+    { id: 'sur_b4', name: 'Alchemist', max: 1, desc: 'Potions restore 50% HP instead of 25%.', req: 'sur_a2' },
     
-    { id: 'sur_c1', name: 'Retribution', max: 1, desc: 'Reflect 50% of blocked/reduced damage back to the attacker.', req: 'sur_b1' },
-    { id: 'sur_c2', name: 'Titan\'s Grip', max: 1, desc: 'Allows you to equip a Shield alongside a Two-Handed weapon.', req: 'sur_b1' },
-    { id: 'sur_c3', name: 'Indomitable', max: 1, desc: 'Take half damage from Bosses.', req: 'sur_b2' },
-    { id: 'sur_c4', name: 'Juggernaut', max: 1, desc: 'Take 50% less damage from Traps and Hazards.', req: 'sur_b2' },
-    { id: 'sur_c5', name: 'Second Wind', max: 1, desc: 'Once per floor, dropping below 20% HP instantly heals 50% HP.', req: 'sur_b3' },
-    { id: 'sur_c6', name: 'Regeneration', max: 5, desc: 'Heal +5 HP per level when using stairs.', req: 'sur_b3' },
-    { id: 'sur_c7', name: 'Iron Stomach', max: 1, desc: 'Drinking a potion also grants you a +2 Damage buff for 10 turns.', req: 'sur_b4' },
+    { id: 'sur_c1', name: 'Retribution', max: 1, desc: 'Reflect 50% of blocked or reduced damage back to attacker.', req: 'sur_b1' },
+    { id: 'sur_c2', name: 'Titan\'s Grip', max: 1, desc: 'Allows equipping a Shield alongside Two-Handed weapons.', req: 'sur_b1' },
+    { id: 'sur_c3', name: 'Indomitable', max: 1, desc: 'Take 50% less damage from Bosses and Elites.', req: 'sur_b2' },
+    { id: 'sur_c4', name: 'Juggernaut', max: 1, desc: 'Take 50% less damage from Traps, Miasma, and Hazards.', req: 'sur_b2' },
+    { id: 'sur_c5', name: 'Second Wind', max: 1, desc: 'Once per run, dropping below 20% HP instantly heals 50% HP.', req: 'sur_b3' },
+    { id: 'sur_c6', name: 'Regeneration', max: 5, desc: 'Heal +5 HP per level when descending stairs.', req: 'sur_b3' },
+    { id: 'sur_c7', name: 'Iron Stomach', max: 1, desc: 'Drinking a potion grants +2 Attack Damage for 10 turns.', req: 'sur_b4' },
     { id: 'sur_c8', name: 'Immortal', max: 1, desc: 'Once per run, survive a fatal blow at 1 HP.', req: 'sur_b4' }
   ],
   lockpicking: [
     { id: 'loc_base', name: 'Tinkerer', max: 5, desc: '+10% Lockpick Success Chance per level.', req: null },
     
-    { id: 'loc_a1', name: 'Nimble Fingers', max: 5, desc: '10% chance per level to not consume a lockpick upon use.', req: 'loc_base' },
+    { id: 'loc_a1', name: 'Nimble Fingers', max: 5, desc: '+10% chance per level to not consume a lockpick on use.', req: 'loc_base' },
     { id: 'loc_a2', name: 'Trap Sense', max: 5, desc: 'Traps deal 10% less damage per level to you.', req: 'loc_base' },
     
-    { id: 'loc_b1', name: 'Burglar', max: 5, desc: '10% chance per level to instantly pick a lock without needing a tool.', req: 'loc_a1' },
-    { id: 'loc_b2', name: 'Scrap Metal', max: 5, desc: 'Breaking props has a 5% chance per level to drop a lockpick.', req: 'loc_a1' },
-    { id: 'loc_b3', name: 'Saboteur', max: 1, desc: 'Walking over Spike Traps permanently breaks them.', req: 'loc_a2' },
-    { id: 'loc_b4', name: 'Mechanisms', max: 1, desc: 'Safely walk over traps, "arming" them to deal double damage to enemies.', req: 'loc_a2' },
+    { id: 'loc_b1', name: 'Burglar', max: 5, desc: '+10% chance per level to pick a lock instantly for free.', req: 'loc_a1' },
+    { id: 'loc_b2', name: 'Scrap Metal', max: 5, desc: 'Smashing props has a +5% chance per level to drop a lockpick.', req: 'loc_a1' },
+    { id: 'loc_b3', name: 'Saboteur', max: 1, desc: 'Walking over Spike Traps permanently disarms them.', req: 'loc_a2' },
+    { id: 'loc_b4', name: 'Mechanisms', max: 1, desc: 'Walking over traps arms them to deal double damage to enemies.', req: 'loc_a2' },
     
-    { id: 'loc_c1', name: 'Master Thief', max: 1, desc: 'Lockpicks never break.', req: 'loc_b1' },
-    { id: 'loc_c2', name: 'Skeleton Key', max: 1, desc: 'Puzzle doors and sealed magic doors can now be lockpicked.', req: 'loc_b1' },
-    { id: 'loc_c3', name: 'Jury-Rig', max: 1, desc: 'Allows you to combine 3 Arrows into 1 Lockpick from the inventory.', req: 'loc_b2' },
-    { id: 'loc_c4', name: 'Shadow Walk', max: 1, desc: 'Successfully picking a lock makes you invisible to enemies for 3 turns.', req: 'loc_b2' },
-    { id: 'loc_c5', name: 'Evasion', max: 1, desc: 'You take 0 damage from all traps and environmental hazards.', req: 'loc_b3' },
-    { id: 'loc_c6', name: 'Trapmaster', max: 1, desc: 'Armed traps can now be picked up and placed elsewhere.', req: 'loc_b4' }
+    { id: 'loc_c1', name: 'Master Thief', max: 1, desc: 'Lockpicks never break on failure.', req: 'loc_b1' },
+    { id: 'loc_c2', name: 'Skeleton Key', max: 1, desc: 'Puzzle doors and sealed magic doors can be lockpicked.', req: 'loc_b1' },
+    { id: 'loc_c3', name: 'Jury-Rig', max: 1, desc: 'Allows combining 3 Arrows into 1 Lockpick in your inventory.', req: 'loc_b2' },
+    { id: 'loc_c4', name: 'Shadow Walk', max: 1, desc: 'Successfully picking a lock grants 3 turns of stealth.', req: 'loc_b2' },
+    { id: 'loc_c5', name: 'Evasion', max: 1, desc: 'Take 0 damage from traps and environmental hazards.', req: 'loc_b3' },
+    { id: 'loc_c6', name: 'Trapmaster', max: 1, desc: 'Armed traps can be picked up and repositioned.', req: 'loc_b4' }
   ],
   dungeoneering: [
     { id: 'dun_base', name: 'Scout', max: 5, desc: '+1 Field of Vision radius per level.', req: null },
     
-    { id: 'dun_a1', name: 'Scavenger', max: 5, desc: 'Find 20% more gold per level.', req: 'dun_base' },
-    { id: 'dun_a2', name: 'Spelunker', max: 5, desc: 'Heal 5 HP per level when descending stairs.', req: 'dun_base' },
+    { id: 'dun_a1', name: 'Scavenger', max: 5, desc: 'Find +20% more gold from all sources per level.', req: 'dun_base' },
+    { id: 'dun_a2', name: 'Spelunker', max: 5, desc: 'Heal +5 HP per level when descending stairs.', req: 'dun_base' },
     
     { id: 'dun_b1', name: 'Appraiser', max: 1, desc: 'Chests have a +25% chance to drop Affixed weapons.', req: 'dun_a1' },
-    { id: 'dun_b2', name: 'Haggle', max: 5, desc: 'Merchant prices are reduced by 10% per level.', req: 'dun_a1' },
+    { id: 'dun_b2', name: 'Haggle', max: 5, desc: 'Merchant purchase prices are reduced by 10% per level.', req: 'dun_a1' },
     { id: 'dun_b3', name: 'Treasure Hunter', max: 5, desc: 'Chests drop +1 extra consumable per level.', req: 'dun_a2' },
-    { id: 'dun_b4', name: 'Alchemist\'s Bag', max: 1, desc: 'Using any consumable has a 25% chance to not be consumed.', req: 'dun_a2' },
+    { id: 'dun_b4', name: 'Alchemist\'s Bag', max: 1, desc: 'Consumables have a 25% chance to not be consumed on use.', req: 'dun_a2' },
     
     { id: 'dun_c1', name: 'Bounty', max: 1, desc: 'Warlords and Bosses drop 3x the normal amount of gold.', req: 'dun_b1' },
-    { id: 'dun_c2', name: 'Sixth Sense', max: 1, desc: 'Mimics are revealed automatically instead of surprising you.', req: 'dun_b1' },
-    { id: 'dun_c3', name: 'Silver Tongue', max: 1, desc: 'Sell items to the merchant for 50% more gold.', req: 'dun_b2' },
-    { id: 'dun_c4', name: 'Mercenary', max: 5, desc: 'Deal +1% bonus weapon damage for every 100 gold you are carrying per level.', req: 'dun_b2' },
-    { id: 'dun_c5', name: 'Hoarder', max: 1, desc: 'Chests have a 10% chance to contain an extra piece of equipment.', req: 'dun_b3' },
-    { id: 'dun_c6', name: 'Lucky Coin', max: 1, desc: 'Flat 10% chance to take 0 damage from any source.', req: 'dun_b4' }
+    { id: 'dun_c2', name: 'Sixth Sense', max: 1, desc: 'Mimics are revealed before being opened.', req: 'dun_b1' },
+    { id: 'dun_c3', name: 'Silver Tongue', max: 1, desc: 'Sell items to the merchant for +50% more gold.', req: 'dun_b2' },
+    { id: 'dun_c4', name: 'Mercenary', max: 5, desc: 'Deal +1% bonus weapon damage per 100 gold carried per level.', req: 'dun_b2' },
+    { id: 'dun_c5', name: 'Hoarder', max: 1, desc: 'Chests have a 10% chance to drop an extra piece of equipment.', req: 'dun_b3' },
+    { id: 'dun_c6', name: 'Lucky Coin', max: 1, desc: 'Flat 10% chance to negate any incoming damage.', req: 'dun_b4' }
   ]
 };
 
